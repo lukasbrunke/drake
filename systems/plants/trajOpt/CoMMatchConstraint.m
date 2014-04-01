@@ -13,6 +13,7 @@ classdef CoMMatchConstraint < NonlinearConstraint
       nq = obj.robot.getNumDOF;
       obj = obj.setSparseStructure([reshape(bsxfun(@times,(1:3)',ones(1,nq)),[],1);1;2;3],...
         [reshape(bsxfun(@times,ones(3,1),(1:nq)),[],1);nq+1;nq+2;nq+3]);
+      obj = obj.setName({'CoM x';'CoM y';'CoM z'});
     end
     
     function [c,dc] = eval(obj,kinsol,com)
