@@ -142,6 +142,8 @@ classdef InverseKinTraj < NonlinearProgramWKinsol
         elseif(isa(varargin{i},'MultipleTimeLinearPostureConstraint'))
           cnstr = varargin{i}.generateConstraint(obj.t_knot(t_start:end));
           obj = obj.addLinearConstraint(cnstr{1},reshape(obj.q_idx(:,t_start:end),[],1));
+        else
+          error('Drake:InverseKinTraj:Unsupported RigidBodyConstraint');
         end
       end
       obj.Q = eye(obj.nq);
