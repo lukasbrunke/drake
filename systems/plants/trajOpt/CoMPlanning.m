@@ -55,6 +55,7 @@ classdef CoMPlanning < NonlinearProgramWKinsol
     contact_force_idx
     contact_F_idx
     contact_wrench_cnstr
+    g
   end
   
   properties(Access = protected)
@@ -199,7 +200,7 @@ classdef CoMPlanning < NonlinearProgramWKinsol
                 obj.contact_F_idx{j} = {obj.num_vars+(1:num_F)'};
               else
                 obj.contact_wrench_cnstr{j} = [obj.contact_wrench_cnstr{j},varargin(i)];
-                obj.contact_F_idx{j} = [obj.contact_F_idx{j},{obj.num_vars+(1:num_F)'}];
+                obj.contact_F_idx{j} = [obj.contact_F_idx{j};{obj.num_vars+(1:num_F)'}];
               end
               F_name = varargin{i}.forceParamName(obj.t_knot(j));
               obj = obj.addDecisionVariable(num_F,F_name);
@@ -211,6 +212,25 @@ classdef CoMPlanning < NonlinearProgramWKinsol
         else
           error('Drake:CoMPlanning:Unsupported RigidBodyConstraint');
         end
+      end
+      obj.g = 9.8;
+      m = obj.robot.getMass();
+      for i = 1:obj.nT
+        % add the linear constraint that the acceleration matches with total forces
+        F_idx_i = cell2mat(obj.contact_F_idx{i});
+        A_accel = zeros(3,3+length(F_idx_i));
+        A_accel(:,1:3) = m*eye(3);
+        A_accel_row_start = 3;
+        for j = 1:length(obj.contact_wrench_cnstr{i})
+          A_accel(:,A_accel_row_start+(1:length(obj.contact_F_idx{i}{j}))) = ...
+            -obj.contact_wrench_cnstr{i}{j}.force(obj.t_knot(i));
+          A_accel_row_start = A_accel_row_start+length(obj.contact_F_idx{i}{j});
+        end
+        accel_bnd = -m*[0;0;obj.g];
+        obj = obj.addLinearConstraint(LinearConstraint(accel_bnd,accel_bnd,A_accel),[obj.comddot_idx(:,i);F_idx_i]);
+        % add the nonlinear constraint that the torque at the CoM is zero
+        sctc_i = SimpleCentroidalTorqueConstraint(obj.t_knot(i),obj.nq,length(F_idx_i),obj.contact_wrench_cnstr{i}{:});
+        obj = obj.addNonlinearConstraint(sctc_i,i,F_idx_i,[obj.q_idx(:,i);F_idx_i]);
       end
       obj.Q = eye(obj.nq);
       obj.Qv = 0*eye(obj.nq);
