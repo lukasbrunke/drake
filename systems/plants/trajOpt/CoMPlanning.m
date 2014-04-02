@@ -239,8 +239,8 @@ classdef CoMPlanning < NonlinearProgramWKinsol
       obj = obj.setSolverOptions('snopt','majoroptimalitytolerance',1e-4);
       obj = obj.setSolverOptions('snopt','superbasicslimit',2000);
       obj = obj.setSolverOptions('snopt','majorfeasibilitytolerance',1e-6);
-      obj = obj.setSolverOptions('snopt','iterationslimit',10000);
-      obj = obj.setSolverOptions('snopt','majoriterationslimit',200);
+      obj = obj.setSolverOptions('snopt','iterationslimit',100000);
+      obj = obj.setSolverOptions('snopt','majoriterationslimit',600);
     end
     
     function obj = setCubicPostureError(obj,Q,Qv,Qa)
@@ -290,6 +290,39 @@ classdef CoMPlanning < NonlinearProgramWKinsol
             1,[obj.q_idx(:,1);obj.qd0_idx;obj.com_idx(:,1);obj.comdot_idx(:,1)]);
         end
       end
+    end
+    
+    function [xtraj,comtraj,force_traj,F,info,infeasible_constraint] = solve(obj,qtraj_seed)
+      % @param qtraj_seed    -- A Trajectory object. The initial guess of posture trajectory
+      % @retval xtraj        -- A cubic spline trajectory. The solution of the posture
+      % trajectory
+      % @retval comtraj      -- The solution of the CoM trajectory
+      % @retval force        -- A cell of size nT x 1. force{i}{j} are the contact forces
+      % at time t_knot(i) for the contact_wrench_constraint{i}{j}
+      q_seed = qtraj_seed.eval(obj.t_knot);
+      kinsol0 = cell(1,length(obj.t_knot));
+      com0 = zeros(3,length(obj.t_knot));
+      x0 = randn(obj.num_vars,1);
+      x0(obj.q_idx(:)) = q_seed(:);
+      qd0 = (obj.x_lb(obj.qd0_idx)+obj.x_ub(obj.qd0_idx))/2;
+      qd0(isnan(qd0)) = 0;
+      x0(obj.qd0_idx) = qd0;
+      qdf = (obj.x_lb(obj.qdf_idx)+obj.x_ub(obj.qdf_idx))/2;
+      qdf(isnan(qdf)) = 0;
+      x0(obj.qdf_idx) = qdf;
+      for i = 1:length(obj.t_knot)
+        kinsol0{i} = obj.robot.doKinematics(q_seed(:,i),false,false);
+        com0(:,i) = obj.robot.getCOM(kinsol0{i});
+        x0(obj.com_idx(:,i)) = com0(:,i);
+      end
+      comdot0 = diff(com0,[],2)./bsxfun(@times,ones(3,1),reshape(diff(obj.t_knot),1,[]));
+      comdot0 = [zeros(3,1) comdot0];
+      x0(obj.comdot_idx(:)) = comdot0(:);
+      comddot0 = diff(comdot0,[],2)./bsxfun(@times,ones(3,1),reshape(diff(obj.t_knot),1,[]));
+      comddot0 = [zeros(3,1) comddot0];
+      x0(obj.comddot_idx(:)) = comddot0(:);
+      % solve a convex NLP to find the initial force
+      [x,F,info] = solve@NonlinearProgramWConstraintObjects(obj,x0);
     end
   end
 end

@@ -30,6 +30,7 @@ classdef NonlinearProgramWKinsol < NonlinearProgramWConstraintObjects
           obj.x_name{(i-1)*obj.nq+j} = sprintf('q%d[%d]',j,i);
         end
       end
+      
       obj.t_kinsol = false(1,obj.nT);
       obj.cost_kinsol_idx = {};
       obj.cost_nonkinsol_idx = {};

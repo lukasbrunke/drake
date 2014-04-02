@@ -83,7 +83,9 @@ classdef ContactWrenchConstraint < RigidBodyConstraint
         cnstr = {NonlinearConstraint(lb,ub,obj.robot.getNumDOF+prod(obj.F_size),@(kinsol,F) obj.eval(t,kinsol,F)),...
           BoundingBoxConstraint(obj.F_lb(:),obj.F_ub(:))};
         [iCfun,jCvar] = obj.evalSparseStructure(t);
-        cnstr{1} = cnstr{1}.setSparseStructure(iCfun,jCvar);  
+        cnstr{1} = cnstr{1}.setSparseStructure(iCfun,jCvar); 
+        name_str = obj.name(t);
+        cnstr{1} = cnstr{1}.setName(name_str);
       else
         cnstr = {};
       end

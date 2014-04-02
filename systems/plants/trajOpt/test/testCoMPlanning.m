@@ -51,5 +51,9 @@ q_seed_traj = PPTrajectory(zoh(t,repmat(q0,1,nT)+[zeros(nq,1) 1e-3*randn(nq,nT-1
 lfoot_fc = FrictionConeWrenchConstraint(r,l_foot,l_foot_contact_pts,1,[0;0;1],tspan);
 rfoot_fc = FrictionConeWrenchConstraint(r,r_foot,r_foot_contact_pts,1,[0;0;1],tspan);
 com_planning = CoMPlanning(r,t,q_nom_traj,true,[q0;qdot0],kc1{:},kc2{:},kc3,kc4,kc5,pc_knee,lfoot_fc,rfoot_fc);
-
+com_planning = com_planning.setSolverOptions('snopt','print','planning.out');
+com_planning = com_planning.addBoundingBoxConstraint(BoundingBoxConstraint(zeros(3,1),zeros(3,1)),com_planning.comdot_idx(:,end));
+tic
+[xtraj,comtraj,force_traj,F,indo,infeasible_constraint] = com_planning.solve(q_seed_traj);
+toc
 end
