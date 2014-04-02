@@ -118,6 +118,10 @@ valuecheck(sparse(cnstr{1}.iCfun,cnstr{1}.jCvar,dc_cnstr(sub2ind([cnstr{1}.num_c
 cnstr{1}.num_cnstr,cnstr{1}.xdim),dc_cnstr);
 valuecheck(cnstr{2}.lb,fc_cnst.F_lb(:));
 valuecheck(cnstr{2}.ub,fc_cnst.F_ub(:));
+name_str = fc_cnst.forceParamName(t);
+[~,dtau] = fc_cnst.centroidalTorque(t,kinsol,F);
+[~,dtau_numeric] = geval(@(x) evalCentroidalTorque(fc_cnst,t,x(1:nq),reshape(x(nq+1:end),fc_cnst.F_size(1),fc_cnst.F_size(2))),[q;F(:)],struct('grad_method','numerical'));
+valuecheck(dtau,dtau_numeric,1e-4);
 end
 
 function c = evalConstraint(fc_cnst,t,q,F)
@@ -134,4 +138,9 @@ function w = evalWrench(fc_cnst,t,q,F)
   tau = evalTorque(fc_cnst,t,q,F);
   A = fc_cnst.force(t);
   w = [A*F(:);tau];
+end
+
+function tau = evalCentroidalTorque(fc_cnst,t,q,F)
+kinsol = fc_cnst.robot.doKinematics(q);
+tau = fc_cnst.centroidalTorque(t,kinsol,F);
 end

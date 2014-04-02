@@ -30,6 +30,12 @@ classdef CoMPlanning < NonlinearProgramWKinsol
 % @param qd0_idx  -- a nq x 1 matrix. qdot0 = x(qd0_idx);
 % @param qdf_idx  -- a nq x 1 matrix. qdotf = x(qdf_idx);
 % @param qsc_weight_idx  -- a cell of vectors. x(qsc_weight_idx{i}) are the weights of the QuasiStaticConstraint at time t(i) 
+% @param com_idx      -- a 3 x nT matrix. com(:,i) = x(com_idx(:,i))
+% @param comdot_idx   -- a 3 x nT matrix. comdot(:,i) = x(comdot_idx(:,i))
+% @param comddot_idx  -- a 3 x nT matrix. comddot(:,i) = x(comddot_idx(:,i))
+% @param contact_wrench_cnstr     -- A 1 x nT cell. contact_wrench_cnstr{i} is a cell of all the ContactWrenchConstraint being active at time t_knot(i)
+% @param contact_F_idx    -- A 1 x nT cell. x(contact_F_idx{i}{j}) are the F variable used
+% in evaluating contact_wrench_cnstr{i}{j}
 
   properties(SetAccess = protected)
     t_knot
@@ -47,6 +53,8 @@ classdef CoMPlanning < NonlinearProgramWKinsol
     comdot_idx
     comddot_idx
     contact_force_idx
+    contact_F_idx
+    contact_wrench_cnstr
   end
   
   properties(Access = protected)
@@ -130,6 +138,8 @@ classdef CoMPlanning < NonlinearProgramWKinsol
         com_match_cnstr = com_match_cnstr.setName({sprintf('CoM x at t[%d]',i);sprintf('CoM y at t[%d]',i);sprintf('CoM z at t[%d]',i)});
         obj = obj.addNonlinearConstraint(com_match_cnstr,i,obj.com_idx(:,i),[obj.q_idx(:,i);obj.com_idx(:,i)]);
       end
+      obj.contact_wrench_cnstr = cell(1,obj.nT);
+      obj.contact_F_idx = cell(1,obj.nT);
       for i = 1:num_rbcnstr
         if(~isa(varargin{i},'RigidBodyConstraint'))
           error('Drake:InverseKinTraj:the input should be a RigidBodyConstraint');
@@ -181,7 +191,23 @@ classdef CoMPlanning < NonlinearProgramWKinsol
           cnstr = varargin{i}.generateConstraint(obj.t_knot(t_start:end));
           obj = obj.addLinearConstraint(cnstr{1},reshape(obj.q_idx(:,t_start:end),[],1));
         elseif(isa(varargin{i},'ContactWrenchConstraint'))
-          
+          for j = 1:obj.nT
+            if(varargin{i}.isTimeValid(obj.t_knot(j)))
+              num_F = prod(varargin{i}.F_size);
+              if(isempty(obj.contact_wrench_cnstr{j}))
+                obj.contact_wrench_cnstr{j} = varargin(i);
+                obj.contact_F_idx{j} = {obj.num_vars+(1:num_F)'};
+              else
+                obj.contact_wrench_cnstr{j} = [obj.contact_wrench_cnstr{j},varargin(i)];
+                obj.contact_F_idx{j} = [obj.contact_F_idx{j},{obj.num_vars+(1:num_F)'}];
+              end
+              F_name = varargin{i}.forceParamName(obj.t_knot(j));
+              obj = obj.addDecisionVariable(num_F,F_name);
+              cnstr = varargin{i}.generateConstraint(obj.t_knot(j));
+              obj = obj.addNonlinearConstraint(cnstr{1},j,obj.contact_F_idx{j}{end},[obj.q_idx(:,j);obj.contact_F_idx{j}{end}]);
+              obj = obj.addBoundingBoxConstraint(cnstr{2},obj.contact_F_idx{j}{end});
+            end
+          end
         else
           error('Drake:CoMPlanning:Unsupported RigidBodyConstraint');
         end

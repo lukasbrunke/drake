@@ -88,10 +88,7 @@ classdef FrictionConeWrenchConstraint < ContactWrenchConstraint
       % @retval c      - A num_pts x 1 double vector, the constraint value
       % @retval dc_val - A 3*obj.num_pts x 1 double vector. The nonzero entries of constraint gradient w.r.t F
       if(obj.isTimeValid(t))
-        valid_F = checkForceSize(obj,F);
-        if(~valid_F)
-          error('Drake:FrictionConeWrenchConstraint:friction force should be 3 x n_pts matrix');
-        end
+        F = reshape(F,obj.F_size(1),obj.F_size(2));
         F_norm = sqrt(sum(F.^2,1));
         c = reshape(sum(F.*obj.FC_axis,1)./F_norm,[],1);
         dc_entry = (obj.FC_axis'.*bsxfun(@times,(F_norm').^2,ones(1,3))-...
@@ -144,10 +141,7 @@ classdef FrictionConeWrenchConstraint < ContactWrenchConstraint
       % @retval dtau   -- a 3 x (nq+3*obj.num_pts) double matrix. The gradient of tau
       % w.r.t q and F
       if(obj.isTimeValid(t))
-        valid_F = checkForceSize(obj,F);
-        if(~valid_F)
-          error('Drake:FrictionConeWrenchConstraint:friction force should be 3 x n_pts matrix');
-        end
+        F = reshape(F,obj.F_size(1),obj.F_size(2));
         nq = obj.robot.getNumDOF();
         [body_pos,dbody_pos] = forwardKin(obj.robot,kinsol,obj.body,obj.body_pts,0);
         tau = sum(cross(body_pos,F,1),2);
@@ -209,6 +203,16 @@ classdef FrictionConeWrenchConstraint < ContactWrenchConstraint
       else
         pos = [];
         J = [];
+      end
+    end
+    
+    function name_str = forceParamName(obj,t)
+      % Return the name of the force parameters
+      % @retval name_str    -- A cell of dim F_size(1)*F_size(2) x 1. name_str{i} is the
+      % name of the i'th force parameter.
+      name_str = cell(obj.F_size(1)*obj.F_size(2),1);
+      for i = 1:obj.num_pts
+        name_str((i-1)*3+(1:3)) = repmat({sprintf('friction cone force at pt %d on %s at time %5.2f',i,obj.body_name,t)},3,1);
       end
     end
   end

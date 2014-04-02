@@ -226,5 +226,14 @@ classdef RailGraspWrenchConstraint < ContactWrenchConstraint
         J = [];
       end
     end
+    
+    function name_str = forceParamName(obj,t)
+      % Return the name of the force parameters
+      % @retval name_str    -- A cell of dim F_size(1)*F_size(2) x 1. name_str{i} is the
+      % name of the i'th force parameter.
+      name_str = cell(6,1);
+      name_str(1:3) = repmat({sprintf('rail grasp force at on %s at time %5.2f',obj.body_name,t)},3,1);
+      name_str(4:6) = repmat({sprintf('rail grasp torque at on %s at time %5.2f',obj.body_name,t)},3,1);
+    end
   end
 end

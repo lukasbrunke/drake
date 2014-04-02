@@ -84,10 +84,7 @@ classdef LinearFrictionConeWrenchConstraint < ContactWrenchConstraint
     function [tau,dtau] = torque(obj,t,kinsol,F)
       % Compute the total torque and its gradient
       if(obj.isTimeValid(t))
-        valid_F = checkForceSize(obj,F);
-        if(~valid_F)
-          error('Drake:LinearFrictionConeWrenchConstraint:friction force should be num_edges x n_pts matrix');
-        end
+        F = reshape(F,obj.F_size(1),obj.F_size(2));
         nq = obj.robot.getNumDOF();
         [body_pos,dbody_pos] = forwardKin(obj.robot,kinsol,obj.body,obj.body_pts,0);
         force = obj.FC_edge*F;
@@ -130,6 +127,16 @@ classdef LinearFrictionConeWrenchConstraint < ContactWrenchConstraint
       else
         pos = [];
         J = [];
+      end
+    end
+    
+    function name_str = forceParamName(obj,t)
+      % Return the name of the force parameters
+      % @retval name_str    -- A cell of dim F_size(1)*F_size(2) x 1. name_str{i} is the
+      % name of the i'th force parameter.
+      name_str = cell(obj.F_size(1)*obj.F_size(2),1);
+      for i = 1:obj.num_pts
+        name_str((i-1)*obj.num_edges+(1:obj.num_edges)) = repmat({sprintf('linear friction cone force at pt %d on %s at time %5.2f',i,obj.body_name,t)},obj.num_edges,1);
       end
     end
   end
