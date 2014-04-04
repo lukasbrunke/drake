@@ -6,11 +6,13 @@ classdef ContactWrenchConstraint < RigidBodyConstraint
   % force parameters
   % @param F_ub         - A double matrix of size F_size. The upper bound on the
   % force parameters
+  % @param num_contact_pt  - The number of contact points
   properties(SetAccess = protected)
     num_constraint;
     F_size;
     F_lb;
     F_ub
+    num_contact_pt
   end
   
   methods
@@ -166,5 +168,6 @@ classdef ContactWrenchConstraint < RigidBodyConstraint
       % Return the name of the force parameters
       % @retval name_str    -- A cell of dim F_size(1)*F_size(2) x 1. name_str{i} is the
       % name of the i'th force parameter.
+      
   end
 end

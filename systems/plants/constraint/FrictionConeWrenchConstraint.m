@@ -77,6 +77,7 @@ classdef FrictionConeWrenchConstraint < ContactWrenchConstraint
       obj.type = RigidBodyConstraint.FrictionConeWrenchConstraintType;
       obj.F_lb = -inf(obj.F_size);
       obj.F_ub = inf(obj.F_size);
+      obj.num_contact_pt = size(obj.body_pts,2);
     end
     
     function [c,dc_val] = evalSparse(obj,t,kinsol,F)

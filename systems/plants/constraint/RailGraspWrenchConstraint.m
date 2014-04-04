@@ -96,6 +96,7 @@ classdef RailGraspWrenchConstraint < ContactWrenchConstraint
       obj.type = RigidBodyConstraint.RailGraspWrenchConstraintType;
       obj.F_lb = -[obj.force_max*ones(3,1);sqrt(obj.torque_bnd_height^2+obj.torque_bnd_radius^2)*ones(3,1)];
       obj.F_ub = [obj.force_max*ones(3,1);sqrt(obj.torque_bnd_height^2+obj.torque_bnd_radius^2)*ones(3,1)];
+      obj.num_contact_pt = 1;
     end
     
     function [lb,ub] = bounds(obj,t)
