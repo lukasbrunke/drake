@@ -10,6 +10,10 @@ classdef CoMPlanning
   % @param contact_pos     -- A 1 x nT cell. contact_pos{i}{j} is the contact position for
   % contact_wrench_constr{i}{j}
   % @param g            -- Gravitational acceleration.
+  % @param Q_com        -- A 3 x 3 PSD matrix. penalize the CoM deviation
+  % (com-com_des)'*Q_com*(com-com_des)
+  % @param com_des      -- A 3 x nT matrix. com_des(:,i) is the desired CoM location
+  % at time t_knot(i)
   properties(SetAccess = protected)
     robot_mass
     interpolation_order
@@ -29,6 +33,8 @@ classdef CoMPlanning
     x_lb
     x_ub
     cones
+    Q_com
+    com_des
   end
   
   properties(Access = protected)
@@ -38,10 +44,12 @@ classdef CoMPlanning
     b_lb;
     b_ub;
     num_A;
+    Q_obj   % The quadratic term in the objective function
+    f_obj   % The linear terms in the objective function
   end
   
   methods
-    function obj = CoMPlanning(robot_mass,t_knot,interpolation_order,fix_time,minimize_angular_momentum,varargin)
+    function obj = CoMPlanning(robot_mass,t_knot,Q_com,com_des,interpolation_order,fix_time,minimize_angular_momentum,varargin)
       % obj =
       % CoMPlanning(robot_mass,t_knot,fix_time,minimize_angular_momentum,...
       %         contact_wrench_constraint1,contact_pos1,...
@@ -50,6 +58,10 @@ classdef CoMPlanning
       %         contact_wrench_constraintN,contact_posN)
       % @param robot_mass   -- The mass of the robot
       % @param t_knot       -- The time knot points
+      % @param Q_com        -- A 3 x 3 PSD matrix. penalize the CoM deviation
+      % (com-com_des)'*Q_com*(com-com_des)
+      % @param com_des      -- A 3 x nT matrix. com_des(:,i) is the desired CoM location
+      % at time t_knot(i)
       % @param interpolation_order   -- The interpolation order of CoM trajectory. Accept
       % 1 or 2
       % @param fix_time     -- A boolean, True if we are not optimizing over time. False
@@ -73,6 +85,13 @@ classdef CoMPlanning
       t_knot = reshape(unique(t_knot),1,[]);
       obj.t_knot = t_knot;
       obj.nT = length(t_knot);
+      sizecheck(Q_com,[3,3]);
+      if(any(eig(Q_com)<0))
+        error('Drake:CoMPlanning: Q_com should be positive semidefinite');
+      end
+      obj.Q_com = Q_com;
+      sizecheck(com_des,[3,obj.nT]);
+      obj.com_des = com_des;
       sizecheck(fix_time,[1 1]);
       typecheck(fix_time,'logical');
       sizecheck(minimize_angular_momentum,[1 1]);
@@ -162,6 +181,16 @@ classdef CoMPlanning
           end
         end
       end
+      
+      % set the objective funtion. This should be done last
+      obj.Q_obj = zeros(obj.num_vars);
+      iQfun_com = reshape(repmat(obj.com_idx,3,1),[],1);
+      jQvar_com = reshape(bsxfun(@times,ones(3,1),obj.com_idx(:)'),[],1);
+      Qval_com = reshape(bsxfun(@times,reshape(obj.Q_com,[],1),ones(1,obj.nT)),[],1);
+      obj.Q_obj(sub2ind([obj.num_vars,obj.num_vars],iQfun_com,jQvar_com)) = obj.Q_obj(sub2ind([obj.num_vars,obj.num_vars],iQfun_com,jQvar_com))+...
+        Qval_com;
+      obj.f_obj = zeros(1,obj.num_vars);
+      obj.f_obj(obj.com_idx(:)) = obj.f_obj(obj.com_idx(:))-2*reshape(obj.Q_com*obj.com_des,1,[]);
     end
     
     function obj = setXbounds(obj,lb,ub,xind)
@@ -185,9 +214,10 @@ classdef CoMPlanning
       end
       model.lb = obj.x_lb;
       model.ub = obj.x_ub;
-      model.obj = zeros(1,obj.num_vars);
+      model.obj = obj.f_obj;
+      model.Q = sparse(obj.Q_obj);
       model.modelsense = 'min';
-      params = struct();
+      params = struct('OutputFlag',false);
       checkDependency('gurobi');
       result = gurobi(model,params);
       
@@ -263,9 +293,8 @@ classdef CoMPlanning
       end
       obj.num_vars = obj.num_vars+num_F;
       obj.x_name = [obj.x_name;contact_cnstr.forceParamName(obj.t_knot(t_idx))];
-      cnstr = contact_cnstr.generateConstraint(obj.t_knot(t_idx));
-      obj.x_lb = [obj.x_lb;cnstr{2}.lb];
-      obj.x_ub = [obj.x_ub;cnstr{2}.ub];
+      obj.x_lb = [obj.x_lb;contact_cnstr.F_lb(:)];
+      obj.x_ub = [obj.x_ub;contact_cnstr.F_ub(:)];
     end
     
     function obj = addLinearConstraint(obj,iAfun,jAvar,Aval,b_lb,b_ub,constr_name)
