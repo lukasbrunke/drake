@@ -25,6 +25,7 @@ v.draw(0,[nomdata.xstar]);
 kinsol0 = r.doKinematics(qstar,false,false);
 rfoot_pos0 = r.forwardKin(kinsol0,r_foot,r_foot_pt,1);
 lfoot_pos0 = r.forwardKin(kinsol0,l_foot,l_foot_pt,1);
+com0 = r.getCOM(kinsol0);
 
 % test walking with only friction cone constraint
 % right foot takes off first
@@ -94,6 +95,18 @@ for i = 1:num_steps
   contact_args{4*(i-1)+4} = lfoot_contact_pos(:,:,i);
 end
 com_planning = CoMPlanning(r.getMass,t_knot,1,true,false,contact_args{:});
+kc_final = {WorldPositionConstraint(r,r_foot,r_foot_pt,rfoot_pos(1:3,end),rfoot_pos(1:3,end),[t_knot(end) t_knot(end)]),...
+  WorldEulerConstraint(r,r_foot,rfoot_pos(4:6,end),rfoot_pos(4:6,end),[t_knot(end) t_knot(end)]),...
+  WorldPositionConstraint(r,l_foot,l_foot_pt,lfoot_pos(1:3,end),lfoot_pos(1:3,end),[t_knot(end) t_knot(end)]),...
+  WorldEulerConstraint(r,l_foot,lfoot_pos(4:6,end),lfoot_pos(4:6,end),[t_knot(end) t_knot(end)])};
+qfinal = inverseKin(r,qstar,qstar,kc_final{:});
+kinsol_final = r.doKinematics(qfinal,false,false);
+com_final = getCOM(r,kinsol_final);
+com_planning = com_planning.setXbounds(com0,com0,com_planning.com_idx(:,1));
+com_planning = com_planning.setXbounds(com_final,com_final,com_planning.com_idx(:,end));
+com_planning = com_planning.setXbounds(zeros(3,1),zeros(3,1),com_planning.comdot_idx(:,1));
+com_planning = com_planning.setXbounds(zeros(3,1),zeros(3,1),com_planning.comdot_idx(:,end));
+[com,comdot,comddot,info] = com_planning.solve();
 end
 
 function pos = contactPosition(body_pos,body_pts)
