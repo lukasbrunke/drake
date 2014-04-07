@@ -57,8 +57,8 @@ for i = 1:num_steps
   lcmgl.glColor3f(255,0,0);
   plotFoot(lcmgl,rfoot_contact_pos(:,:,i));
   lcmgl.switchBuffers();
-  lfoot_fc_axis(:,i) = rpy2rotmat(lfoot_pos(:,i))*[0;0;1];
-  rfoot_fc_axis(:,i) = rpy2rotmat(rfoot_pos(:,i))*[0;0;1];
+  lfoot_fc_axis(:,i) = rpy2rotmat(lfoot_pos(4:6,i))*[0;0;1];
+  rfoot_fc_axis(:,i) = rpy2rotmat(rfoot_pos(4:6,i))*[0;0;1];
 end
 lfoot_landing_time = 0;
 rfoot_landing_time = 0;

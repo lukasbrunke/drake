@@ -68,6 +68,7 @@ classdef CoMPlanning
       if(interpolation_order ~= 1 && interpolation_order ~= 2)
         error('Drake:CoMPlanning: interpolation order not supported yet');
       end
+      obj.g = 9.81;
       obj.interpolation_order = interpolation_order;
       t_knot = reshape(unique(t_knot),1,[]);
       obj.t_knot = t_knot;
@@ -151,8 +152,8 @@ classdef CoMPlanning
         newton_name(3*(i-1)+(1:3)) = repmat({sprintf('newton law for acceleration at %5.2f',obj.t_knot(i))},3,1);
       end
       [iAfun_newton,jAvar_newton,Aval_newton] = find(A_newton);
-      
-      obj = obj.addLinearConstraint(iAfun_newton,jAvar_newton,Aval_newton,zeros(3*obj.nT,1),zeros(3*obj.nT,1),newton_name);
+      newton_bnd = reshape(bsxfun(@times,[0;0;-obj.g*obj.robot_mass],ones(1,obj.nT)),[],1);
+      obj = obj.addLinearConstraint(iAfun_newton,jAvar_newton,Aval_newton,newton_bnd,newton_bnd,newton_name);
       % Add constraint on the contact force. 
       for i = 1:obj.nT
         for j = 1:length(obj.contact_wrench_constr{i})
@@ -189,6 +190,19 @@ classdef CoMPlanning
       params = struct();
       checkDependency('gurobi');
       result = gurobi(model,params);
+      
+      info = strcmp(result.status,'OPTIMAL');
+      com = reshape(result.x(obj.com_idx),3,obj.nT);
+      comdot = reshape(result.x(obj.comdot_idx),3,obj.nT);
+      comddot = reshape(result.x(obj.comddot_idx),3,obj.nT);
+      F = cell(1,obj.nT);
+      for i = 1:obj.nT
+        F{i} = cell(1,length(obj.contact_F_idx{i}));
+        for j = 1:length(obj.contact_F_idx{i})
+          F{i}{j} = reshape(obj.contact_force_rotmat{i}{j}*result.x(obj.contact_F_idx{i}{j}),...
+            obj.contact_wrench_constr{i}{j}.F_size(1),obj.contact_wrench_constr{i}{j}.F_size(2));
+        end
+      end
     end
   end
     
