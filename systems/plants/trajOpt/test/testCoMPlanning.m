@@ -102,17 +102,18 @@ qfinal = inverseKin(r,qstar,qstar,kc_final{:});
 kinsol_final = r.doKinematics(qfinal,false,false);
 com_final = getCOM(r,kinsol_final);
 Q_com = eye(3);
+Q_comddot = eye(3);
 com_des = bsxfun(@times,com0,ones(1,length(t_knot)-1))+bsxfun(@times,(com_final-com0)/(length(t_knot)-1),(1:length(t_knot)-1));
 com_des = [com0 com_des];
 tic
-com_planning = CoMPlanning(r.getMass,t_knot,Q_com,com_des,1,true,false,contact_args{:});
+com_planning = CoMPlanning(r.getMass,t_knot,Q_com,Q_comddot,com_des,1,true,false,contact_args{:});
 
 com_planning = com_planning.setXbounds(com0,com0,com_planning.com_idx(:,1));
 com_planning = com_planning.setXbounds(com_final,com_final,com_planning.com_idx(:,end));
 com_planning = com_planning.setXbounds(zeros(3,1),zeros(3,1),com_planning.comdot_idx(:,1));
 com_planning = com_planning.setXbounds(zeros(3,1),zeros(3,1),com_planning.comdot_idx(:,end));
 com_planning = com_planning.setXbounds(0.8*ones(com_planning.nT,1),1.2*ones(com_planning.nT,1),com_planning.com_idx(3,:));
-[com,comdot,comddot,info] = com_planning.solve();
+[com,comdot,comddot,F,info] = com_planning.solve();
 toc
 end
 

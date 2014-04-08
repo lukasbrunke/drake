@@ -34,6 +34,7 @@ classdef CoMPlanning
     x_ub
     cones
     Q_com
+    Q_comddot
     com_des
   end
   
@@ -46,10 +47,11 @@ classdef CoMPlanning
     num_A;
     Q_obj   % The quadratic term in the objective function
     f_obj   % The linear terms in the objective function
+    name_flag;
   end
   
   methods
-    function obj = CoMPlanning(robot_mass,t_knot,Q_com,com_des,interpolation_order,fix_time,minimize_angular_momentum,varargin)
+    function obj = CoMPlanning(robot_mass,t_knot,Q_com,Q_comddot,com_des,interpolation_order,fix_time,minimize_angular_momentum,varargin)
       % obj =
       % CoMPlanning(robot_mass,t_knot,fix_time,minimize_angular_momentum,...
       %         contact_wrench_constraint1,contact_pos1,...
@@ -60,6 +62,8 @@ classdef CoMPlanning
       % @param t_knot       -- The time knot points
       % @param Q_com        -- A 3 x 3 PSD matrix. penalize the CoM deviation
       % (com-com_des)'*Q_com*(com-com_des)
+      % @param Q_comddot    -- A 3 x 3 PSD matrix. Penalize the CoM acceleration
+      % comddot'*Q_comddot*comddot
       % @param com_des      -- A 3 x nT matrix. com_des(:,i) is the desired CoM location
       % at time t_knot(i)
       % @param interpolation_order   -- The interpolation order of CoM trajectory. Accept
@@ -76,6 +80,7 @@ classdef CoMPlanning
         error('Drake:CoMPlanning: robot mass should be a positive scalar');
       end
       obj.robot_mass = robot_mass;
+      obj.name_flag = false;
       sizecheck(interpolation_order,[1,1]);
       if(interpolation_order ~= 1 && interpolation_order ~= 2)
         error('Drake:CoMPlanning: interpolation order not supported yet');
@@ -90,6 +95,11 @@ classdef CoMPlanning
         error('Drake:CoMPlanning: Q_com should be positive semidefinite');
       end
       obj.Q_com = Q_com;
+      sizecheck(Q_comddot,[3,3]);
+      if(any(eig(Q_comddot)<0))
+        error('Drake:CoMPlanning: Q_comddot should be positive semidefinite');
+      end
+      obj.Q_comddot = Q_comddot;
       sizecheck(com_des,[3,obj.nT]);
       obj.com_des = com_des;
       sizecheck(fix_time,[1 1]);
@@ -103,17 +113,19 @@ classdef CoMPlanning
       obj.contact_pos = cell(1,obj.nT);
       obj.contact_F_idx = cell(1,obj.nT);
       obj.contact_force_rotmat = cell(1,obj.nT);
-      obj.x_name = cell(9*obj.nT,1);
-      for i = 1:obj.nT
-        obj.x_name{(i-1)*9+1} = sprintf('com_x[%d]',i);
-        obj.x_name{(i-1)*9+2} = sprintf('com_y[%d]',i);
-        obj.x_name{(i-1)*9+3} = sprintf('com_z[%d]',i);
-        obj.x_name{(i-1)*9+4} = sprintf('comdot_x[%d]',i);
-        obj.x_name{(i-1)*9+5} = sprintf('comdot_y[%d]',i);
-        obj.x_name{(i-1)*9+6} = sprintf('comdot_z[%d]',i);
-        obj.x_name{(i-1)*9+7} = sprintf('comddot_x[%d]',i);
-        obj.x_name{(i-1)*9+8} = sprintf('comddot_y[%d]',i);
-        obj.x_name{(i-1)*9+9} = sprintf('comddot_z[%d]',i);
+      if(obj.name_flag)
+        obj.x_name = cell(9*obj.nT,1);
+        for i = 1:obj.nT
+          obj.x_name{(i-1)*9+1} = sprintf('com_x[%d]',i);
+          obj.x_name{(i-1)*9+2} = sprintf('com_y[%d]',i);
+          obj.x_name{(i-1)*9+3} = sprintf('com_z[%d]',i);
+          obj.x_name{(i-1)*9+4} = sprintf('comdot_x[%d]',i);
+          obj.x_name{(i-1)*9+5} = sprintf('comdot_y[%d]',i);
+          obj.x_name{(i-1)*9+6} = sprintf('comdot_z[%d]',i);
+          obj.x_name{(i-1)*9+7} = sprintf('comddot_x[%d]',i);
+          obj.x_name{(i-1)*9+8} = sprintf('comddot_y[%d]',i);
+          obj.x_name{(i-1)*9+9} = sprintf('comddot_z[%d]',i);
+        end
       end
       obj.num_vars = 9*obj.nT;
       obj.x_lb = -inf(9*obj.nT,1);
@@ -152,7 +164,11 @@ classdef CoMPlanning
           iAfun_com = [iAfun_com;3*(obj.nT-1)+iAfun_com];
           jAvar_com = [jAvar_com;reshape(obj.comdot_idx(:,2:end),[],1);reshape(obj.comdot_idx(:,1:end-1),[],1);reshape(obj.comddot_idx(:,2:end),[],1)];
           Aval_com = [Aval_com;Aval_com];
-          com_name = repmat({sprintf('com interpolation')},6*(obj.nT-1),1);
+          if(obj.name_flag)
+            com_name = repmat({sprintf('com interpolation')},6*(obj.nT-1),1);
+          else
+            com_name = cell(6*(obj.nT-1),1);
+          end
         else
           error('Not implemented yet');
         end
@@ -168,19 +184,13 @@ classdef CoMPlanning
         for j = 1:length(obj.contact_wrench_constr{i})
           A_newton(3*(i-1)+(1:3),obj.contact_F_idx{i}{j}) = -obj.contact_wrench_constr{i}{j}.force(obj.t_knot(i))*obj.contact_force_rotmat{i}{j};
         end
-        newton_name(3*(i-1)+(1:3)) = repmat({sprintf('newton law for acceleration at %5.2f',obj.t_knot(i))},3,1);
+        if(obj.name_flag)
+          newton_name(3*(i-1)+(1:3)) = repmat({sprintf('newton law for acceleration at %5.2f',obj.t_knot(i))},3,1);
+        end
       end
       [iAfun_newton,jAvar_newton,Aval_newton] = find(A_newton);
       newton_bnd = reshape(bsxfun(@times,[0;0;-obj.g*obj.robot_mass],ones(1,obj.nT)),[],1);
       obj = obj.addLinearConstraint(iAfun_newton,jAvar_newton,Aval_newton,newton_bnd,newton_bnd,newton_name);
-      % Add constraint on the contact force. 
-      for i = 1:obj.nT
-        for j = 1:length(obj.contact_wrench_constr{i})
-          if(isa(obj.contact_wrench_constr{i},'FrictionConeWrenchConstraint'))
-            % add a cone constraint
-          end
-        end
-      end
       
       % set the objective funtion. This should be done last
       obj.Q_obj = zeros(obj.num_vars);
@@ -191,6 +201,11 @@ classdef CoMPlanning
         Qval_com;
       obj.f_obj = zeros(1,obj.num_vars);
       obj.f_obj(obj.com_idx(:)) = obj.f_obj(obj.com_idx(:))-2*reshape(obj.Q_com*obj.com_des,1,[]);
+      iQfun_comddot = reshape(repmat(obj.comddot_idx,3,1),[],1);
+      jQvar_comddot = reshape(bsxfun(@times,ones(3,1),obj.comddot_idx(:)'),[],1);
+      Qval_comddot = reshape(bsxfun(@times,reshape(obj.Q_comddot,[],1),ones(1,obj.nT)),[],1);
+      obj.Q_obj(sub2ind([obj.num_vars,obj.num_vars],iQfun_comddot,jQvar_comddot)) = obj.Q_obj(sub2ind([obj.num_vars,obj.num_vars],iQfun_comddot,jQvar_comddot))+...
+        Qval_comddot;
     end
     
     function obj = setXbounds(obj,lb,ub,xind)
@@ -258,14 +273,20 @@ classdef CoMPlanning
         end
         obj = obj.addContactConstraint(friction_cone,contact_pos,t_idx,force_rotmat);
         obj.num_vars = obj.num_vars+friction_cone.num_pts;
-        obj.x_name = [obj.x_name;repmat({'mu*normal_force'},friction_cone.num_pts,1)];
+        if(obj.name_flag)
+          obj.x_name = [obj.x_name;repmat({'mu*normal_force'},friction_cone.num_pts,1)];
+        end
         obj.x_lb = [obj.x_lb;zeros(friction_cone.num_pts,1)];
         obj.x_ub = [obj.x_ub;inf(friction_cone.num_pts,1)];
         iAfun_mu = reshape(bsxfun(@times,(1:friction_cone.num_pts)',ones(1,2)),[],1);
         F_idx = reshape(obj.contact_F_idx{t_idx}{end},3,[]);
         jAvar_mu = [F_idx(3,:)';(obj.num_vars-friction_cone.num_pts+1:obj.num_vars)'];
         Aval_mu = [ones(friction_cone.num_pts,1);reshape(-friction_cone.FC_mu,[],1)];
-        mu_name = repmat({sprintf('mu constraint for cone at %5.2f',obj.t_knot(t_idx))},friction_cone.num_pts,1);
+        if(obj.name_flag)
+          mu_name = repmat({sprintf('mu constraint for cone at %5.2f',obj.t_knot(t_idx))},friction_cone.num_pts,1);
+        else
+          mu_name = cell(friction_cone.num_pts,1);
+        end
         obj = obj.addLinearConstraint(iAfun_mu,jAvar_mu,Aval_mu,zeros(friction_cone.num_pts,1),zeros(friction_cone.num_pts,1),mu_name);
         for i = 1:friction_cone.num_pts
           if(isempty(obj.cones))
@@ -292,7 +313,9 @@ classdef CoMPlanning
         obj.contact_force_rotmat{t_idx} = [obj.contact_force_rotmat{t_idx},{force_rotmat}];
       end
       obj.num_vars = obj.num_vars+num_F;
-      obj.x_name = [obj.x_name;contact_cnstr.forceParamName(obj.t_knot(t_idx))];
+      if(obj.name_flag)
+        obj.x_name = [obj.x_name;contact_cnstr.forceParamName(obj.t_knot(t_idx))];
+      end
       obj.x_lb = [obj.x_lb;contact_cnstr.F_lb(:)];
       obj.x_ub = [obj.x_ub;contact_cnstr.F_ub(:)];
     end
@@ -307,9 +330,9 @@ classdef CoMPlanning
       if(length(b_lb) ~= length(constr_name))
         error('linear constraint length does not match');
       end
-      if(~iscellstr(constr_name))
-        error('should be a cell string');
-      end
+%       if(~iscellstr(constr_name))
+%         error('should be a cell string');
+%       end
       obj.A_name = [obj.A_name;constr_name];
     end
   end
