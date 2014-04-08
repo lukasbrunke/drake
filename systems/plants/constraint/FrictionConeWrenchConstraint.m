@@ -213,7 +213,8 @@ classdef FrictionConeWrenchConstraint < ContactWrenchConstraint
       % name of the i'th force parameter.
       name_str = cell(obj.F_size(1)*obj.F_size(2),1);
       for i = 1:obj.num_pts
-        name_str((i-1)*3+(1:3)) = repmat({sprintf('friction cone force at pt %d on %s at time %5.2f',i,obj.body_name,t)},3,1);
+        force_str = {sprintf('friction cone force at pt %d on %s at time %5.2f',i,obj.body_name,t)};
+        name_str((i-1)*3+(1:3)) = force_str(ones(3,1),:);
       end
     end
   end

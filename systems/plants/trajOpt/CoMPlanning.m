@@ -165,7 +165,8 @@ classdef CoMPlanning
           jAvar_com = [jAvar_com;reshape(obj.comdot_idx(:,2:end),[],1);reshape(obj.comdot_idx(:,1:end-1),[],1);reshape(obj.comddot_idx(:,2:end),[],1)];
           Aval_com = [Aval_com;Aval_com];
           if(obj.name_flag)
-            com_name = repmat({sprintf('com interpolation')},6*(obj.nT-1),1);
+            com_interp_name = {'com interpolation'};
+            com_name = com_interp_name(ones(6*(obj.nT-1),1),:);
           else
             com_name = cell(6*(obj.nT-1),1);
           end
@@ -185,7 +186,8 @@ classdef CoMPlanning
           A_newton(3*(i-1)+(1:3),obj.contact_F_idx{i}{j}) = -obj.contact_wrench_constr{i}{j}.force(obj.t_knot(i))*obj.contact_force_rotmat{i}{j};
         end
         if(obj.name_flag)
-          newton_name(3*(i-1)+(1:3)) = repmat({sprintf('newton law for acceleration at %5.2f',obj.t_knot(i))},3,1);
+          newton_name_i = {sprintf('newton law for acceleration at %5.2f',obj.t_knot(i))};
+          newton_name(3*(i-1)+(1:3)) = newton_name_i(ones(3,1),:);
         end
       end
       [iAfun_newton,jAvar_newton,Aval_newton] = find(A_newton);
@@ -223,7 +225,10 @@ classdef CoMPlanning
       Alb_idx = ~isinf(obj.b_lb) & (obj.b_lb ~= obj.b_ub);
       model.A = sparse([A(Aeq_idx,:);A(Aub_idx,:);A(Alb_idx,:)]);
       model.rhs = [obj.b_ub(Aeq_idx);obj.b_ub(Aub_idx);obj.b_lb(Alb_idx)];
-      model.sense = [repmat('=',sum(Aeq_idx),1);repmat('<',sum(Aub_idx),1);repmat('>',sum(Alb_idx),1)];
+      equal_str = '=';
+      less_str = '<';
+      more_str = '>';
+      model.sense = [equal_str(ones(sum(Aeq_idx),1),:);less_str(ones(sum(Aub_idx),1),:);more_str(ones(sum(Alb_idx),1),:)];
       if(~isempty(obj.cones))
         model.cones = obj.cones;
       end
@@ -274,7 +279,8 @@ classdef CoMPlanning
         obj = obj.addContactConstraint(friction_cone,contact_pos,t_idx,force_rotmat);
         obj.num_vars = obj.num_vars+friction_cone.num_pts;
         if(obj.name_flag)
-          obj.x_name = [obj.x_name;repmat({'mu*normal_force'},friction_cone.num_pts,1)];
+          mu_force_name = {'mu*normal_force'};
+          obj.x_name = [obj.x_name;mu_force_name(ones(friction_cone.num_pts,1),:)];
         end
         obj.x_lb = [obj.x_lb;zeros(friction_cone.num_pts,1)];
         obj.x_ub = [obj.x_ub;inf(friction_cone.num_pts,1)];
@@ -283,7 +289,8 @@ classdef CoMPlanning
         jAvar_mu = [F_idx(3,:)';(obj.num_vars-friction_cone.num_pts+1:obj.num_vars)'];
         Aval_mu = [ones(friction_cone.num_pts,1);reshape(-friction_cone.FC_mu,[],1)];
         if(obj.name_flag)
-          mu_name = repmat({sprintf('mu constraint for cone at %5.2f',obj.t_knot(t_idx))},friction_cone.num_pts,1);
+          mu_name_i = {sprintf('mu constraint for cone at %5.2f',obj.t_knot(t_idx))};
+          mu_name = mu_name_i(ones(friction_cone.num_pts,1),:);
         else
           mu_name = cell(friction_cone.num_pts,1);
         end
