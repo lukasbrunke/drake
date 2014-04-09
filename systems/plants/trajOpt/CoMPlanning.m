@@ -14,6 +14,10 @@ classdef CoMPlanning
   % (com-com_des)'*Q_com*(com-com_des)
   % @param com_des      -- A 3 x nT matrix. com_des(:,i) is the desired CoM location
   % at time t_knot(i)
+  % @param Hdot_idx     -- A 3 x nT matrix. x(Hdot_idx(:,i)) is the rate of angular
+  % momumtum around the CoM at time t_knot(i)
+  % @param Q_Hdot       -- A 3 x 3 PSD matrix. Penalize the square of rate of angular
+  % momentum Hdot'*Q_Hdot*Hdot
   properties(SetAccess = protected)
     robot_mass
     interpolation_order
@@ -36,6 +40,9 @@ classdef CoMPlanning
     Q_com
     Q_comddot
     com_des
+    Hdot_idx
+    minimize_angular_momentum
+    Q_Hdot
   end
   
   properties(Access = protected)
@@ -48,6 +55,8 @@ classdef CoMPlanning
     Q_obj   % The quadratic term in the objective function
     f_obj   % The linear terms in the objective function
     name_flag;
+    
+    A_interpolation;  % The interpolation matrix for com,comdot, comddot
   end
   
   methods
@@ -106,6 +115,7 @@ classdef CoMPlanning
       typecheck(fix_time,'logical');
       sizecheck(minimize_angular_momentum,[1 1]);
       typecheck(minimize_angular_momentum,'logical');
+      obj.minimize_angular_momentum = minimize_angular_momentum;
       obj.com_idx = reshape((1:3*obj.nT),3,obj.nT);
       obj.comdot_idx = reshape(3*obj.nT+(1:3*obj.nT),3,obj.nT);
       obj.comddot_idx = reshape(6*obj.nT+(1:3*obj.nT),3,obj.nT);
@@ -154,6 +164,10 @@ classdef CoMPlanning
           end
         end
       end
+      % add decision variable Hdot if we choose to minimize the angular momentum
+      if(obj.minimize_angular_momentum)
+        obj.Q_Hdot = eye(3);
+      end
       % The interpolation of CoM
       if(fix_time)
         dt = reshape(diff(obj.t_knot),1,[]);
@@ -176,6 +190,7 @@ classdef CoMPlanning
       else
         error('Not implemented yet');
       end
+      obj.A_interpolation = sparse(iAfun_com,jAvar_com,Aval_com,6*(obj.nT-1),obj.num_vars);
       obj = obj.addLinearConstraint(iAfun_com,jAvar_com,Aval_com,zeros(6*(obj.nT-1),1),zeros(6*(obj.nT-1),1),com_name);
       % Newton law for acceleration
       A_newton = zeros(3*obj.nT,obj.num_vars);
@@ -253,6 +268,14 @@ classdef CoMPlanning
             obj.contact_wrench_constr{i}{j}.F_size(1),obj.contact_wrench_constr{i}{j}.F_size(2));
         end
       end
+      
+      momentum = zeros(3,obj.nT);
+      for i = 1:obj.nT
+        for j = 1:length(obj.contact_pos{i})
+          momentum(:,i) = momentum(:,i)+sum(cross(obj.contact_pos{i}{j}-bsxfun(@times,com(:,i),ones(1,size(obj.contact_pos{i}{j},2))),F{i}{j}),2);
+        end
+      end
+      [com,comdot,comddot,angular_momentum] = obj.solveFixForce(F,com,comdot,comddot,momentum);
     end
   end
     
@@ -341,6 +364,38 @@ classdef CoMPlanning
 %         error('should be a cell string');
 %       end
       obj.A_name = [obj.A_name;constr_name];
+    end
+    
+    function [com,comdot,comddot,momentum_sum] = solveFixForce(obj,F,com,comdot,comddot,momentum)
+      % given the contact forces, find the CoM trajectory that minimizes the total squared
+      % sum of the rate of angular momentum around CoM
+      bnd_Hdot = zeros(3*obj.nT,1);
+      F_i = zeros(3,obj.nT);
+      A_Hdot = zeros(3*obj.nT,12*obj.nT);
+      for i = 1:obj.nT
+        for j = 1:length(obj.contact_wrench_constr{i})
+          bnd_Hdot((i-1)*3+(1:3)) = bnd_Hdot((i-1)*3+(1:3)) + sum(cross(obj.contact_pos{i}{j},F{i}{j}),2);
+          F_i(:,i) = F_i(:,i)+sum(F{i}{j},2);
+        end
+        A_Hdot((i-1)*3+(1:3),(i-1)*3+(1:3)) = -[0 -F_i(3,i) F_i(2,i);F_i(3,i) 0 -F_i(1,i);-F_i(2,i) F_i(1,i) 0];
+        A_Hdot((i-1)*3+(1:3),9*obj.nT+(i-1)*3+(1:3)) = eye(3);
+      end
+      A_interp = [obj.A_interpolation(:,[obj.com_idx(:);obj.comdot_idx(:);obj.comddot_idx(:)]) zeros(6*(obj.nT-1),3*obj.nT)];
+      bnd_interp = zeros(6*(obj.nT-1),1);
+      A_newton = zeros(3*obj.nT,12*obj.nT);
+      A_newton(sub2ind([3*obj.nT,12*obj.nT],(1:3*obj.nT)',6*obj.nT+(1:3*obj.nT)')) = obj.robot_mass;
+      bnd_newton = reshape(F_i-bsxfun(@times,[0;0;obj.robot_mass*obj.g],ones(1,obj.nT)),[],1);
+      Aeq = sparse([A_interp;A_newton;A_Hdot]);
+      beq = [bnd_interp;bnd_newton;bnd_Hdot];
+      Hdot_idx_tmp = reshape(9*obj.nT+(1:3*obj.nT),3,obj.nT);
+      iQfun = reshape(repmat(Hdot_idx_tmp,3,1),[],1);
+      jQvar = reshape(bsxfun(@times,ones(3,1),Hdot_idx_tmp(:)'),[],1);
+      Qval = reshape(bsxfun(@times,reshape(obj.Q_Hdot,[],1),ones(1,obj.nT)),[],1);
+      Q = sparse(iQfun,jQvar,Qval,12*obj.nT,12*obj.nT);
+      f = zeros(1,12*obj.nT);
+      com_planning = QuadraticProgram(Q,f,[],[],Aeq,beq,[],[]);
+      [x,objval,exitflag,active] = com_planning.solve([com(:);comdot(:);comddot(:);momentum(:)]);
+      
     end
   end
 end

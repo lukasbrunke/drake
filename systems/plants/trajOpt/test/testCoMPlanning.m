@@ -106,7 +106,7 @@ Q_comddot = eye(3);
 com_des = bsxfun(@times,com0,ones(1,length(t_knot)-1))+bsxfun(@times,(com_final-com0)/(length(t_knot)-1),(1:length(t_knot)-1));
 com_des = [com0 com_des];
 tic
-com_planning = CoMPlanning(r.getMass,t_knot,Q_com,Q_comddot,com_des,1,true,false,contact_args{:});
+com_planning = CoMPlanning(r.getMass,t_knot,Q_com,Q_comddot,com_des,1,true,true,contact_args{:});
 
 com_planning = com_planning.setXbounds(com0,com0,com_planning.com_idx(:,1));
 com_planning = com_planning.setXbounds(com_final,com_final,com_planning.com_idx(:,end));
