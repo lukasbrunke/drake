@@ -275,7 +275,7 @@ classdef CoMPlanning
           momentum(:,i) = momentum(:,i)+sum(cross(obj.contact_pos{i}{j}-bsxfun(@times,com(:,i),ones(1,size(obj.contact_pos{i}{j},2))),F{i}{j}),2);
         end
       end
-      [com,comdot,comddot,angular_momentum] = obj.solveFixForce(F,com,comdot,comddot,momentum);
+%       [com,comdot,comddot,angular_momentum] = obj.solveFixForce(F,com,comdot,comddot,momentum);
     end
   end
     

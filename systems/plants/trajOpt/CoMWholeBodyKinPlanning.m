@@ -63,6 +63,10 @@ classdef CoMWholeBodyKinPlanning < NonlinearProgramWKinsol
     cpe
   end
   
+  properties(Access = private)
+    input_contact_wrench_cnstr;
+  end
+  
   methods
     function obj = CoMWholeBodyKinPlanning(robot,t,q_nom_traj,fix_initial_state,x0,varargin)
       % obj =
@@ -141,6 +145,7 @@ classdef CoMWholeBodyKinPlanning < NonlinearProgramWKinsol
       end
       obj.contact_wrench_cnstr = cell(1,obj.nT);
       obj.contact_F_idx = cell(1,obj.nT);
+      obj.input_contact_wrench_cnstr = [];
       for i = 1:num_rbcnstr
         if(~isa(varargin{i},'RigidBodyConstraint'))
           error('Drake:CoMWholeBodyKinPlanning:the input should be a RigidBodyConstraint');
@@ -192,6 +197,7 @@ classdef CoMWholeBodyKinPlanning < NonlinearProgramWKinsol
           cnstr = varargin{i}.generateConstraint(obj.t_knot(t_start:end));
           obj = obj.addLinearConstraint(cnstr{1},reshape(obj.q_idx(:,t_start:end),[],1));
         elseif(isa(varargin{i},'ContactWrenchConstraint'))
+          obj.input_contact_wrench_cnstr = [obj.input_contact_wrench_cnstr,varargin(i)];
           for j = 1:obj.nT
             if(varargin{i}.isTimeValid(obj.t_knot(j)))
               num_F = prod(varargin{i}.F_size);
@@ -229,8 +235,8 @@ classdef CoMWholeBodyKinPlanning < NonlinearProgramWKinsol
         accel_bnd = -m*[0;0;obj.g];
         obj = obj.addLinearConstraint(LinearConstraint(accel_bnd,accel_bnd,A_accel),[obj.comddot_idx(:,i);F_idx_i]);
         % add the nonlinear constraint that the torque at the CoM is zero
-        sctc_i = SimpleCentroidalTorqueConstraint(obj.t_knot(i),obj.nq,length(F_idx_i),obj.contact_wrench_cnstr{i}{:});
-        obj = obj.addNonlinearConstraint(sctc_i,i,F_idx_i,[obj.q_idx(:,i);F_idx_i]);
+%         sctc_i = SimpleCentroidalTorqueConstraint(obj.t_knot(i),obj.nq,length(F_idx_i),obj.contact_wrench_cnstr{i}{:});
+%         obj = obj.addNonlinearConstraint(sctc_i,i,F_idx_i,[obj.q_idx(:,i);F_idx_i]);
       end
       obj.Q = eye(obj.nq);
       obj.Qv = 0*eye(obj.nq);
@@ -321,7 +327,20 @@ classdef CoMWholeBodyKinPlanning < NonlinearProgramWKinsol
       comddot0 = diff(comdot0,[],2)./bsxfun(@times,ones(3,1),reshape(diff(obj.t_knot),1,[]));
       comddot0 = [zeros(3,1) comddot0];
       x0(obj.comddot_idx(:)) = comddot0(:);
-      % solve a convex NLP to find the initial force
+      % solve a convex problem to find the initial force
+      contact_pos = cell(1,length(obj.input_contact_wrench_cnstr));
+      for i = 1:length(contact_pos)
+        contact_pos{i} = zeros(3,obj.input_contact_wrench_cnstr{i}.num_contact_pt);
+      end
+      com_planning_varargin = reshape([obj.input_contact_wrench_cnstr;contact_pos],1,[]);
+      com_planning = CoMPlanning(obj.robot.getMass,obj.t_knot,eye(3),eye(3),com0,1,true,false,...
+        com_planning_varargin{:});
+      [~,~,~,F,info] = com_planning.solve();
+      for i = 1:obj.nT
+        for j = 1:length(obj.contact_F_idx{i})
+          x0(obj.contact_F_idx{i}{j}) = F{i}{j};
+        end
+      end
       [x,F,info] = solve@NonlinearProgramWConstraintObjects(obj,x0);
     end
   end
