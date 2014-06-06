@@ -50,7 +50,7 @@ classdef NonlinearConstraint < Constraint
       obj.ceq_idx = c_idx(obj.lb == obj.ub);
       obj.cin_idx = c_idx(obj.lb ~= obj.ub);
       
-      if(~isnumeric(xdim) || numel(xdim) ~= 1 || xdim<0 || xdim ~= floor(xdim))
+      if(~isnumeric(xdim) || numel(xdim) ~= 1 || xdim<=0 || xdim ~= floor(xdim))
         error('Drake:NonlinearConstraint:BadInputs','NonlinearConstraint xdim should be a non-negative integer');
       end
       obj.xdim = xdim;
