@@ -24,8 +24,8 @@ if (gurobi_FOUND AND eigen3_FOUND)
 
 endif()
 
+add_subdirectory(test)
 add_library(drakeConstraint Constraint.cpp)
 pods_install_libraries(drakeConstraint)
 pods_install_headers(Constraint.h DESTINATION drake)
-
 

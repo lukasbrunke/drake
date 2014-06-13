@@ -14,37 +14,24 @@ class ConstraintInput
     Eigen::MatrixXd x;
 };
 
-class ConstraintOutput
-{
-  public:
-    ConstraintOutput(const Eigen::MatrixXd &y);
-    virtual ~ConstraintOutput(void){};
-  public:
-    Eigen::MatrixXd y;
-};
-
 class Constraint
 {
   protected:
     Eigen::MatrixXd lb;
     Eigen::MatrixXd ub;
     std::vector<std::string> name;
+    void (*eval_handle)(const ConstraintInput &in, Eigen::MatrixXd &y);
   public:
     Constraint(const Eigen::MatrixXd &lb, const Eigen::MatrixXd &ub);
-    virtual void eval(const ConstraintInput &in, ConstraintOutput &out) const ;
+    virtual void setEvalHandle(void(*eval_handle)(const ConstraintInput &, Eigen::MatrixXd &));
+    virtual void eval(const ConstraintInput &in, Eigen::MatrixXd &y) const;
     virtual void setName(const std::vector<std::string> &name);
+    virtual void getName(std::vector<std::string> &name) const;
+    virtual void getBounds(Eigen::MatrixXd &lb, Eigen::MatrixXd &ub) const;
     virtual ~Constraint(void){};
 };
 
-class ConstraintOutputWGradient: public ConstraintOutput
-{
-  public:
-    ConstraintOutputWGradient(const Eigen::VectorXd &y, const Eigen::MatrixXd &dy);
-  public:
-    Eigen::MatrixXd dy;
-};
-
-class NonlinearConstraint:Constraint
+class NonlinearConstraint:public Constraint
 {
   protected:
     int num_cnstr;
@@ -52,17 +39,55 @@ class NonlinearConstraint:Constraint
     Eigen::VectorXi iCfun;
     Eigen::VectorXi jCvar;
     int nnz;
-    std::vector<int> ceq_idx;
-    std::vector<int> cin_idx;
+    Eigen::VectorXi ceq_idx;
+    Eigen::VectorXi cin_idx;
+    void (*geval_handle)(const ConstraintInput &, Eigen::VectorXd &y, Eigen::MatrixXd &dy);
   public:
     NonlinearConstraint(const Eigen::VectorXd &lb, const Eigen::VectorXd &ub, int xdim);
-    virtual void eval(const ConstraintInput &in, ConstraintOutputWGradient &out) const;
+    virtual void eval(const ConstraintInput &in, Eigen::MatrixXd &y) const;
+    virtual void geval(const ConstraintInput &in, Eigen::VectorXd &, Eigen::MatrixXd &) const ;
     virtual void setSparseStructure(const Eigen::VectorXi &iCfun, const Eigen::VectorXi &jCvar);
-    virtual int getNumCnstr() const;
-    virtual int getXdim() const;
-    virtual void getSparseStructure(Eigen::VectorXi &iCfun, const Eigen::VectorXi &jCvar) const;
-    virtual void getCeqIdx(Eigen::VectorXi ceq_idx) const;
-    virtual void getCinIdx(Eigen::VectorXi cin_idx) const;
+    virtual int getNumCnstr(void) const;
+    virtual int getXdim(void) const;
+    virtual void getSparseStructure(Eigen::VectorXi &iCfun, Eigen::VectorXi &jCvar,int &nnz) const;
+    virtual void getCeqIdx(Eigen::VectorXi &ceq_idx) const;
+    virtual void getCinIdx(Eigen::VectorXi &cin_idx) const;
+    virtual void setGevalHandle(void (*geval_handle)(const ConstraintInput &, Eigen::VectorXd &y, Eigen::MatrixXd &dy));
+    virtual void setName(const std::vector<std::string> &name);
+    virtual void getBounds(Eigen::VectorXd &lb, Eigen::VectorXd &ub) const;
+    bool checkGradient(double tol, const ConstraintInput & in) const;
+    virtual ~NonlinearConstraint(void){};
 };
+
+class LinearConstraint:public Constraint
+{
+  protected:
+    int num_cnstr;
+    int xdim;
+    Eigen::MatrixXd A;
+    Eigen::VectorXi iAfun;
+    Eigen::VectorXi jAvar;
+    Eigen::VectorXd A_val;
+    int nnz;
+    Eigen::VectorXi ceq_idx;
+    Eigen::VectorXi cin_idx;
+
+  public:
+    LinearConstraint(const Eigen::VectorXd &lb, const Eigen::VectorXd &ub, const Eigen::MatrixXd &A);
+    virtual void eval(const ConstraintInput &in, Eigen::MatrixXd &y) const;
+    virtual void getSparseStructure(Eigen::VectorXi &iAfun, Eigen::VectorXi &jAvar, Eigen::VectorXd &A_val, int &nnz) const;
+    virtual void getA(Eigen::MatrixXd &A) const;
+    virtual void setName(const std::vector<std::string> name);
+    virtual void getBounds(Eigen::VectorXd &lb, Eigen::VectorXd &ub) const;
+    virtual ~LinearConstraint(void){};
+};
+
+class BoundingBoxConstraint:public LinearConstraint
+{
+  public:
+    BoundingBoxConstraint(const Eigen::VectorXd &lb, const Eigen::VectorXd &ub);
+    ~BoundingBoxConstraint(void){};
+};
+
 #endif
 
