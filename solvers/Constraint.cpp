@@ -13,6 +13,7 @@ Constraint::Constraint(const MatrixXd &lb, const MatrixXd &ub)
   if(lb.rows() != ub.rows() || lb.cols() != ub.cols())
   {
     cerr<<"constraint lower bound and upper bound should have the same size"<<endl;
+    exit(EXIT_FAILURE);
   }
   this->lb = lb;
   this->ub = ub;
@@ -37,6 +38,7 @@ void Constraint::eval(const ConstraintInput & in, MatrixXd &y) const
   if(this->eval_handle == nullptr)
   {
     cerr<<"Drake:Constraint::eval:null eval pointer"<<endl;
+    exit(EXIT_FAILURE);
   }
   else
   {
@@ -52,52 +54,54 @@ void Constraint::getBounds(MatrixXd &lb, MatrixXd &ub) const
 
 NonlinearConstraint::NonlinearConstraint(const VectorXd &lb, const VectorXd &ub, int xdim):Constraint(lb,ub)
 {
-   this->num_cnstr = this->lb.rows();
-   this->ceq_idx.resize(this->num_cnstr);
-   this->cin_idx.resize(this->num_cnstr);
-   int num_ceq = 0;
-   int num_cin = 0;
-   for(int i = 0;i<this->num_cnstr;i++)
-   {
-     if(this->lb(i)>this->ub(i))
-     {
-       cerr<<"Drake:NonlinearConstraint:lb must be no larger than ub"<<endl;
-     }
-     else if(this->lb(i) == this->ub(i))
-     {
-       this->ceq_idx(num_ceq) = i;
-       num_ceq++;
-     }
-     else
-     {
-       this->cin_idx(num_cin) = i;
-       num_cin++;
-     }
-   }
-   this->ceq_idx.conservativeResize(num_ceq);
-   this->cin_idx.conservativeResize(num_cin);
-   if(xdim<=0)
-   {
-     cerr<<"Drake:NonlinearConstraint:xdim should be positive"<<endl;
-   }
-   this->xdim = xdim;
-   this->iCfun.resize(this->num_cnstr*this->xdim);
-   this->jCvar.resize(this->num_cnstr*this->xdim);
-   for(int j = 0;j<this->xdim;j++)
-   {
-     for(int i = 0;i<this->num_cnstr;i++)
-     {
-       this->iCfun(j*this->num_cnstr+i) = i;
-       this->jCvar(j*this->num_cnstr+i) = j;
-     }
-   }
-   this->nnz = this->num_cnstr*this->xdim;
-   this->name.resize(this->num_cnstr);
-   for(int i = 0;i<this->num_cnstr;i++)
-   {
-     this->name.at(i) = string("");
-   }
-   this->eval_handle = nullptr;
+  this->num_cnstr = this->lb.rows();
+  this->ceq_idx.resize(this->num_cnstr);
+  this->cin_idx.resize(this->num_cnstr);
+  int num_ceq = 0;
+  int num_cin = 0;
+  for(int i = 0;i<this->num_cnstr;i++)
+  {
+    if(this->lb(i)>this->ub(i))
+    {
+      cerr<<"Drake:NonlinearConstraint:lb must be no larger than ub"<<endl;
+      exit(EXIT_FAILURE);
+    }
+    else if(this->lb(i) == this->ub(i))
+    {
+      this->ceq_idx(num_ceq) = i;
+      num_ceq++;
+    }
+    else
+    {
+      this->cin_idx(num_cin) = i;
+      num_cin++;
+    }
+  }
+  this->ceq_idx.conservativeResize(num_ceq);
+  this->cin_idx.conservativeResize(num_cin);
+  if(xdim<=0)
+  {
+    cerr<<"Drake:NonlinearConstraint:xdim should be positive"<<endl;
+    exit(EXIT_FAILURE);
+  }
+  this->xdim = xdim;
+  this->iCfun.resize(this->num_cnstr*this->xdim);
+  this->jCvar.resize(this->num_cnstr*this->xdim);
+  for(int j = 0;j<this->xdim;j++)
+  {
+    for(int i = 0;i<this->num_cnstr;i++)
+    {
+      this->iCfun(j*this->num_cnstr+i) = i;
+      this->jCvar(j*this->num_cnstr+i) = j;
+    }
+  }
+  this->nnz = this->num_cnstr*this->xdim;
+  this->name.resize(this->num_cnstr);
+  for(int i = 0;i<this->num_cnstr;i++)
+  {
+    this->name.at(i) = string("");
+  }
+  this->eval_handle = nullptr;
 }
 
 int NonlinearConstraint::getNumCnstr(void) const
@@ -132,12 +136,14 @@ void NonlinearConstraint::setSparseStructure(const VectorXi &iCfun, const Vector
   if(iCfun.rows() != jCvar.rows())
   {
     cerr<<"Drake:NonlinearConstraint:setSparseStructure:iCfun and jCvar should have the same size"<<endl;
+    exit(EXIT_FAILURE);
   }
   for(int i = 0;i<iCfun.rows();i++)
   {
     if(iCfun(i)<0 || iCfun(i)>=this->num_cnstr || jCvar(i)<0 || jCvar(i)>=this->xdim)
     {
       cerr<<"Drake:NonlinearConstraint:setSparseStructure:iCfun and jCvar are not within the valid range"<<endl;
+      exit(EXIT_FAILURE);
     }
   }
   this->iCfun = iCfun;
@@ -161,6 +167,7 @@ void NonlinearConstraint::eval(const ConstraintInput &in, MatrixXd &y) const
   else
   {
     cerr<<"Drake:NonlinearConstraint:eval:both eval_handle and geval_handle are null pointers"<<endl;
+    exit(EXIT_FAILURE);
   }
 }
 
@@ -169,6 +176,7 @@ void NonlinearConstraint::geval(const ConstraintInput &in, VectorXd &y, MatrixXd
   if(this->geval_handle == nullptr)
   {
     cerr<<"Drake:NonlinearConstraint::geval:null geval_handle pointer"<<endl;
+    exit(EXIT_FAILURE);
   }
   else
   {
@@ -229,6 +237,7 @@ void NonlinearConstraint::setName(const std::vector<std::string> &name)
   if(name.size() != this->num_cnstr)
   {
     cerr<<"Drake:NonlinearConstraint:setName:name string has incorrect size"<<endl;
+    exit(EXIT_FAILURE);
   }
   Constraint::setName(name);
 }
@@ -246,11 +255,13 @@ LinearConstraint::LinearConstraint(const VectorXd &lb, const VectorXd &ub, const
   if(lb.rows() != ub.rows())
   {
     cerr<<"Drake:LinearConstraint:lb and ub should have the same size"<<endl;
+    exit(EXIT_FAILURE);
   }
   this->num_cnstr = lb.rows();
   if(A.rows() != this->num_cnstr)
   {
     cerr<<"Drake:LinearConstraint: matrix A and bounds have different number of rows"<<endl;
+    exit(EXIT_FAILURE);
   }
   this->xdim = A.cols();
   this->ceq_idx.resize(this->num_cnstr);
@@ -262,6 +273,7 @@ LinearConstraint::LinearConstraint(const VectorXd &lb, const VectorXd &ub, const
     if(this->lb(i)>this->ub(i))
     {
       cerr<<"Drake:LinearConstraint:lb must be no larger than ub"<<endl;
+      exit(EXIT_FAILURE);
     }
     else if(this->lb(i) == this->ub(i))
     {
@@ -328,6 +340,7 @@ void LinearConstraint::setName(const vector<string> name)
   if(name.size() != this->num_cnstr)
   {
     cerr<<"Drake:LinearConstraint:setName: name string has incorrect size"<<endl;
+    exit(EXIT_FAILURE);
   }
   Constraint::setName(name);
 }

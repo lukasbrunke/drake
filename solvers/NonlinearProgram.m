@@ -63,6 +63,8 @@ classdef NonlinearProgram
     %  OVERLOAD ONE OR THE OTHER VERSIONS.
     
     function [f,df] = objective(obj,x)
+		  % @retval f   The value of the objective function, a double scalar;
+			% @retval df  The gradient of the objective function w.r.t x. A 1 x obj.num_vars vector
       if (obj.objcon_logic) % then i'm getting called from objectiveAndNonlinearConstraints
         error('Drake:NonlinearProgram:AbstractMethod','all derived classes must implement objective or objectiveAndNonlinearConstraints');
       end
@@ -80,6 +82,10 @@ classdef NonlinearProgram
     end
     
     function [g,h,dg,dh] = nonlinearConstraints(obj,x)
+		  % @retval g   The value of the nonlinear inequality constraints. A obj.num_cin x 1 double vector
+			% @retval h   The value of the nonlinear equality constraints. A obj.num_ceq x 1 double vector
+			% @retval dg  The gradient of the nonlinear inequality constraints w.r.t x. A obj.num_cin x obj.num_vars matrix
+			% @retval dh  The gradient of the nonlinear equality constraitns w.r.t x. A obj.num_ceq x obj.num_vars matrix
       if (obj.objcon_logic) % then i'm getting called from objectiveAndNonlinearConstraints
         error('Drake:NonlinearProgram:AbstractMethod','all derived classes must implement objective or objectiveAndNonlinearConstraints');
       end
@@ -193,6 +199,9 @@ classdef NonlinearProgram
       % set the lower and upper bounds of the decision variables
       sizecheck(x_lb,[obj.num_vars,1]);
       sizecheck(x_ub,[obj.num_vars,1]);
+      if(any(x_lb>x_ub))
+        error('Drake:NonlinearProgram:setVarBounds:x_lb should be no larger than x_ub');
+      end
       obj.x_lb = x_lb;
       obj.x_ub = x_ub;
     end
@@ -202,7 +211,7 @@ classdef NonlinearProgram
       % @param jFvar     -- A column integer vector. The indices of the non-zero entries
       % in the objective gradient
       if(any(jFvar>obj.num_vars) || any(jFvar<1))
-        error('Drake:NonlinearProgram:setObjectiveGradientSparsity:jGvar out of bounds');
+        error('Drake:NonlinearProgram:setObjectiveGradientSparsity:jFvar out of bounds');
       end
       obj.iFfun = ones(length(jFvar),1);
       obj.jFvar = jFvar;
@@ -425,7 +434,7 @@ classdef NonlinearProgram
       snseti('Iterations Limit',obj.solver_options.snopt.IterationsLimit);
 
       function [f,G] = snopt_userfun(x)
-        [f,G] = geval(@obj.objectiveAndNonlinearConstraints,x);
+        [f,G] = obj.objectiveAndNonlinearConstraints(x);
         f = [f;zeros(length(obj.bin)+length(obj.beq),1)];
         
         G = G(sub2ind(size(G),iGfun,jGvar));
