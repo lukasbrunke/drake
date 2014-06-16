@@ -373,8 +373,7 @@ void NonlinearProgram::snopt_solve(const VectorXd &x0, VectorXd &x, double &objv
     xupp[i] = this->x_ub(i);
   }
 
-  snopt::snoptProblem snopt_problem;
-  snopt_problem.setUserFun(&NonlinearProgram::snopt_userfun);
+  //snopt::snoptProblem snopt_problem; snopt_problem.setUserFun(&NonlinearProgram::snopt_userfun);
 //  snopt::integer minrw, miniw, mincw;
 //  snopt::integer lenrw = (this->num_cin+this->num_ceq+this->bin.rows()+this->beq.rows())*this->num_vars*1000;
 //  snopt::integer leniw = (this->num_cin+this->num_ceq+this->bin.rows()+this->beq.rows())*this->num_vars*100;
@@ -460,6 +459,8 @@ int NonlinearProgram::snopt_userfun(snopt::integer *Status, snopt::integer *n, s
   {
     G[i] = dfgh(this->iGfun(i),this->jGvar(i));
   }
+  fgh.conservativeResize(fgh.rows()+this->bin.rows()+this->beq.rows());
+  fgh.tail(this->bin.rows()+this->beq.rows()) = VectorXd::Zero(this->bin.rows()+this->beq.rows());
   return 0;
 }
 
