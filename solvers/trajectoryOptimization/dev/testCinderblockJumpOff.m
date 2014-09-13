@@ -7,7 +7,7 @@ warning('off','Drake:RigidBody:NonPositiveInertiaMatrix');
 warning('off','Drake:RigidBodyManipulator:UnsupportedContactPoints');
 warning('off','Drake:RigidBodyManipulator:UnsupportedJointLimits');
 warning('off','Drake:RigidBodyManipulator:UnsupportedVelocityLimits');
-urdf = [getDrakePath,'/examples/Atlas/urdf/atlas_minimal_contact.urdf'];
+urdf = [getDrakePath,'/examples/Atlas/urdf/atlas_convex_hull.urdf'];
 options.floating = true;
 robot = RigidBodyManipulator(urdf,options);
 cinderblock_urdf = [getDrakePath,'/solvers/trajectoryOptimization/dev/cinderblock.urdf'];
@@ -90,7 +90,7 @@ bky_idx = robot.getBody(robot.findJointInd('back_bky')).position_num;
 l_leg_hpx = robot.getBody(robot.findJointInd('l_leg_hpx')).position_num;
 r_leg_hpx = robot.getBody(robot.findJointInd('r_leg_hpx')).position_num;
 
-tf_range = [1 3];
+tf_range = [0.5 3];
 q_nom = bsxfun(@times,qstar,ones(1,nT));
 Q_comddot = eye(3);
 Q = eye(nq);
@@ -180,12 +180,25 @@ cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(vstar,vstar),cdfkp.
 cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(vstar,vstar),cdfkp.v_inds(:,end));
 
 cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(0.04*ones(nT-1,1),0.1*ones(nT-1,1)),cdfkp.h_inds(:));
+cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(0.04*ones(toe_land_idx-toe_takeoff_idx,1),0.06*ones(toe_land_idx-toe_takeoff_idx,1)),cdfkp.h_inds(toe_takeoff_idx:toe_land_idx-1)');
 
 % cdfkp = cdfkp.addCoMBounds(1:nT,bsxfun(@times,com_star-[0.5;0.5;0.5],ones(1,nT)),bsxfun(@times,com_star+[0.5;0.5;1],ones(1,nT)));
 
 cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(...
   reshape(bsxfun(@times,[-9.81;-9.81;-9.81*1.1],ones(1,nT)),[],1),...
   reshape(bsxfun(@times,[9.81;9.81;9.81],ones(1,nT)),[],1)),cdfkp.comddot_inds(:));
+
+% add a collision avoidance constraint between the foot and the cinderblock
+lfoot_avoid_cinderblock = MinDistanceConstraint(robot,0.05,struct('body_idx',[l_foot,1]));
+rfoot_avoid_cinderblock = MinDistanceConstraint(robot,0.05,struct('body_idx',[r_foot,1]));
+lfoot_avoid_cinderblock = lfoot_avoid_cinderblock.generateConstraint();
+lfoot_avoid_cinderblock = lfoot_avoid_cinderblock{1};
+rfoot_avoid_cinderblock = rfoot_avoid_cinderblock.generateConstraint();
+rfoot_avoid_cinderblock = rfoot_avoid_cinderblock{1};
+for i = toe_takeoff_idx+2:toe_land_idx
+  cdfkp = cdfkp.addNonlinearConstraint(lfoot_avoid_cinderblock,cdfkp.q_inds(:,i),cdfkp.kinsol_dataind(i));
+  cdfkp = cdfkp.addNonlinearConstraint(rfoot_avoid_cinderblock,cdfkp.q_inds(:,i),cdfkp.kinsol_dataind(i));
+end
 
 x_seed = zeros(cdfkp.num_vars,1);
 x_seed(cdfkp.h_inds) = 0.1;
@@ -224,7 +237,7 @@ cdfkp = cdfkp.setSolverOptions('snopt','majoroptimalitytolerance',2e-4);
 cdfkp = cdfkp.setSolverOptions('snopt','superbasicslimit',2000);
 cdfkp = cdfkp.setSolverOptions('snopt','print','test_jump_cinderblock.out');
 
-% seed_sol = load('test_jump','-mat','x_sol');
+seed_sol = load('test_cinderblock','-mat','x_sol');
 if(mode == 0)
   jump = load('test_jump','-mat','t_sol','v_sol','q_sol','wrench_sol','com_sol','comdot_sol','comddot_sol');
   v = ContactWrenchVisualizer(robot,jump.t_sol,jump.wrench_sol);
@@ -253,7 +266,7 @@ if(mode == 0)
 end
 if(mode == 1)
 tic
-[x_sol,F,info] = cdfkp.solve(x_seed);
+[x_sol,F,info] = cdfkp.solve(seed_sol.x_sol);
 toc
 [q_sol,v_sol,h_sol,t_sol,com_sol,comdot_sol,comddot_sol,H_sol,Hdot_sol,lambda_sol,wrench_sol] = parseSolution(cdfkp,x_sol);
 xtraj_sol = PPTrajectory(foh(cumsum([0 h_sol]),[q_sol;v_sol]));
