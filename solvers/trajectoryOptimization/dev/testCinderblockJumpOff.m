@@ -11,8 +11,9 @@ urdf = [getDrakePath,'/examples/Atlas/urdf/atlas_minimal_contact.urdf'];
 options.floating = true;
 robot = RigidBodyManipulator(urdf,options);
 cinderblock_urdf = [getDrakePath,'/solvers/trajectoryOptimization/dev/cinderblock.urdf'];
-cinderblock_pos1;
-robot = robot.addRobotFromURDF(cinderblock_urdf,cinderblock_pos1(1:3),cinderblock_pos1(4:6));
+cinderblock_dim = [0.397;0.45;0.29];
+cinderblock_pos = [-0.05;0;cinderblock_dim(3)/2;0;0;0];
+robot = robot.addRobotFromURDF(cinderblock_urdf,cinderblock_pos(1:3),cinderblock_pos(4:6));
 nomdata = load([getDrakePath,'/examples/Atlas/data/atlas_fp.mat']);
 nq = robot.getNumPositions();
 qstar = nomdata.xstar(1:nq);
@@ -45,13 +46,17 @@ end
 l_foot_bottom = [l_foot_toe l_foot_heel];
 r_foot_bottom = [r_foot_toe r_foot_heel];
 
-lfoot_pos_star = robot.forwardKin(kinsol_star,l_foot,[0;0;0],2);
-rfoot_pos_star = robot.forwardKin(kinsol_star,r_foot,[0;0;0],2);
-lfoot_toe_pos_star = robot.forwardKin(kinsol_star,l_foot,l_foot_toe,0);
-rfoot_toe_pos_star = robot.forwardKin(kinsol_star,r_foot,r_foot_toe,0);
-lfoot_heel_pos_star = robot.forwardKin(kinsol_star,l_foot,l_foot_heel,0);
-rfoot_heel_pos_star = robot.forwardKin(kinsol_star,r_foot,r_foot_heel,0);
-com_star = robot.getCOM(kinsol_star);
+q_start = qstar;
+q_start(3) = qstar(3)+cinderblock_dim(3);
+
+kinsol_start = robot.doKinematics(q_start);
+lfoot_pos_start = robot.forwardKin(kinsol_start,l_foot,[0;0;0],2);
+rfoot_pos_start = robot.forwardKin(kinsol_start,r_foot,[0;0;0],2);
+lfoot_toe_pos_start = robot.forwardKin(kinsol_start,l_foot,l_foot_toe,0);
+rfoot_toe_pos_start = robot.forwardKin(kinsol_start,r_foot,r_foot_toe,0);
+lfoot_heel_pos_start = robot.forwardKin(kinsol_start,l_foot,l_foot_heel,0);
+rfoot_heel_pos_start = robot.forwardKin(kinsol_start,r_foot,r_foot_heel,0);
+com_start = robot.getCOM(kinsol_start);
 
 
 heel_takeoff_idx = 5;
@@ -82,8 +87,10 @@ r_foot_contact_wrench(3) = struct('active_knot',heel_land_idx:nT,'cw',LinearFric
 r_foot_contact_wrench(4) = struct('active_knot',toe_land_idx:nT,'cw',LinearFrictionConeWrench(robot,r_foot,r_foot_toe,FC_edge));
 
 bky_idx = robot.getBody(robot.findJointInd('back_bky')).position_num;
+l_leg_hpx = robot.getBody(robot.findJointInd('l_leg_hpx')).position_num;
+r_leg_hpx = robot.getBody(robot.findJointInd('r_leg_hpx')).position_num;
 
-tf_range = [1 2];
+tf_range = [1 3];
 q_nom = bsxfun(@times,qstar,ones(1,nT));
 Q_comddot = eye(3);
 Q = eye(nq);
@@ -119,64 +126,93 @@ cdfkp = cdfkp.addRigidBodyConstraint(rfoot_heel_above_ground,num2cell(heel_takeo
 % % rfoot_heel_on_ground = rfoot_heel_on_ground.generateConstraint([]);
 % sdfkp = sdfkp.addRigidBodyConstraint(rfoot_heel_on_ground,num2cell(heel_land_idx:toe_land_idx-1));
 
-lfoot_toe_on_ground = WorldPositionConstraint(robot,l_foot,l_foot_toe,lfoot_toe_pos_star,lfoot_toe_pos_star);
+land_region_lb = [cinderblock_dim(1)/2;-inf;0];
+land_region_ub = [inf;inf;0];
+lfoot_toe_on_ground = WorldPositionConstraint(robot,l_foot,l_foot_toe,bsxfun(@times,land_region_lb,ones(1,size(l_foot_toe,2))),bsxfun(@times,land_region_ub,ones(1,size(l_foot_toe,2))));
 % lfoot_toe_on_ground = lfoot_toe_on_ground.generateConstraint([]);
-cdfkp = cdfkp.addRigidBodyConstraint(lfoot_toe_on_ground,num2cell([(heel_takeoff_idx+1:toe_takeoff_idx) (toe_land_idx:heel_land_idx-1)]));
+cdfkp = cdfkp.addRigidBodyConstraint(lfoot_toe_on_ground,num2cell(toe_land_idx:nT));
 
-rfoot_toe_on_ground = WorldPositionConstraint(robot,r_foot,r_foot_toe,rfoot_toe_pos_star,rfoot_toe_pos_star);
+rfoot_toe_on_ground = WorldPositionConstraint(robot,r_foot,r_foot_toe,bsxfun(@times,land_region_lb,ones(1,size(r_foot_toe,2))),bsxfun(@times,land_region_ub,ones(1,size(r_foot_toe,2))));
 % rfoot_toe_on_ground = rfoot_toe_on_ground.generateConstraint([]);
-cdfkp = cdfkp.addRigidBodyConstraint(rfoot_toe_on_ground,num2cell([(heel_takeoff_idx+1:toe_takeoff_idx) (toe_land_idx:heel_land_idx-1)]));
+cdfkp = cdfkp.addRigidBodyConstraint(rfoot_toe_on_ground,num2cell(toe_land_idx:nT));
 
-lfoot_on_ground = {WorldPositionConstraint(robot,l_foot,[0;0;0],lfoot_pos_star(1:3),lfoot_pos_star(1:3)),...
-  WorldQuatConstraint(robot,l_foot,lfoot_pos_star(4:7),0)};
+lfoot_heel_on_ground = WorldPositionConstraint(robot,l_foot,l_foot_heel,bsxfun(@times,land_region_lb,ones(1,size(l_foot_heel,2))),bsxfun(@times,land_region_ub,ones(1,size(l_foot_heel,2))));
 % lfoot_on_ground = {lfoot_on_ground{1}.generateConstraint([]),lfoot_on_ground{2}.generateConstraint([])};
-cdfkp = cdfkp.addRigidBodyConstraint(lfoot_on_ground{1},num2cell([(2:heel_takeoff_idx) (heel_land_idx:nT-1)]));
-cdfkp = cdfkp.addRigidBodyConstraint(lfoot_on_ground{2},num2cell([(2:heel_takeoff_idx) (heel_land_idx:nT-1)]));
+cdfkp = cdfkp.addRigidBodyConstraint(lfoot_heel_on_ground,num2cell(heel_land_idx:nT));
 
-rfoot_on_ground = {WorldPositionConstraint(robot,r_foot,[0;0;0],rfoot_pos_star(1:3),rfoot_pos_star(1:3)),...
-  WorldQuatConstraint(robot,r_foot,rfoot_pos_star(4:7),0)};
+rfoot_heel_on_ground = WorldPositionConstraint(robot,r_foot,r_foot_heel,bsxfun(@times,land_region_lb,ones(1,size(r_foot_heel,2))),bsxfun(@times,land_region_ub,ones(1,size(r_foot_heel,2))));
 % rfoot_on_ground = {rfoot_on_ground{1}.generateConstraint([]),rfoot_on_ground{2}.generateConstraint([])};
-cdfkp = cdfkp.addRigidBodyConstraint(rfoot_on_ground{1},num2cell([(2:heel_takeoff_idx) (heel_land_idx:nT-1)]));
-cdfkp = cdfkp.addRigidBodyConstraint(rfoot_on_ground{2},num2cell([(2:heel_takeoff_idx) (heel_land_idx:nT-1)]));
+cdfkp = cdfkp.addRigidBodyConstraint(rfoot_heel_on_ground,num2cell(heel_land_idx:nT));
 
+% fix the toe position after landing
+rfoot_toe_static_on_ground = WorldFixedPositionConstraint(robot,r_foot,r_foot_toe);
+cdfkp = cdfkp.addRigidBodyConstraint(rfoot_toe_static_on_ground,{toe_land_idx:nT});
+lfoot_toe_static_on_ground = WorldFixedPositionConstraint(robot,l_foot,l_foot_toe);
+cdfkp = cdfkp.addRigidBodyConstraint(lfoot_toe_static_on_ground,{toe_land_idx:nT});
+
+lfoot_on_cinderblock = {WorldPositionConstraint(robot,l_foot,[0;0;0],lfoot_pos_start(1:3),lfoot_pos_start(1:3)),...
+  WorldQuatConstraint(robot,l_foot,lfoot_pos_start(4:7),0)};
+cdfkp = cdfkp.addRigidBodyConstraint(lfoot_on_cinderblock{1},num2cell(2:heel_takeoff_idx));
+cdfkp = cdfkp.addRigidBodyConstraint(lfoot_on_cinderblock{2},num2cell(2:heel_takeoff_idx));
+
+rfoot_on_cinderblock = {WorldPositionConstraint(robot,r_foot,[0;0;0],rfoot_pos_start(1:3),rfoot_pos_start(1:3)),...
+  WorldQuatConstraint(robot,r_foot,rfoot_pos_start(4:7),0)};
+cdfkp = cdfkp.addRigidBodyConstraint(rfoot_on_cinderblock{1},num2cell(2:heel_takeoff_idx));
+cdfkp = cdfkp.addRigidBodyConstraint(rfoot_on_cinderblock{2},num2cell(2:heel_takeoff_idx));
+
+rfoot_heel_above_cinderblock = WorldPositionConstraint(robot,r_foot,r_foot_heel,bsxfun(@times,[nan(2,1);cinderblock_dim(3)],ones(1,size(r_foot_heel,2))),nan(3,size(r_foot_heel,2)));
+cdfkp = cdfkp.addRigidBodyConstraint(rfoot_heel_above_cinderblock,num2cell(heel_takeoff_idx+1:toe_takeoff_idx));
+
+lfoot_heel_above_cinderblock = WorldPositionConstraint(robot,l_foot,l_foot_heel,bsxfun(@times,[nan(2,1);cinderblock_dim(3)],ones(1,size(l_foot_heel,2))),nan(3,size(l_foot_heel,2)));
+cdfkp = cdfkp.addRigidBodyConstraint(lfoot_heel_above_cinderblock,num2cell(heel_takeoff_idx+1:toe_takeoff_idx));
+
+rfoot_toe_on_cinderblock = WorldPositionConstraint(robot,r_foot,r_foot_toe,rfoot_toe_pos_start,rfoot_toe_pos_start);
+cdfkp = cdfkp.addRigidBodyConstraint(rfoot_toe_on_cinderblock,num2cell(heel_takeoff_idx+1:toe_takeoff_idx));
+
+lfoot_toe_on_cinderblock = WorldPositionConstraint(robot,l_foot,l_foot_toe,lfoot_toe_pos_start,lfoot_toe_pos_start);
+cdfkp = cdfkp.addRigidBodyConstraint(lfoot_toe_on_cinderblock,num2cell(heel_takeoff_idx+1:toe_takeoff_idx));
 % 
 % sdfkp = sdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(qstar(3)+0.3,inf),sdfkp.q_inds(3,apex_knot));
 
-cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(qstar,qstar),cdfkp.q_inds(:,1));
-cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(qstar,qstar),cdfkp.q_inds(:,end));
+cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(q_start,q_start),cdfkp.q_inds(:,1));
+% cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(qstar,qstar),cdfkp.q_inds(:,end));
 cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(vstar,vstar),cdfkp.v_inds(:,1));
 cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(vstar,vstar),cdfkp.v_inds(:,end));
 
 cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(0.04*ones(nT-1,1),0.1*ones(nT-1,1)),cdfkp.h_inds(:));
 
-cdfkp = cdfkp.addCoMBounds(1:nT,bsxfun(@times,com_star-[0.5;0.5;0.5],ones(1,nT)),bsxfun(@times,com_star+[0.5;0.5;1],ones(1,nT)));
+% cdfkp = cdfkp.addCoMBounds(1:nT,bsxfun(@times,com_star-[0.5;0.5;0.5],ones(1,nT)),bsxfun(@times,com_star+[0.5;0.5;1],ones(1,nT)));
 
 cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(...
-  reshape(bsxfun(@times,[-9.81/2;-9.81/2;-9.81],ones(1,nT)),[],1),...
-  reshape(bsxfun(@times,[9.81/2;9.81/2;9.81],ones(1,nT)),[],1)),cdfkp.comddot_inds(:));
+  reshape(bsxfun(@times,[-9.81;-9.81;-9.81*1.1],ones(1,nT)),[],1),...
+  reshape(bsxfun(@times,[9.81;9.81;9.81],ones(1,nT)),[],1)),cdfkp.comddot_inds(:));
 
 x_seed = zeros(cdfkp.num_vars,1);
 x_seed(cdfkp.h_inds) = 0.1;
-x_seed(cdfkp.q_inds(:)) = reshape(bsxfun(@times,qstar,ones(1,nT)),[],1);
-x_seed(cdfkp.com_inds(:)) = reshape(bsxfun(@times,com_star,ones(1,nT)),[],1);
+x_seed(cdfkp.q_inds(:)) = reshape(bsxfun(@times,q_start,ones(1,nT)),[],1);
+x_seed(cdfkp.com_inds(:)) = reshape(bsxfun(@times,com_start,ones(1,nT)),[],1);
 x_seed(cdfkp.lambda_inds{1}(:)) = reshape(bsxfun(@times,1/num_edges*ones(num_edges,4,1),ones(1,1,nT)),[],1);
 x_seed(cdfkp.lambda_inds{2}(:)) = reshape(bsxfun(@times,1/num_edges*ones(num_edges,4,1),ones(1,1,nT)),[],1);
 
 % add a cost to maximize com apex_height
-cdfkp = cdfkp.addCost(FunctionHandleConstraint(-inf,inf,2,@comApexHeightCost),{cdfkp.com_inds(3,toe_takeoff_idx);cdfkp.comdot_inds(3,toe_takeoff_idx)});
+% cdfkp = cdfkp.addCost(FunctionHandleConstraint(-inf,inf,2,@comApexHeightCost),{cdfkp.com_inds(3,toe_takeoff_idx);cdfkp.comdot_inds(3,toe_takeoff_idx)});
 % add a constraint on the com apex height
-apex_height_cnstr = FunctionHandleConstraint(1.4,inf,2,@comApexHeight);
+apex_height_cnstr = FunctionHandleConstraint(com_start(3)+0.1,inf,2,@comApexHeight);
 apex_height_cnstr = apex_height_cnstr.setName({'com apex height'});
-cdfkp = cdfkp.addDifferentiableConstraint(apex_height_cnstr,{cdfkp.com_inds(3,toe_takeoff_idx);cdfkp.comdot_inds(3,toe_takeoff_idx)});
+cdfkp = cdfkp.addNonlinearConstraint(apex_height_cnstr,{cdfkp.com_inds(3,toe_takeoff_idx);cdfkp.comdot_inds(3,toe_takeoff_idx)});
 
 % add a symmetric constraint
 symmetry_cnstr = symmetryConstraint(robot,2:nT-1);
 cdfkp = cdfkp.addLinearConstraint(symmetry_cnstr,reshape(cdfkp.q_inds(:,2:nT-1),[],1));
 % no yawing on the back
 bkz_idx = robot.getBody(robot.findJointInd('back_bkz')).position_num;
-cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(zeros(nT-2,1),zeros(nT-2,1)),reshape(cdfkp.q_inds(bkz_idx,2:nT-1),[],1));
+cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(zeros(nT-1,1),zeros(nT-1,1)),reshape(cdfkp.q_inds(bkz_idx,2:nT),[],1));
 % sdfkp = sdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(zeros(nT-2,1),zeros(nT-2,1)),reshape(sdfkp.q_inds(6,2:nT-1),[],1));
 % sdfkp = sdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(zeros(nT-2,1),zeros(nT-2,1)),reshape(sdfkp.q_inds(4,2:nT-1),[],1));
+
+% no leg crossing by constraining the hpx
+cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(-0.1*ones(nT-1,1),inf(nT-1,1)),reshape(cdfkp.q_inds(l_leg_hpx,2:nT),[],1));
+cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(-inf(nT-1,1),0.1*ones(nT-1,1)),reshape(cdfkp.q_inds(r_leg_hpx,2:nT),[],1));
 
 % no large pelvis pitch
 cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint((qstar(5)-0.3)*ones(nT-2,1),(qstar(5)+0.4)*ones(nT-2,1)),cdfkp.q_inds(5,2:nT-1));
@@ -186,9 +222,9 @@ cdfkp = cdfkp.setSolverOptions('snopt','majoriterationslimit',2000);
 cdfkp = cdfkp.setSolverOptions('snopt','majorfeasibilitytolerance',1e-6);
 cdfkp = cdfkp.setSolverOptions('snopt','majoroptimalitytolerance',2e-4);
 cdfkp = cdfkp.setSolverOptions('snopt','superbasicslimit',2000);
-cdfkp = cdfkp.setSolverOptions('snopt','print','test_jump.out');
+cdfkp = cdfkp.setSolverOptions('snopt','print','test_jump_cinderblock.out');
 
-seed_sol = load('test_jump','-mat','x_sol');
+% seed_sol = load('test_jump','-mat','x_sol');
 if(mode == 0)
   jump = load('test_jump','-mat','t_sol','v_sol','q_sol','wrench_sol','com_sol','comdot_sol','comddot_sol');
   v = ContactWrenchVisualizer(robot,jump.t_sol,jump.wrench_sol);
@@ -217,7 +253,7 @@ if(mode == 0)
 end
 if(mode == 1)
 tic
-[x_sol,F,info] = cdfkp.solve(seed_sol.x_sol);
+[x_sol,F,info] = cdfkp.solve(x_seed);
 toc
 [q_sol,v_sol,h_sol,t_sol,com_sol,comdot_sol,comddot_sol,H_sol,Hdot_sol,lambda_sol,wrench_sol] = parseSolution(cdfkp,x_sol);
 xtraj_sol = PPTrajectory(foh(cumsum([0 h_sol]),[q_sol;v_sol]));
