@@ -7,7 +7,7 @@ warning('off','Drake:RigidBody:NonPositiveInertiaMatrix');
 warning('off','Drake:RigidBodyManipulator:UnsupportedContactPoints');
 warning('off','Drake:RigidBodyManipulator:UnsupportedJointLimits');
 warning('off','Drake:RigidBodyManipulator:UnsupportedVelocityLimits');
-urdf = [getDrakePath,'/examples/Atlas/urdf/atlas_convex_hull.urdf'];
+urdf = [getDrakePath,'/examples/Atlas/urdf/atlas_minimal_contact.urdf'];
 options.floating = true;
 robot = RigidBodyManipulator(urdf,options);
 cinderblock_urdf = [getDrakePath,'/solvers/trajectoryOptimization/dev/cinderblock.urdf'];
@@ -239,8 +239,8 @@ cdfkp = cdfkp.setSolverOptions('snopt','print','test_jump_cinderblock.out');
 
 seed_sol = load('test_cinderblock','-mat','x_sol');
 if(mode == 0)
-  jump = load('test_jump','-mat','t_sol','v_sol','q_sol','wrench_sol','com_sol','comdot_sol','comddot_sol');
-  v = ContactWrenchVisualizer(robot,jump.t_sol,jump.wrench_sol);
+  jump = load('test_cinderblock','-mat','t_sol','v_sol','q_sol','wrench_sol','com_sol','comdot_sol','comddot_sol');
+  v = robot.constructVisualizer();
   xtraj = PPTrajectory(foh(jump.t_sol,[jump.q_sol;jump.v_sol]));
   xtraj = xtraj.setOutputFrame(robot.getStateFrame);
   v.playback(xtraj,struct('slider',true));
