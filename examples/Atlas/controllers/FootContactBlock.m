@@ -11,6 +11,7 @@ classdef FootContactBlock < MIMODrakeSystem
     contact_threshold; % min height above terrain to be considered in contact
     use_lcm;
     use_contact_logic_OR;
+    robot;
   end
   
   methods
@@ -130,6 +131,7 @@ classdef FootContactBlock < MIMODrakeSystem
         obj.using_flat_terrain = false;
       end
 
+      obj.robot = r;
     end
    
     function varargout=mimoOutput(obj,t,~,x)      
@@ -173,7 +175,15 @@ classdef FootContactBlock < MIMODrakeSystem
         height = 0;
       end
       
-      active_supports = supportDetectmex(obj.mex_ptr.data,x,supp,contact_sensor,contact_thresh,height,contact_logic_AND);
+      active_supports = [];
+      kinsol = obj.robot.doKinematics(x(1:obj.robot.getNumPositions));
+      for i = 1:length(supp.bodies)
+        phi = contactConstraintsBV(obj.robot,kinsol,false,struct('terrain_only',true,'body_idx',[1,supp.bodies(i)]));
+        if(any(phi<contact_thresh))
+          active_supports = [active_supports supp.bodies(i)];
+        end
+      end
+%       active_supports = supportDetectmex(obj.mex_ptr.data,x,supp,contact_sensor,contact_thresh,height,contact_logic_AND);
 
       y = [1.0*any(active_supports==obj.lfoot_idx); 1.0*any(active_supports==obj.rfoot_idx)];
       if obj.num_outputs > 1

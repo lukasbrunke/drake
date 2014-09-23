@@ -16,14 +16,18 @@ warning('off','Drake:RigidBodyManipulator:UnsupportedContactPoints')
 warning('off','Drake:RigidBodyManipulator:UnsupportedJointLimits')
 warning('off','Drake:RigidBodyManipulator:UnsupportedVelocityLimits')
 
-options.floating = true;
-options.dt = 0.001;
-options.ignore_effort_limits = true;
-r = Atlas('urdf/atlas_minimal_contact.urdf',options);
-r = r.removeCollisionGroupsExcept({'heel','toe'});
 cinderblock_urdf = [getDrakePath,'/solvers/trajectoryOptimization/dev/cinderblock.urdf'];
 cinderblock_dim = [0.397;0.45;0.29];
 cinderblock_pos = [-0.05;0;cinderblock_dim(3)/2;0;0;0];
+cinderblock_terrain = CinderblockTerrain(cinderblock_dim,cinderblock_pos([1;2]));
+
+options.floating = true;
+options.dt = 0.001;
+options.ignore_effort_limits = true;
+options.terrain = cinderblock_terrain;
+r = Atlas('urdf/atlas_minimal_contact.urdf',options);
+r = r.removeCollisionGroupsExcept({'heel','toe'});
+
 r = r.addRobotFromURDF(cinderblock_urdf,cinderblock_pos(1:3),cinderblock_pos(4:6));
 r = compile(r);
 
@@ -31,7 +35,7 @@ v = r.constructVisualizer;
 v.display_dt = 0.005;
 
 % load in running trajectory
-sol = load('../../solvers/trajectoryOptimization/dev/test_cinderblock.mat','xtraj_sol','t_sol','h_sol','com_sol','comdot_sol','comddot_sol');
+sol = load('../../solvers/trajectoryOptimization/dev/test_cinderblock2.mat','xtraj_sol','t_sol','h_sol','com_sol','comdot_sol','comddot_sol');
 
 ts = unique(sol.xtraj_sol.getBreaks);
 xtraj = sol.xtraj_sol;
