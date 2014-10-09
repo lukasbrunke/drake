@@ -100,7 +100,7 @@ Q = eye(nq);
 Q(1,1) = 0;
 Q(2,2) = 0;
 Q(6,6) = 0;
-Qv = 0.001*eye(nv);
+Qv = 0.005*eye(nv);
 % Qv(4,4) = 100*Qv(4,4);
 Q_contact_force = 0/(robot.getMass*g)^2*eye(3);
 cdfkp = ComDynamicsFullKinematicsPlanner(robot,nT,tf_range,Q_comddot,Qv,Q,q_nom,Q_contact_force,[l_foot_contact_wrench r_foot_contact_wrench]);
@@ -180,8 +180,12 @@ cdfkp = cdfkp.addRigidBodyConstraint(no_self_collision,num2cell(1:nT));
 cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(0.1*ones(2*nT,1),inf(2*nT,1)),reshape(cdfkp.q_inds([l_leg_kny;r_leg_kny],:),[],1));
 
 % wrist not bending too much
-cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(-0.5*ones(nT,1),0.5*ones(nT,1)),cdfkp.q_inds(l_arm_mwx,:)');
-cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(-0.5*ones(nT,1),0.5*ones(nT,1)),cdfkp.q_inds(r_arm_mwx,:)');
+cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(-0.3*ones(nT,1),0.3*ones(nT,1)),cdfkp.q_inds(l_arm_mwx,:)');
+cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(-0.3*ones(nT,1),0.3*ones(nT,1)),cdfkp.q_inds(r_arm_mwx,:)');
+
+% do not bend the elbow too much
+cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(-inf(nT,1),0.7*ones(nT,1)),cdfkp.q_inds(l_arm_elx,:)');
+cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(-0.7*ones(nT,1),inf(nT,1)),cdfkp.q_inds(r_arm_elx,:)');
 
 x_seed = zeros(cdfkp.num_vars,1);
 x_seed(cdfkp.h_inds) = 0.05;
@@ -193,7 +197,7 @@ x_seed(cdfkp.lambda_inds{2}(:)) = reshape(bsxfun(@times,1/num_edges*ones(num_edg
 cdfkp = cdfkp.setSolverOptions('snopt','iterationslimit',1e6);
 cdfkp = cdfkp.setSolverOptions('snopt','majoriterationslimit',1000);
 cdfkp = cdfkp.setSolverOptions('snopt','majorfeasibilitytolerance',1e-6);
-cdfkp = cdfkp.setSolverOptions('snopt','majoroptimalitytolerance',2e-4);
+cdfkp = cdfkp.setSolverOptions('snopt','majoroptimalitytolerance',1e-5);
 cdfkp = cdfkp.setSolverOptions('snopt','superbasicslimit',2000);
 cdfkp = cdfkp.setSolverOptions('snopt','print','test_walk.out');
 
