@@ -11,7 +11,6 @@ classdef CinderblockTerrain < RigidBodyTerrain
       obj = obj@RigidBodyTerrain();
       obj.cinderblock_size = cinderblock_size;
       obj.cinderblock_xy = cinderblock_xy;
-      obj.geom = obj.constructRigidBodyGeometry();
     end
     
     function [z,normal] = getHeight(obj,xy)
@@ -26,12 +25,12 @@ classdef CinderblockTerrain < RigidBodyTerrain
       normal = bsxfun(@times,[0;0;1],ones(1,size(xy,2)));
     end
     
-    function geom = constructRigidBodyGeometry(obj)
-      if(~isempty(obj.cinderblock_size))
-        geom = RigidBodyBox(obj.cinderblock_size,[obj.cinderblock_xy;obj.cinderblock_size(3)/2],[0;0;0]);
-      else
-        geom = [];
-      end
+    function geom = getRigidBodyGeometry(obj)
+      geom = RigidBodyBox(obj.cinderblock_size,[obj.cinderblock_xy;obj.cinderblock_size(3)/2],[0;0;0]);
+    end
+    
+    function geom = getRigidBodyContactGeometry(obj)
+      geom = RigidBodyBox(obj.cinderblock_size,[obj.cinderblock_xy;obj.cinderblock_size(3)/2],[0;0;0]);
     end
     
     function [xgv,ygv] = writeWRL(obj,fp) % for visualization

@@ -6,7 +6,7 @@ if ~checkDependency('gurobi')
 end
 
 if (nargin<1); use_mex = true; end
-if (nargin<2); use_angular_momentum = false; end
+if (nargin<2); use_angular_momentum = true; end
 
 addpath(fullfile(getDrakePath,'examples','Atlas','controllers'));
 addpath(fullfile(getDrakePath,'examples','Atlas','frames'));
@@ -17,7 +17,8 @@ warning('off','Drake:RigidBodyManipulator:UnsupportedJointLimits')
 warning('off','Drake:RigidBodyManipulator:UnsupportedVelocityLimits')
 
 cinderblock_urdf = [getDrakePath,'/solvers/trajectoryOptimization/dev/cinderblock.urdf'];
-cinderblock_dim = [0.397;0.45;0.29];
+% cinderblock_dim = [0.397;0.45;0.29];
+cinderblock_dim = [0.41;2;0.29];
 cinderblock_pos = [-0.05;0;cinderblock_dim(3)/2;0;0;0];
 cinderblock_terrain = CinderblockTerrain(cinderblock_dim,cinderblock_pos([1;2]));
 
@@ -35,7 +36,7 @@ v = r.constructVisualizer;
 v.display_dt = 0.005;
 
 % load in running trajectory
-sol = load('../../solvers/trajectoryOptimization/dev/test_cinderblock2.mat','xtraj_sol','t_sol','h_sol','com_sol','comdot_sol','comddot_sol');
+sol = load('../../solvers/trajectoryOptimization/dev/test_cinderblock3.mat','xtraj_sol','t_sol','h_sol','com_sol','comdot_sol','comddot_sol');
 
 ts = unique(sol.xtraj_sol.getBreaks);
 xtraj = sol.xtraj_sol;
@@ -74,21 +75,6 @@ com = sol.com_sol;
 comdot = sol.comdot_sol;
 comddot = sol.comddot_sol;
 ts = sol.t_sol;
-for i=1:5 % three strides
-  comi = sol.com_sol;  
-  comdoti = sol.comdot_sol;
-  comddoti = sol.comddot_sol;
-  if mod(i,2)
-    comi(2,:) = -comi(2,:);  
-    comdoti(2,:) = -comdoti(2,:);  
-    comddoti(2,:) = -comddoti(2,:);  
-  end
-  comi(1,:) = comi(1,:) + com(1,end);
-  com = [com,comi];
-  comdot = [comdot,comdoti];
-  comddot = [comddot,comddoti];
-  ts = [ts,sol.t_sol+ts(end)+1e-6];
-end
 
 % for i=0:0.01:ts(end)
 %   v.draw(i,xtraj.eval(i));
@@ -105,11 +91,11 @@ heel_support = RigidBodySupportState(r,[l_foot,r_foot],{{'heel'},{'heel'}});
 toe_support = RigidBodySupportState(r,[l_foot,r_foot],{{'toe'},{'toe'}});
 foot_support = RigidBodySupportState(r,[l_foot,r_foot],{{'toe','heel'},{'toe','heel'}});
 
-supports = [foot_support;foot_support;foot_support;foot_support;foot_support;...
+supports = [foot_support;foot_support;foot_support;foot_support;...
+  toe_support;toe_support;toe_support;...
+  flight;flight;flight;flight;flight;...
   toe_support;toe_support;...
-  flight;flight;flight;flight;flight;flight;...
-  toe_support;toe_support;...
-  foot_support;foot_support;foot_support;foot_support;foot_support;foot_support];
+  foot_support;foot_support;foot_support];
 
 r = r.setInitialState(x_knots(:,1));
 
@@ -171,13 +157,17 @@ end
 
 boptions.Kp =250*ones(6,1);
 boptions.Kd = 2*sqrt(boptions.Kp);
-lfoot_motion = BodyMotionControlBlock(r,'l_foot',ctrl_data,boptions);
-rfoot_motion = BodyMotionControlBlock(r,'r_foot',ctrl_data,boptions);
-pelvis_motion = BodyMotionControlBlock(r,'pelvis',ctrl_data,boptions);
+boptions_foot.Kp = 10*boptions.Kp;
+boptions_foot.Kd = 10*boptions.Kd;
+lfoot_motion = BodyMotionControlBlock(r,'l_foot',ctrl_data,boptions_foot);
+rfoot_motion = BodyMotionControlBlock(r,'r_foot',ctrl_data,boptions_foot);
+boptions_pelvis.Kp = boptions.Kp;
+boptions_pelvis.Kd = boptions.Kd;
+pelvis_motion = BodyMotionControlBlock(r,'pelvis',ctrl_data,boptions_pelvis);
 lhand_motion = BodyMotionControlBlock(r,'l_hand',ctrl_data,boptions);
 rhand_motion = BodyMotionControlBlock(r,'r_hand',ctrl_data,boptions);
-boptions.Kp(4:6) = NaN; % don't constrain orientation
-boptions.Kd(4:6) = NaN;
+% boptions.Kp(4:6) = NaN; % don't constrain orientation
+% boptions.Kd(4:6) = NaN;
 torso_motion = BodyMotionControlBlock(r,'utorso',ctrl_data,boptions);
 
 
@@ -185,7 +175,7 @@ motion_frames = {lfoot_motion.getOutputFrame,rfoot_motion.getOutputFrame,...
   lhand_motion.getOutputFrame,rhand_motion.getOutputFrame,...
 	pelvis_motion.getOutputFrame,torso_motion.getOutputFrame};
 
-options.body_accel_input_weights = [100 100 10 10 100 10];
+options.body_accel_input_weights = [10 10 10 10 100 100];
 qp = QPController(r,motion_frames,ctrl_data,options);
 
 % feedback QP controller with atlas

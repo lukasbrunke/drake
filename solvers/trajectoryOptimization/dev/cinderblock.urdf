@@ -20,14 +20,14 @@
 
     <visual>
       <geometry>
-        <box size="0.397 0.45 0.29"/>
+        <box size="0.397 3 0.29"/>
       </geometry>
       <material name="Blue"/>
     </visual>
 
     <collision>
       <geometry>
-        <box size="0.397 0.45 0.29"/>
+        <box size="0.397 3  0.29"/>
       </geometry>
     </collision>
   </link>
