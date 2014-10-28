@@ -5,8 +5,8 @@ if ~checkDependency('gurobi')
   return;
 end
 
-if (nargin<1); use_mex = true; end
-if (nargin<2); use_angular_momentum = true; end
+if (nargin<1); use_mex = false; end
+if (nargin<2); use_angular_momentum = false; end
 
 addpath(fullfile(getDrakePath,'examples','Atlas','controllers'));
 addpath(fullfile(getDrakePath,'examples','Atlas','frames'));
@@ -24,7 +24,7 @@ cinderblock_terrain = CinderblockTerrain(cinderblock_dim,cinderblock_pos([1;2]))
 
 options.floating = true;
 options.dt = 0.001;
-options.ignore_effort_limits = true;
+options.ignore_effort_limits = false;
 options.terrain = cinderblock_terrain;
 r = Atlas('urdf/atlas_minimal_contact.urdf',options);
 r = r.removeCollisionGroupsExcept({'heel','toe'});
@@ -36,8 +36,10 @@ v = r.constructVisualizer;
 v.display_dt = 0.005;
 
 % load in running trajectory
-sol = load('../../solvers/trajectoryOptimization/dev/test_cinderblock3.mat','xtraj_sol','t_sol','h_sol','com_sol','comdot_sol','comddot_sol');
-
+sol = load('../../solvers/trajectoryOptimization/dev/test_cinderblock2.mat','xtraj_sol','t_sol','h_sol','com_sol','comdot_sol','comddot_sol');
+toe_land_idx = 14;
+toe_takeoff_idx = 7;
+nT = 19;
 ts = unique(sol.xtraj_sol.getBreaks);
 xtraj = sol.xtraj_sol;
 r.setInitialState(xtraj.eval(0));
@@ -91,11 +93,11 @@ heel_support = RigidBodySupportState(r,[l_foot,r_foot],{{'heel'},{'heel'}});
 toe_support = RigidBodySupportState(r,[l_foot,r_foot],{{'toe'},{'toe'}});
 foot_support = RigidBodySupportState(r,[l_foot,r_foot],{{'toe','heel'},{'toe','heel'}});
 
-supports = [foot_support;foot_support;foot_support;foot_support;...
-  toe_support;toe_support;toe_support;...
+supports = [foot_support;foot_support;foot_support;foot_support;foot_support;...
+  toe_support;toe_support;...
   flight;flight;flight;flight;flight;...
   toe_support;toe_support;...
-  foot_support;foot_support;foot_support];
+  foot_support;foot_support;foot_support;foot_support;foot_support;foot_support];
 
 r = r.setInitialState(x_knots(:,1));
 
@@ -104,6 +106,15 @@ x0traj = PPTrajectory(foh(ts,[com;comdot]));
 x0traj = x0traj.setOutputFrame(COMState);
 u0traj = PPTrajectory(foh(ts,comddot));
 u0traj = u0traj.setOutputFrame(COMAcceleration);
+x0traj_landing = PPTrajectory(foh(ts(toe_land_idx:nT),[com(:,toe_land_idx:nT);comdot(:,toe_land_idx:nT)]));
+x0traj_landing = x0traj_landing.setOutputFrame(COMState);
+u0traj_landing = PPTrajectory(foh(ts(toe_land_idx:nT),comddot(:,toe_land_idx:nT)));
+u0traj_landing = u0traj_landing.setOutputFrame(COMAcceleration);
+
+x0traj_takeoff = PPTrajectory(foh(ts(1:toe_takeoff_idx),[com(:,1:toe_takeoff_idx);comdot(:,1:toe_takeoff_idx)]));
+x0traj_takeoff = x0traj_takeoff.setOutputFrame(COMState);
+u0traj_takeoff = PPTrajectory(foh(ts(1:toe_takeoff_idx),comddot(:,1:toe_takeoff_idx)));
+u0traj_takeoff = u0traj_takeoff.setOutputFrame(COMAcceleration);
 
 Q = diag([10 10 10 1 1 1]);
 R = 0.0001*eye(3);
@@ -116,7 +127,31 @@ ti_sys = ti_sys.setStateFrame(COMState);
 ti_sys = ti_sys.setOutputFrame(COMState);
 ti_sys = ti_sys.setInputFrame(COMAcceleration);
 [~,V] = tvlqr(ti_sys,x0traj,u0traj,Q,R,Q,options);
-
+options_landing = options;
+options_landing.tspan = [ts(toe_land_idx) ts(nT)];
+[~,V_landing] = tvlqr(ti_sys,x0traj_landing,u0traj_landing,Q,R,Q,options_landing);
+A_flight = [eye(3) ts(toe_land_idx)-ts(toe_takeoff_idx)*eye(3);zeros(3) eye(3)];
+S_landing = V_landing.S.eval(V_landing.S.tspan(1));
+s1_landing = V_landing.s1.eval(V_landing.s1.tspan(1));
+s2_landing = V_landing.s2.eval(V_landing.s2.tspan(1));
+S_takeoff = A_flight'*S_landing*A_flight;
+s1_takeoff = A_flight'*s1_landing;
+s2_takeoff = s2_landing;
+options_takeoff = options;
+options_takeoff.tspan = [ts(1) ts(toe_takeoff_idx)];
+[~,V_takeoff] = tvlqr(ti_sys,x0traj_takeoff,u0traj_takeoff,Q,R,{S_takeoff;s1_takeoff;s2_takeoff},options_takeoff);
+S_flight_values = zeros(6,6,2);
+S_flight_values(:,:,1) = S_takeoff;
+S_flight_values(:,:,2) = S_takeoff;
+S_flight = PPTrajectory(zoh([ts(toe_takeoff_idx) ts(toe_land_idx)],S_flight_values));
+V_S = V_takeoff.S.append(S_flight);
+V_S = V_S.append(V_landing.S);
+s1_flight = PPTrajectory(zoh([ts(toe_takeoff_idx) ts(toe_land_idx)],[s1_takeoff s1_takeoff]));
+V_s1 = V_takeoff.s1.append(s1_flight);
+V_s1 = V_s1.append(V_landing.s1);
+s2_flight = PPTrajectory(zoh([ts(toe_takeoff_idx) ts(toe_land_idx)],[s2_takeoff s2_takeoff]));
+V_s2 = V_takeoff.s2.append(s2_flight);
+V_s2 = V_s2.append(V_landing.s2);
 ctrl_data = QPControllerData(true,struct(...
   'acceleration_input_frame',AtlasCoordinates(r),...
   'A',A,...
@@ -125,9 +160,9 @@ ctrl_data = QPControllerData(true,struct(...
   'D',zeros(6,3),...
   'Qy',0*Q,...
   'R',R,...
-  'S',V.S,...
-  's1',V.s1,...
-  's2',V.s2,...
+  'S',V_S,...
+  's1',V_s1,...
+  's2',V_s2,...
   'x0',x0traj,...
   'u0',u0traj,...
   'y0',x0traj,...
@@ -141,7 +176,7 @@ ctrl_data = QPControllerData(true,struct(...
 
 % instantiate QP controller
 options.slack_limit = 1000;
-options.w_qdd = 0.1*ones(nq,1);
+options.w_qdd = 0.01*ones(nq,1);
 options.w_grf = 0;
 options.w_slack = 3;
 options.debug = false;
@@ -157,17 +192,15 @@ end
 
 boptions.Kp =250*ones(6,1);
 boptions.Kd = 2*sqrt(boptions.Kp);
-boptions_foot.Kp = 10*boptions.Kp;
-boptions_foot.Kd = 10*boptions.Kd;
-lfoot_motion = BodyMotionControlBlock(r,'l_foot',ctrl_data,boptions_foot);
-rfoot_motion = BodyMotionControlBlock(r,'r_foot',ctrl_data,boptions_foot);
+lfoot_motion = BodyMotionControlBlock(r,'l_foot',ctrl_data,boptions);
+rfoot_motion = BodyMotionControlBlock(r,'r_foot',ctrl_data,boptions);
 boptions_pelvis.Kp = boptions.Kp;
 boptions_pelvis.Kd = boptions.Kd;
 pelvis_motion = BodyMotionControlBlock(r,'pelvis',ctrl_data,boptions_pelvis);
 lhand_motion = BodyMotionControlBlock(r,'l_hand',ctrl_data,boptions);
 rhand_motion = BodyMotionControlBlock(r,'r_hand',ctrl_data,boptions);
-% boptions.Kp(4:6) = NaN; % don't constrain orientation
-% boptions.Kd(4:6) = NaN;
+boptions.Kp(4:6) = NaN; % don't constrain orientation
+boptions.Kd(4:6) = NaN;
 torso_motion = BodyMotionControlBlock(r,'utorso',ctrl_data,boptions);
 
 
@@ -175,7 +208,7 @@ motion_frames = {lfoot_motion.getOutputFrame,rfoot_motion.getOutputFrame,...
   lhand_motion.getOutputFrame,rhand_motion.getOutputFrame,...
 	pelvis_motion.getOutputFrame,torso_motion.getOutputFrame};
 
-options.body_accel_input_weights = [10 10 10 10 100 100];
+options.body_accel_input_weights = [1000 1000 10 10 100 100];
 qp = QPController(r,motion_frames,ctrl_data,options);
 
 % feedback QP controller with atlas
@@ -307,11 +340,11 @@ outs(1).output = 1;
 sys = mimoFeedback(qt,sys,[],[],[],outs);
 
 
-S=warning('off','Drake:DrakeSystem:UnsupportedSampleTime');
+V_S=warning('off','Drake:DrakeSystem:UnsupportedSampleTime');
 output_select(1).system=1;
 output_select(1).output=1;
 sys = mimoCascade(sys,v,[],[],output_select);
-warning(S);
+warning(V_S);
 
 traj = simulate(sys,[0 ts(end)],xtraj.eval(0));
 playback(v,traj,struct('slider',true));
