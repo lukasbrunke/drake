@@ -346,7 +346,7 @@ output_select(1).output=1;
 sys = mimoCascade(sys,v,[],[],output_select);
 warning(V_S);
 
-traj = simulate(sys,[0 ts(end)],xtraj.eval(0));
+traj = simulate(sys,[0 ts(end)+1],xtraj.eval(0));
 playback(v,traj,struct('slider',true));
 
 end
