@@ -59,28 +59,30 @@ function worldPositionTest
   %% Enforce that the projection of the COM onto the xy-plane be within the
   %% convex hull of the foot points
   % Create a frame for the convex weights on the foot points
-  weights_frame = frames.realCoordinateSpace(lfoot_pts_fcn.n_pts+rfoot_pts_fcn.n_pts);
-
+  foot_weights_frame = frames.realCoordinateSpace(lfoot_pts_fcn.n_pts+rfoot_pts_fcn.n_pts);
   % Create a DrakeFunction that computes the COM position
   com_fcn = WorldPosition(rbm,0);
   % Add unused inputs for the weights
-  com_fcn = addInputFrame(com_fcn,weights_frame);
-
+  com_fcn = addInputFrame(com_fcn,foot_weights_frame);
+  
   % Create a DrakeFunction that computes a linear combination of points in R3
   % given the points and the weights as inputs
   lin_comb_of_pts = LinearCombination(lfoot_pts_fcn.n_pts+rfoot_pts_fcn.n_pts,R3);
   % Create a DrakeFUnction that computes a linear combination of the foot
   % points given joint-angles and weights as inputs
-  lin_comb_of_foot_pts = lin_comb_of_pts([lfoot_pts_fcn;rfoot_pts_fcn;Identity(weights_frame)]);
+  foot_frame_transform_input_fcn = Concatenated({lfoot_pts_fcn;rfoot_pts_fcn},true);
+  foot_pts_frame = MultiCoordinateFrame.constructFrame(repmat({R3},1,lfoot_pts_fcn.n_pts+rfoot_pts_fcn.n_pts));
+  foot_frame_transform = Linear(foot_frame_transform_input_fcn.output_frame,foot_pts_frame,eye(3*(lfoot_pts_fcn.n_pts+rfoot_pts_fcn.n_pts)));
+  foot_pts_fcn = foot_frame_transform(foot_frame_transform_input_fcn);
+  lin_comb_of_foot_pts = lin_comb_of_pts([foot_pts_fcn;Identity(foot_weights_frame)]);
 
   % Create a DrakeFunction that computes the difference between the COM
   % position computed from the joint-angles and the linear combination of the
   % foot points.
   support_polygon{1} = minus(com_fcn,lin_comb_of_foot_pts,true);
-  support_polygon{2} = Identity(weights_frame);
-
+  support_polygon{2} = Identity(foot_weights_frame);
   % Create a DrakeFunction that computes the sum of the weights
-  support_polygon{3} = Linear(weights_frame,frames.realCoordinateSpace(1),ones(1,lfoot_pts_fcn.n_pts));
+  support_polygon{3} = Linear(foot_weights_frame,frames.realCoordinateSpace(1),ones(1,lfoot_pts_fcn.n_pts+rfoot_pts_fcn.n_pts));
 
   % Create quasi-static constraints
   % xy-coordinates of COM must match a linear combination of the foot points
@@ -88,10 +90,9 @@ function worldPositionTest
   qsc_cnstr{1} = DrakeFunctionConstraint([0;0;-Inf],[0;0;Inf],support_polygon{1});
 
   % The weights must be between 0 and 1
-  lb = zeros(lfoot_pts_fcn.n_pts,1);
-  ub = ones(lfoot_pts_fcn.n_pts,1);
+  lb = zeros(lfoot_pts_fcn.n_pts+rfoot_pts_fcn.n_pts,1);
+  ub = ones(lfoot_pts_fcn.n_pts+rfoot_pts_fcn.n_pts,1);
   qsc_cnstr{2} = DrakeFunctionConstraint(lb,ub,support_polygon{2});
-
   % The weights must sum to 1
   qsc_cnstr{3} = DrakeFunctionConstraint(1,1,support_polygon{3});
 
@@ -99,11 +100,12 @@ function worldPositionTest
   prog = InverseKinematics(rbm,q_nom);
   prog = prog.setQ(Q);
   q_inds = prog.q_idx;
-  w_inds = reshape(prog.num_vars+(1:lfoot_pts_fcn.n_pts),[],1);
+  w_inds = reshape(prog.num_vars+(1:lfoot_pts_fcn.n_pts+rfoot_pts_fcn.n_pts),[],1);
   prog = prog.addDecisionVariable(numel(w_inds));
   
   prog = prog.addConstraint(lfoot_on_ground_cnstr,q_inds,prog.kinsol_dataind);
-%   prog = prog.addConstraint(qsc_cnstr{1},[{q_inds};{w_inds}],{1});
+  prog = prog.addConstraint(rfoot_on_ground_cnstr,q_inds,prog.kinsol_dataind);
+  prog = prog.addConstraint(qsc_cnstr{1},[q_inds;w_inds],{1});
   prog = prog.addConstraint(qsc_cnstr{2},w_inds);
   prog = prog.addConstraint(qsc_cnstr{3},w_inds);
 

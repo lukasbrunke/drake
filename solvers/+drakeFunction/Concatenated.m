@@ -72,8 +72,17 @@ classdef Concatenated < drakeFunction.DrakeFunction
       obj = obj.setSparsityPattern();
     end
 
-    function [f,df] = eval(obj,x)
-      [f_cell,df_cell] = evalContainedFunctions(obj,x);
+    function [f,df] = eval(obj,varargin)
+      % eval(x,{cached_data1,cached_data2,...})
+      % where x is a column vector, containing all the x for each combined drakeFunction
+      % cached_data_i is a cell, containing the cached data for the i'th drakeFunction
+      x = varargin{1};
+      if(nargin>2)
+      cached_data_cell = varargin{2};
+        [f_cell,df_cell] = evalContainedFunctions(obj,x,cached_data_cell);
+      else
+        [f_cell,df_cell] = evalContainedFunctions(obj,x);
+      end
       [f,df] = combineOutputs(obj,f_cell,df_cell);
     end
 
@@ -99,14 +108,14 @@ classdef Concatenated < drakeFunction.DrakeFunction
   end
 
   methods (Access = private)
-    function [f_cell,df_cell] = evalContainedFunctions(obj,x)
+    function [f_cell,df_cell] = evalContainedFunctions(obj,x,cached_data)
       % [f_cell,df_cell] = evalContainedFunctions(obj,x) returns the
       % function values and gradients for each of the component
       % functions
       % 
       % @param obj        -- drakeFunction.Concatenated object
       % @param x          -- Input vector
-      %
+      % @param cached_data  -- A 
       % @retval f_cell    -- Cell array of function values for each
       %                      component function
       % @retval df_cell   -- Cell array of Jacobians for each component
