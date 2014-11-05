@@ -25,9 +25,14 @@ classdef Atlas < TimeSteppingRigidBodyManipulator & Biped
       obj = obj@Biped('r_foot_sole', 'l_foot_sole');
       warning(w);
 
+      if(isfield(options,'x0'))
+        x0_guess = options.x0;
+      else
+        x0_guess = zeros(obj.getNumStates(),1);
+      end
       if options.floating
         % could also do fixed point search here
-        obj = obj.setInitialState(obj.resolveConstraints(zeros(obj.getNumStates(),1)));
+        obj = obj.setInitialState(obj.resolveConstraints(x0_guess));
       else
         % TEMP HACK to get by resolveConstraints
         for i=1:length(obj.manip.body), obj.manip.body(i).contact_pts=[]; end
