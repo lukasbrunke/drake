@@ -194,6 +194,12 @@ cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint((qstar(5)-0.3)*ones
 % no large back_bky velocity
 cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(-pi/3*ones(nT,1),pi/3*ones(nT,1)),cdfkp.v_inds(8,:));
 
+% flat foot at landing
+flat_lfoot = WorldEulerConstraint(robot,l_foot,[nan;-pi/20;nan],[nan;pi/20;nan]);
+flat_rfoot = WorldEulerConstraint(robot,r_foot,[nan;-pi/20;nan],[nan;pi/20;nan]);
+cdfkp = cdfkp.addRigidBodyConstraint(flat_lfoot,{toe_land_idx});
+cdfkp = cdfkp.addRigidBodyConstraint(flat_rfoot,{toe_land_idx});
+
 cdfkp = cdfkp.setSolverOptions('snopt','iterationslimit',1e6);
 cdfkp = cdfkp.setSolverOptions('snopt','majoriterationslimit',200);
 cdfkp = cdfkp.setSolverOptions('snopt','majorfeasibilitytolerance',3e-6);
@@ -201,7 +207,7 @@ cdfkp = cdfkp.setSolverOptions('snopt','majoroptimalitytolerance',2e-4);
 cdfkp = cdfkp.setSolverOptions('snopt','superbasicslimit',2000);
 cdfkp = cdfkp.setSolverOptions('snopt','print','test_jump.out');
 
-seed_sol = load('test_jump2','-mat','x_sol');
+seed_sol = load('test_jump3','-mat','x_sol');
 if(mode == 0)
   jump = load('test_jump2','-mat','t_sol','v_sol','q_sol','wrench_sol','com_sol','comdot_sol','comddot_sol');
   v = ContactWrenchVisualizer(robot,jump.t_sol,jump.wrench_sol);

@@ -27,7 +27,7 @@ v = r.constructVisualizer;
 v.display_dt = 0.005;
 
 % load in running trajectory
-sol = load([getDrakePath,'/solvers/trajectoryOptimization/dev/test_jump3.mat'],'xtraj_sol','com_sol','comdot_sol','comddot_sol','t_sol');
+sol = load([getDrakePath,'/solvers/trajectoryOptimization/dev/test_jump4.mat'],'xtraj_sol','com_sol','comdot_sol','comddot_sol','t_sol');
 
 ts = unique(sol.xtraj_sol.getBreaks);
 xtraj = sol.xtraj_sol;
@@ -110,7 +110,7 @@ x0traj_takeoff = x0traj_takeoff.setOutputFrame(COMState);
 u0traj_takeoff = PPTrajectory(foh(ts(1:toe_takeoff_idx),comddot(:,1:toe_takeoff_idx)));
 u0traj_takeoff = u0traj_takeoff.setOutputFrame(COMAcceleration);
 
-Q = diag([10 10 10 1 1 1]);
+Q = 10*diag([10 10 10 1 1 1]);
 R = 0.0001*eye(3);
 A = [zeros(3),eye(3); zeros(3,6)];
 B = [zeros(3); eye(3)];
@@ -173,7 +173,7 @@ ctrl_data = QPControllerData(true,struct(...
 
 % instantiate QP controller
 options.slack_limit = 1000;
-options.w_qdd = 1e-1*ones(nq,1);
+options.w_qdd = 1e-5*ones(nq,1);
 % options.w_qdd(back_bky) = 0.01;
 % options.w_qdd(1:3) = 0;
 options.w_grf = 0;
@@ -207,7 +207,7 @@ motion_frames = {lfoot_motion.getOutputFrame,rfoot_motion.getOutputFrame,...
   lhand_motion.getOutputFrame,rhand_motion.getOutputFrame,...
 	pelvis_motion.getOutputFrame,torso_motion.getOutputFrame};
 
-options.body_accel_input_weights = [100 100 10 10 100 10];
+options.body_accel_input_weights = 0*[100 100 10 10 100 10];
 qp = QPController(r,motion_frames,ctrl_data,options);
 
 % feedback QP controller with atlas
