@@ -27,7 +27,7 @@ v = r.constructVisualizer;
 v.display_dt = 0.005;
 
 % load in running trajectory
-sol = load([getDrakePath,'/solvers/trajectoryOptimization/dev/test_jump4.mat'],'xtraj_sol','com_sol','comdot_sol','comddot_sol','t_sol');
+sol = load([getDrakePath,'/solvers/trajectoryOptimization/dev/test_jump3.mat'],'xtraj_sol','com_sol','comdot_sol','comddot_sol','t_sol');
 
 ts = unique(sol.xtraj_sol.getBreaks);
 xtraj = sol.xtraj_sol;
@@ -175,7 +175,7 @@ ctrl_data = QPControllerData(true,struct(...
 options.slack_limit = 1000;
 options.w_qdd = 1e-5*ones(nq,1);
 % options.w_qdd(back_bky) = 0.01;
-% options.w_qdd(1:3) = 0;
+options.w_qdd(1:6) = 0;
 options.w_grf = 0;
 options.w_slack = 3;
 options.debug = false;
