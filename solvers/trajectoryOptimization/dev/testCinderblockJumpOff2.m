@@ -299,7 +299,7 @@ cdfkp = cdfkp.setSolverOptions('snopt','majoroptimalitytolerance',2e-4);
 cdfkp = cdfkp.setSolverOptions('snopt','superbasicslimit',2000);
 cdfkp = cdfkp.setSolverOptions('snopt','print','test_jump_cinderblock.out');
 
-seed_sol = load('test_cinderblock3','-mat','x_sol');
+seed_sol = load('test_cinderblock4','-mat','x_sol');
 if(mode == 0)
   jump = load('test_cinderblock2','-mat','t_sol','v_sol','q_sol','wrench_sol','com_sol','comdot_sol','comddot_sol');
   v = robot.constructVisualizer();
