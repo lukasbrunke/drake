@@ -41,7 +41,7 @@ v = r.constructVisualizer;
 v.display_dt = 0.005;
 
 % load in running trajectory
-sol = load('../../solvers/trajectoryOptimization/dev/test_cinderblock3.mat','xtraj_sol','t_sol','h_sol','com_sol','comdot_sol','comddot_sol');
+sol = load('../../solvers/trajectoryOptimization/dev/test_cinderblock5.mat','xtraj_sol','t_sol','h_sol','com_sol','comdot_sol','comddot_sol');
 toe_land_idx = 11;
 toe_takeoff_idx = 7;
 nT = 15;
@@ -132,9 +132,10 @@ ti_sys = ti_sys.setStateFrame(COMState);
 ti_sys = ti_sys.setOutputFrame(COMState);
 ti_sys = ti_sys.setInputFrame(COMAcceleration);
 [~,V] = tvlqr(ti_sys,x0traj,u0traj,Q,R,Q,options);
+[~,Vf] = tilqr(ti_sys,[com(:,nT);zeros(3,1)],zeros(3,1),Q,R,options);
 options_landing = options;
 options_landing.tspan = [ts(toe_land_idx) ts(nT)];
-[~,V_landing] = tvlqr(ti_sys,x0traj_landing,u0traj_landing,Q,R,Q,options_landing);
+[~,V_landing] = tvlqr(ti_sys,x0traj_landing,u0traj_landing,Q,R,Vf.S,options_landing);
 A_flight = [eye(3) (ts(toe_land_idx)-ts(toe_takeoff_idx))*eye(3);zeros(3) eye(3)];
 S_landing = V_landing.S.eval(V_landing.S.tspan(1));
 s1_landing = V_landing.s1.eval(V_landing.s1.tspan(1));
@@ -181,7 +182,7 @@ ctrl_data = QPControllerData(true,struct(...
 
 % instantiate QP controller
 options.slack_limit = 1000;
-options.w_qdd = 0.01*ones(nq,1);
+options.w_qdd = 0.001*ones(nq,1);
 options.w_grf = 0;
 options.w_slack = 3;
 options.debug = false;
@@ -351,7 +352,7 @@ output_select(1).output=1;
 sys = mimoCascade(sys,v,[],[],output_select);
 warning(V_S);
 
-traj = simulate(sys,[0 ts(end)],xtraj.eval(0));
+traj = simulate(sys,[0 ts(end)+0.5],xtraj.eval(0));
 playback(v,traj,struct('slider',true));
 
 end

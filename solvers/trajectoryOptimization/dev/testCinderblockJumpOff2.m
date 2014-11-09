@@ -203,6 +203,7 @@ cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(q_start,q_start),cd
 % cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(qstar,qstar),cdfkp.q_inds(:,end));
 cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(vstar,vstar),cdfkp.v_inds(:,1));
 cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(vstar,vstar),cdfkp.v_inds(:,end));
+cdfkp = cdfkp.addBoundingBoxConstraint(ConstantConstraint(zeros(6,1)),reshape(cdfkp.comdot_inds(:,[1,nT]),[],1));
 
 cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(0.02*ones(nT-1,1),0.1*ones(nT-1,1)),cdfkp.h_inds(:));
 cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(0.02*ones(toe_takeoff_idx-heel_takeoff_idx,1),0.05*ones(toe_takeoff_idx-heel_takeoff_idx,1)),cdfkp.h_inds(heel_takeoff_idx:toe_takeoff_idx-1)');
@@ -215,8 +216,8 @@ cdfkp = cdfkp.addBoundingBoxConstraint(BoundingBoxConstraint(...
   reshape(bsxfun(@times,[9.81;9.81;9.81],ones(1,nT)),[],1)),cdfkp.comddot_inds(:));
 
 % add a collision avoidance constraint between the foot and the cinderblock
-lfoot_avoid_cinderblock = MinDistanceConstraint(robot,0.03,struct('body_idx',[l_foot,1]));
-rfoot_avoid_cinderblock = MinDistanceConstraint(robot,0.03,struct('body_idx',[r_foot,1]));
+lfoot_avoid_cinderblock = MinDistanceConstraint(robot,0.04,struct('body_idx',[l_foot,1]));
+rfoot_avoid_cinderblock = MinDistanceConstraint(robot,0.04,struct('body_idx',[r_foot,1]));
 lfoot_avoid_cinderblock_interp = generateInterpolatedMinDistanceConstraint(lfoot_avoid_cinderblock,[0.3 0.6]);
 rfoot_avoid_cinderblock_interp = generateInterpolatedMinDistanceConstraint(rfoot_avoid_cinderblock,[0.3 0.6]);
 lfoot_avoid_cinderblock = lfoot_avoid_cinderblock.generateConstraint();
@@ -296,7 +297,7 @@ cdfkp = cdfkp.setSolverOptions('snopt','majoriterationslimit',1000);
 cdfkp = cdfkp.setSolverOptions('snopt','majorfeasibilitytolerance',1e-5);
 cdfkp = cdfkp.setSolverOptions('snopt','majoroptimalitytolerance',2e-4);
 cdfkp = cdfkp.setSolverOptions('snopt','superbasicslimit',2000);
-cdfkp = cdfkp.setSolverOptions('snopt','print','test_jump_cinderblock2.out');
+cdfkp = cdfkp.setSolverOptions('snopt','print','test_jump_cinderblock.out');
 
 seed_sol = load('test_cinderblock3','-mat','x_sol');
 if(mode == 0)
