@@ -47,6 +47,13 @@ struct DrakeRobotState {
   VectorXd qd;
 };
 
+namespace DrakeFrame{enum Frame_type {CARTESIAN,CYLINDER};};
+typedef struct _compliant_frame_param
+{
+	DrakeFrame::Frame_type type;	
+	Eigen::Transform<double,3,Eigen::Isometry> T;
+} CompliantFrameParam;
+
 drakeControlUtilEXPORT std::vector<SupportStateElement> parseSupportData(const mxArray* supp_data);
 
 drakeControlUtilEXPORT bool isSupportElementActive(SupportStateElement* se, bool contact_force_detected, bool kinematic_contact_detected);
@@ -76,6 +83,8 @@ drakeControlUtilEXPORT int contactConstraintsBV(RigidBodyManipulator *r, int nc,
 drakeControlUtilEXPORT MatrixXd individualSupportCOPs(RigidBodyManipulator* r, const std::vector<SupportStateElement>& active_supports, const MatrixXd& normals, const MatrixXd& B, const VectorXd& beta);
 drakeControlUtilEXPORT void sizecheck(const mxArray* mat, int M, int N);
 drakeControlUtilEXPORT Vector6d bodyMotionPD(RigidBodyManipulator *r, DrakeRobotState &robot_state, const int body_index, const Ref<const Vector6d> &body_pose_des, const Ref<const Vector6d> &body_v_des, const Ref<const Vector6d> &body_vdot_des, const Ref<const Vector6d> &Kp, const Ref<const Vector6d> &Kd);
+
+drakeControlUtilEXPORT Vector6d bodyCompliantMotionPD( RigidBodyManipulator* R, Map<VectorXd> &q, Map<VectorXd> &qd, const int body_index, const Vector3d &body_pt, const Vector6d &body_pos_des, const Vector6d &body_v_des, const Vector6d &body_vdot_des,  const Vector6d &Kp, const Vector6d &Kd, const CompliantFrameParam &frame_param);
 
 drakeControlUtilEXPORT void evaluateCubicSplineSegment(double t, const Ref<const Matrix<double, 6, 4>> &coefs, Vector6d &y, Vector6d &ydot, Vector6d &yddot);
 

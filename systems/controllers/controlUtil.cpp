@@ -433,6 +433,36 @@ Vector6d bodyMotionPD(RigidBodyManipulator *r, DrakeRobotState &robot_state, con
   return body_vdot;
 }
 
+Vector6d bodyCompliantMotionPD(RigidBodyManipulator *r, Map<VectorXd> &q, Map<VectorXd> &qd, const int body_index, const Vector3d &body_pt, const Vector6d &body_pose_des, const Vector6d &body_v_des, const Vector6d &body_vdot_des, const Vector6d &Kp, const Vector6d &Kd, const CompliantFrameParam &frame_param) {
+	r->doKinematics(q,false,qd);
+	Vector6d body_pose;
+	MatrixXd J = MatrixXd::Zero(6,r->num_positions);
+  Vector4d body_pt1;
+	body_pt1.head(3) = body_pt;
+	body_pt1(3) = 1.0;
+	r->forwardKin(body_index,body_pt1,1,body_pose);
+	r->forwardJac(body_index,body_pt1,1,J);
+
+	if(frame_param.type == DrakeFrame::CYLINDER)
+	{
+		// Transform the body position and velocity to the cylindrical frame
+		Vector3d cylinder_x_dir = frame_param.T.matrix().block(0,0,3,1);
+		Vector3d cylinder_axis = frame_param.T.matrix().block(0,2,3,1);
+		Vector3d cylinder_origin = frame_param.T.translation();
+		Vector6d v_cylinder_des;
+		Vector6d x_cylinder_des;
+		Matrix<double,6,6> J_world2compliant_des;
+		Vector6d Jdotv_world2compliant_des;
+		Vector6d body_v_omega_des = body_v_des;
+		Matrix<double,3,3> E_des;
+		Gradient<Matrix<double,3,3>,3,1>::type dE_des;
+		Vector3d body_rpy_des = body_pose_des.tail(3);
+		rpydot2angularvelMatrix(body_rpy_des,E_des,&dE_des);
+		body_v_omega_des.tail(3) = E_des*body_v_des.tail(3); 
+		cartesian2cylindrical(cylinder_axis,cylinder_x_dir,cylinder_origin,body_pose_des,body_v_omega_des,x_cylinder_des,v_cylinder_des,J_world2compliant_des,Jdotv_world2compliant_des);
+	}
+}
+
 void evaluateCubicSplineSegment(double t, const Ref<const Matrix<double, 6, 4>> &coefs, Vector6d &y, Vector6d &ydot, Vector6d &yddot) {
   // evaluate a cubic spline with coefficients coef and starting time 0 at time t
   y = coefs.col(0)*pow(t, 3) + coefs.col(1)*pow(t, 2) + coefs.col(2)*t + coefs.col(3);
