@@ -433,8 +433,9 @@ Vector6d bodyMotionPD(RigidBodyManipulator *r, DrakeRobotState &robot_state, con
   return body_vdot;
 }
 
-Vector6d bodyCompliantMotionPD(RigidBodyManipulator *r, Map<VectorXd> &q, Map<VectorXd> &qd, const int body_index, const Vector3d &body_pt, const Vector6d &body_pose_des, const Vector6d &body_v_des, const Vector6d &body_vdot_des, const Vector6d &Kp, const Vector6d &Kd, const CompliantFrameParam &frame_param) {
-	r->doKinematics(q,false,qd);
+Vector6d bodyCompliantMotionPD(RigidBodyManipulator *r, DrakeRobotState &robot_state, const int body_index, const Vector3d &body_pt, const Vector6d &body_pose_des, const Vector6d &body_v_des, const Vector6d &body_vdot_des, const Vector6d &Kp, const Vector6d &Kd, const CompliantFrameParam &frame_param) {
+	// implement xddot = Kp*(x-x_des)+Kd*(v-v_des) + vdot_des
+	r->doKinematics(robot_state.q,false,robot_state.qd);
 	Vector6d body_pose;
 	MatrixXd J = MatrixXd::Zero(6,r->num_positions);
   Vector4d body_pt1;
@@ -443,9 +444,11 @@ Vector6d bodyCompliantMotionPD(RigidBodyManipulator *r, Map<VectorXd> &q, Map<Ve
 	r->forwardKin(body_index,body_pt1,1,body_pose);
 	r->forwardJac(body_index,body_pt1,1,J);
 
-	if(frame_param.type == DrakeFrame::CYLINDER)
+	Vector6d vdot_world;
+	if(frame_param.type == DrakeFrame::CYLINDRICAL)
 	{
 		// Transform the body position and velocity to the cylindrical frame
+		// The approach is to compute the linear and angular accleration in the cylindrical frame, and then transform back to linear and Euler angle acceleration in the world frame
 		Vector3d cylinder_x_dir = frame_param.T.matrix().block(0,0,3,1);
 		Vector3d cylinder_axis = frame_param.T.matrix().block(0,2,3,1);
 		Vector3d cylinder_origin = frame_param.T.translation();
@@ -457,10 +460,38 @@ Vector6d bodyCompliantMotionPD(RigidBodyManipulator *r, Map<VectorXd> &q, Map<Ve
 		Matrix<double,3,3> E_des;
 		Gradient<Matrix<double,3,3>,3,1>::type dE_des;
 		Vector3d body_rpy_des = body_pose_des.tail(3);
+		Vector3d body_rpydot_des = body_v_des.tail(3);
 		rpydot2angularvelMatrix(body_rpy_des,E_des,&dE_des);
 		body_v_omega_des.tail(3) = E_des*body_v_des.tail(3); 
+		Vector3d body_rpyddot_des = body_vdot_des.tail(3);
+		auto Edot_des = matGradMult(dE_des,body_rpydot_des);
+		Vector3d body_omegadot_des = E_des*body_rpyddot_des+Edot_des*body_v_des.tail(3);
+		Vector6d body_v_omega_dot_des;
+		body_v_omega_dot_des.head(3) = body_vdot_des.head(3);
+		body_v_omega_dot_des.tail(3) = body_omegadot_des;
 		cartesian2cylindrical(cylinder_axis,cylinder_x_dir,cylinder_origin,body_pose_des,body_v_omega_des,x_cylinder_des,v_cylinder_des,J_world2compliant_des,Jdotv_world2compliant_des);
+		Vector6d v_omega_dot_compliant_des= J_world2compliant_des*body_v_omega_dot_des+Jdotv_world2compliant_des;//v_omega_dot_compliant_des is the desired acceleration in the compliant frame 
+	  // Now we have x_des, v_des, vdot_des in the compliant (cylindrical frame)
+		Vector3d body_rpy = body_pose.tail(3);
+		Vector6d body_v = J*robot_state.qd;
+		Matrix3d E;
+		Gradient<Matrix<double,3,3>,3,1>::type dE;
+		Vector3d body_rpydot = body_v.tail(3);
+		rpydot2angularvelMatrix(body_rpy,E,&dE);
+		auto Edot = matGradMult(dE,body_rpydot);
+		Vector6d body_v_omega = body_v;
+		body_v_omega.tail(3) = E*body_rpydot;
+		Vector6d x_cylinder;
+		Vector6d v_cylinder;
+		Matrix<double,6,6> J_world2compliant;
+		Vector6d Jdotv_world2compliant;
+		cartesian2cylindrical(cylinder_axis,cylinder_x_dir,cylinder_origin,body_pose,body_v_omega,x_cylinder,v_cylinder,J_world2compliant,Jdotv_world2compliant);
+		Vector6d v_omega_dot_compliant = (Kp.array()*(body_pose_des-body_pose).array()).matrix()+(Kd.array()*(body_v_omega_des-body_v_omega).array()).matrix()+body_v_omega_dot_des;
+		Vector6d v_omega_dot_world = J_world2compliant.inverse()*(v_omega_dot_compliant-Jdotv_world2compliant);
+		vdot_world = v_omega_dot_world;
+		vdot_world.tail(3) = Edot.inverse()*(v_omega_dot_world.tail(3)-E*body_v.tail(3));
 	}
+	return vdot_world;
 }
 
 void evaluateCubicSplineSegment(double t, const Ref<const Matrix<double, 6, 4>> &coefs, Vector6d &y, Vector6d &ydot, Vector6d &yddot) {
