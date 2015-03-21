@@ -5,7 +5,14 @@ struct lcmt_body_motion_data
 	int64_t timestamp;
 
 	int32_t body_id;
-
+  
+	double pt[3];
 	double ts[2];
 	double coefs[6][4];
+	
+	const int8_t CARTESIAN_FRAME = 1;
+	const int8_t CYLINDRICAL_FRAME = 2;
+	int8_t frame_type;
+	double frame_rotation[3][3]; // The 3 x 3 rotation matrix for the frame
+	double frame_translation[3]; // The translation vector
 }

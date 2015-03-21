@@ -408,17 +408,18 @@ void sizecheck(const mxArray* mat, int M, int N) {
   return;
 }
 
-Vector6d bodyMotionPD(RigidBodyManipulator *r, DrakeRobotState &robot_state, const int body_index, const Ref<const Vector6d> &body_pose_des, const Ref<const Vector6d> &body_v_des, const Ref<const Vector6d> &body_vdot_des, const Ref<const Vector6d> &Kp, const Ref<const Vector6d> &Kd) {
+Vector6d bodyMotionPD(RigidBodyManipulator *r, DrakeRobotState &robot_state, const int body_index, const Vector3d &body_pt, const Ref<const Vector6d> &body_pose_des, const Ref<const Vector6d> &body_v_des, const Ref<const Vector6d> &body_vdot_des, const Ref<const Vector6d> &Kp, const Ref<const Vector6d> &Kd) {
 
   r->doKinematics(robot_state.q,false,robot_state.qd);
 
   // TODO: this must be updated to use quaternions/spatial velocity
   Vector6d body_pose;
   MatrixXd J = MatrixXd::Zero(6,r->num_positions);
-  Vector4d zero = Vector4d::Zero();
-  zero(3) = 1.0;
-  r->forwardKin(body_index,zero,1,body_pose);
-  r->forwardJac(body_index,zero,1,J);
+	Vector4d body_pt1;
+	body_pt1.head(3) = body_pt;
+	body_pt1(3) = 1.0;
+  r->forwardKin(body_index,body_pt1,1,body_pose);
+  r->forwardJac(body_index,body_pt1,1,J);
 
   Vector6d body_error;
   body_error.head<3>()= body_pose_des.head<3>()-body_pose.head<3>();

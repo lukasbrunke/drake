@@ -10,7 +10,7 @@
 
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
-  if (nrhs<1) mexErrMsgTxt("usage: y=instantaneousBodyMotionControlmex(mex_ptr,x,body_ind,body_pose_des,body_v_des,body_vdot_des,params)");
+  if (nrhs<1) mexErrMsgTxt("usage: y=instantaneousBodyMotionControlmex(mex_ptr,x,body_ind,body_pt,body_pose_des,body_v_des,body_vdot_des,params)");
   if (nlhs<1) mexErrMsgTxt("take at least one output... please.");
   
   // first get the ptr back from matlab
@@ -36,6 +36,9 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 
   body_index = (int) mxGetScalar(prhs[narg++]) - 1;
 
+	Vector3d body_pt;
+	memcpy(body_pt.data(),mxGetPr(prhs[narg++]),sizeof(double)*3);
+
   assert(mxGetM(prhs[narg])==6); assert(mxGetN(prhs[narg])==1);
   Map< Vector6d > body_pose_des(mxGetPr(prhs[narg++]));
 
@@ -57,7 +60,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   // assert(mxGetM(prhs[narg])==6); assert(mxGetN(prgs[narg])==1);
   // Map< Vector6d > Kd(mxGetPr(prhs[narg++]));
 
-  Vector6d body_vdot = bodyMotionPD(r, robot_state, body_index, body_pose_des, body_v_des, body_vdot_des, Kp, Kd);
+  Vector6d body_vdot = bodyMotionPD(r, robot_state, body_index, body_pt, body_pose_des, body_v_des, body_vdot_des, Kp, Kd);
   
   plhs[0] = eigenToMatlab(body_vdot);
 }

@@ -91,6 +91,15 @@ std::shared_ptr<drake::lcmt_qp_controller_input> encodeQPInputLCM(const mxArray 
     for (int i=0; i < nbod; i++) {
       msg->body_motion_data[i].timestamp = msg->timestamp;
       msg->body_motion_data[i].body_id = (int32_t) mxGetScalar(myGetField(body_motion_data, i, "body_id"));
+			memcpy(msg->body_motion_data[i].pt, mxGetPr(myGetField(body_motion_data,i,"pt")),sizeof(double)*3);
+			msg->body_motion_data[i].frame_type = (int8_t) mxGetScalar(myGetField(body_motion_data,i,"frame_type"));
+			mxArray* frame_rotation = myGetField(body_motion_data, i, "frame_rotation");
+			if(mxGetM(frame_rotation)!=3 || mxGetN(frame_rotation)!= 3)
+			{
+				mexErrMsgTxt("frame rotation should be a 3 x 3 matrix");
+			}
+			matlabToCArrayOfArrays<3,3>(body_motion_data, i, "frame_rotation", &msg->body_motion_data[i].frame_rotation[0][0]);
+			memcpy(msg->body_motion_data[i].frame_translation,mxGetPr(myGetField(body_motion_data,i,"frame_translation")),sizeof(double)*3);
       memcpy(msg->body_motion_data[i].ts, mxGetPr(myGetField(body_motion_data, i, "ts")), 2*sizeof(double));
       const mxArray* coefs = myGetField(body_motion_data, i, "coefs");
       if (mxGetNumberOfDimensions(coefs) != 3) mexErrMsgTxt("coefs should be a dimension-3 array");
@@ -317,10 +326,11 @@ int setupAndSolveQP(NewQPControllerData *pdata, std::shared_ptr<drake::lcmt_qp_c
     int body_id0 = qp_input->body_motion_data[i].body_id - 1;
     double weight = params->body_motion[body_id0].weight;
     desired_body_accelerations[i].body_id0 = body_id0;
+		memcpy(desired_body_accelerations[i].body_pt.data(),  qp_input->body_motion_data[i].pt, sizeof(double)*3);
     Map<Matrix<double, 6, 4,RowMajor>>coefs_rowmaj(&qp_input->body_motion_data[i].coefs[0][0]);
     Matrix<double, 6, 4> coefs = coefs_rowmaj;
     evaluateCubicSplineSegment(robot_state.t - qp_input->body_motion_data[i].ts[0], coefs, body_pose_des, body_v_des, body_vdot_des);
-    desired_body_accelerations[i].body_vdot = bodyMotionPD(pdata->r, robot_state, body_id0, body_pose_des, body_v_des, body_vdot_des, params->body_motion[body_id0].Kp, params->body_motion[body_id0].Kd);
+    desired_body_accelerations[i].body_vdot = bodyMotionPD(pdata->r, robot_state, body_id0, desired_body_accelerations[i].body_pt, body_pose_des, body_v_des, body_vdot_des, params->body_motion[body_id0].Kp, params->body_motion[body_id0].Kd);
     desired_body_accelerations[i].weight = weight;
     desired_body_accelerations[i].accel_bounds = params->body_motion[body_id0].accel_bounds;
     // mexPrintf("body: %d, vdot: %f %f %f %f %f %f weight: %f\n", body_id0, 
@@ -476,16 +486,17 @@ int setupAndSolveQP(NewQPControllerData *pdata, std::shared_ptr<drake::lcmt_qp_c
   
   // add in body spatial equality constraints
   // VectorXd body_vdot;
-  MatrixXd orig = MatrixXd::Zero(4,1);
-  orig(3,0) = 1;
   int equality_ind = 6+neps;
   MatrixXd Jb(6,nq);
   MatrixXd Jbdot(6,nq);
   for (int i=0; i<desired_body_accelerations.size(); i++) {
     if (desired_body_accelerations[i].weight < 0) { // negative implies constraint
       if (!inSupport(active_supports,desired_body_accelerations[i].body_id0)) {
-        pdata->r->forwardJac(desired_body_accelerations[i].body_id0,orig,1,Jb);
-        pdata->r->forwardJacDot(desired_body_accelerations[i].body_id0,orig,1,Jbdot);
+				Vector4d body_pt1;
+				body_pt1.head(3) = desired_body_accelerations[i].body_pt;
+				body_pt1(3) = 1;
+        pdata->r->forwardJac(desired_body_accelerations[i].body_id0,body_pt1,1,Jb);
+        pdata->r->forwardJacDot(desired_body_accelerations[i].body_id0,body_pt1,1,Jbdot);
 
         for (int j=0; j<6; j++) {
           if (!std::isnan(desired_body_accelerations[i].body_vdot(j))) {
@@ -521,8 +532,11 @@ int setupAndSolveQP(NewQPControllerData *pdata, std::shared_ptr<drake::lcmt_qp_c
 
   int constraint_start_index = 2*nu;
   for (int i=0; i<desired_body_accelerations.size(); i++) {
-    pdata->r->forwardJac(desired_body_accelerations[i].body_id0,orig,1,Jb);
-    pdata->r->forwardJacDot(desired_body_accelerations[i].body_id0,orig,1,Jbdot);
+		Vector4d body_pt1;
+		body_pt1.head(3) = desired_body_accelerations[i].body_pt;
+		body_pt1(3) = 1;
+    pdata->r->forwardJac(desired_body_accelerations[i].body_id0,body_pt1,1,Jb);
+    pdata->r->forwardJacDot(desired_body_accelerations[i].body_id0,body_pt1,1,Jbdot);
     Ain.block(constraint_start_index,0,6,pdata->r->num_positions) = Jb;
     bin.segment(constraint_start_index,6) = -Jbdot*robot_state.qd + desired_body_accelerations[i].accel_bounds.max;
     constraint_start_index += 6;
@@ -636,8 +650,11 @@ int setupAndSolveQP(NewQPControllerData *pdata, std::shared_ptr<drake::lcmt_qp_c
     for (int i=0; i<desired_body_accelerations.size(); i++) {
       if (desired_body_accelerations[i].weight > 0) {
         if (!inSupport(active_supports,desired_body_accelerations[i].body_id0)) {
-          pdata->r->forwardJac(desired_body_accelerations[i].body_id0,orig,1,Jb);
-          pdata->r->forwardJacDot(desired_body_accelerations[i].body_id0,orig,1,Jbdot);
+					Vector4d body_pt1;
+					body_pt1.head(3) = desired_body_accelerations[i].body_pt;
+					body_pt1(3) = 1.0;
+          pdata->r->forwardJac(desired_body_accelerations[i].body_id0,body_pt1,1,Jb);
+          pdata->r->forwardJacDot(desired_body_accelerations[i].body_id0,body_pt1,1,Jbdot);
 
           for (int j=0; j<6; j++) {
             if (!std::isnan(desired_body_accelerations[i].body_vdot[j])) {

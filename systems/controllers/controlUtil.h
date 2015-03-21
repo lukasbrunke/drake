@@ -90,7 +90,7 @@ drakeControlUtilEXPORT int contactConstraints(RigidBodyManipulator *r, int nc, s
 drakeControlUtilEXPORT int contactConstraintsBV(RigidBodyManipulator *r, int nc, double mu, std::vector<SupportStateElement>& supp, void *map_ptr, MatrixXd &B, MatrixXd &JB, MatrixXd &Jp, MatrixXd &Jpdot, MatrixXd &normals, double terrain_height);
 drakeControlUtilEXPORT MatrixXd individualSupportCOPs(RigidBodyManipulator* r, const std::vector<SupportStateElement>& active_supports, const MatrixXd& normals, const MatrixXd& B, const VectorXd& beta);
 drakeControlUtilEXPORT void sizecheck(const mxArray* mat, int M, int N);
-drakeControlUtilEXPORT Vector6d bodyMotionPD(RigidBodyManipulator *r, DrakeRobotState &robot_state, const int body_index, const Ref<const Vector6d> &body_pose_des, const Ref<const Vector6d> &body_v_des, const Ref<const Vector6d> &body_vdot_des, const Ref<const Vector6d> &Kp, const Ref<const Vector6d> &Kd);
+drakeControlUtilEXPORT Vector6d bodyMotionPD(RigidBodyManipulator *r, DrakeRobotState &robot_state, const int body_index, const Vector3d &body_pt, const Ref<const Vector6d> &body_pose_des, const Ref<const Vector6d> &body_v_des, const Ref<const Vector6d> &body_vdot_des, const Ref<const Vector6d> &Kp, const Ref<const Vector6d> &Kd);
 drakeControlUtilEXPORT Vector6d bodyCompliantMotionPD( RigidBodyManipulator* R, DrakeRobotState &robot_state, const int body_index, const Vector3d &body_pt, const Vector6d &body_pos_des, const Vector6d &body_v_des, const Vector6d &body_vdot_des,  const Vector6d &Kp, const Vector6d &Kd, const CompliantFrameParam &frame_param);
 drakeControlUtilEXPORT void evaluateCubicSplineSegment(double t, const Ref<const Matrix<double, 6, 4>> &coefs, Vector6d &y, Vector6d &ydot, Vector6d &yddot);
 

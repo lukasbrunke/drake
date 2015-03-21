@@ -112,6 +112,7 @@ classdef QPLocomotionPlan < QPControllerPlan
         if qp_input.body_motion_data(j).body_id == rpc.body_ids.pelvis
           pelvis_has_tracking = true;
         end
+        qp_input.body_motion_data(j).pt = obj.link_constraints(j).pt;
         body_t_ind = find(obj.link_constraints(j).ts<=t_plan,1,'last');
         if body_t_ind < length(obj.link_constraints(j).ts)
           qp_input.body_motion_data(j).ts = obj.link_constraints(j).ts(body_t_ind:body_t_ind+1) + obj.start_time;
@@ -119,6 +120,21 @@ classdef QPLocomotionPlan < QPControllerPlan
           qp_input.body_motion_data(j).ts = obj.link_constraints(j).ts([body_t_ind,body_t_ind]) + obj.start_time;
         end
         qp_input.body_motion_data(j).coefs = obj.link_constraints(j).coefs(:,body_t_ind,:);
+        if(~isfield(obj.link_constraints(j),'frame_type') || isempty(obj.link_constraints(j).frame_type))
+          qp_input.body_motion_data(j).frame_type = drake.lcmt_body_motion_data.CARTESIAN_FRAME;
+        else
+          qp_input.body_motion_data(j).frame_type = obj.link_constraints(j).frame_type;
+        end
+        if(~isfield(obj.link_constraints(j),'frame_rotation') || isempty(obj.link_constraints(j).frame_rotation))
+          qp_input.body_motion_data(j).frame_rotation = eye(3);
+        else
+          qp_input.body_motion_data(j).frame_rotation = obj.link_constraints(j).frame_rotation;
+        end
+        if(~isfield(obj.link_constraints(j),'frame_translation') || isempty(obj.link_constraints(j).frame_translation))
+          qp_input.body_motion_data(j).frame_translation = zeros(3,1);
+        else
+          qp_input.body_motion_data(j).frame_translation = obj.link_constraints(j).frame_translation;
+        end
       end
       assert(pelvis_has_tracking, 'Expecting a link_constraints block for the pelvis');
 

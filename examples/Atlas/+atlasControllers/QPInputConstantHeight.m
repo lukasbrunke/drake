@@ -54,8 +54,12 @@ classdef QPInputConstantHeight
       obj.support_data = struct('body_id', {}, 'contact_pts', {}, 'support_logic_map', {}, 'mu', {}, 'contact_surfaces', {});
       
       obj.body_motion_data = struct('body_id', {},... % 3 d
+			                      'pt',{},...
                             'ts', {},... % 6 d
-                            'coefs', {}); % 4 * 6 * 3 d
+                            'coefs', {},... % 4 * 6 * 3 d
+														'frame_type',{},...
+														'frame_rotation',{},...
+														'frame_translation',{});
       obj.whole_body_data = struct('q_des', [],... % 34 d
                                'constrained_dofs', []); % 34 b
       obj.param_set_name = 'walking';
@@ -88,6 +92,7 @@ classdef QPInputConstantHeight
       for j = 1:nbod
         msg.body_motion_data(j) = drake.lcmt_body_motion_data();
         msg.body_motion_data(j).body_id = obj.body_motion_data(j).body_id;
+				msg.body_motion_data(j).pt = obj.body_motion_data(j).pt;
         msg.body_motion_data(j).ts = obj.body_motion_data(j).ts;
         msg.body_motion_data(j).coefs = reshape(obj.body_motion_data(j).coefs, 6, 4);
       end
