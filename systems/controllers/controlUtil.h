@@ -55,13 +55,6 @@ struct DrakeRobotState {
   VectorXd qd;
 };
 
-namespace DrakeFrame{enum Frame_type {CARTESIAN,CYLINDER};};
-typedef struct _compliant_frame_param
-{
-	DrakeFrame::Frame_type type;	
-	Eigen::Transform<double,3,Eigen::Isometry> T;
-} CompliantFrameParam;
-
 drakeControlUtilEXPORT std::vector<SupportStateElement> parseSupportData(const mxArray* supp_data);
 
 drakeControlUtilEXPORT bool isSupportElementActive(SupportStateElement* se, bool contact_force_detected, bool kinematic_contact_detected);
