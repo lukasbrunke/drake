@@ -23,6 +23,10 @@ classdef InverseKinematics < NonlinearProgram
   
   properties(Access = protected)
     pe   % A PostureError object.
+    
+    polygon_min_dist_cnstr_idx
+    polygon_min_dist_c_idx
+    polygon_min_dist_d_idx
   end
   
   methods
@@ -132,10 +136,37 @@ classdef InverseKinematics < NonlinearProgram
       if(~isempty(obj.qsc_weight_idx))
         x0(obj.qsc_weight_idx) = 1/length(obj.qsc_weight_idx);
       end
+      x0 = getSeparatingHyperplaneGuess(obj,q_seed,x0);
       [x,F,info,infeasible_constraint] = solve@NonlinearProgram(obj,x0);
       q = x(obj.q_idx);
       q = max([obj.x_lb(obj.q_idx) q],[],2);
       q = min([obj.x_ub(obj.q_idx) q],[],2);
+    end
+    
+    function obj = addPolygonMinDistConstraint(obj,cnstr)
+      if(~isa(cnstr,'PolygonMinDistConstraint'))
+        error('cnstr should be a PolygonMinDistConstraint object');
+      end
+      var_name = {'c1';'c2';'c3';'d'};
+      [obj,tmp_idx] = obj.addDecisionVariable(4,var_name);
+      obj.polygon_min_dist_c_idx = [obj.polygon_min_dist_c_idx tmp_idx(1:3)];
+      obj.polygon_min_dist_d_idx = [obj.polygon_min_dist_d_idx tmp_idx(4)];
+      obj = obj.addNonlinearConstraint(cnstr,{obj.q_idx;tmp_idx(1:3);tmp_idx(4)},obj.kinsol_dataind);
+      obj.polygon_min_dist_cnstr_idx = [obj.polygon_min_dist_cnstr_idx length(obj.nlcon)];
+      obj = obj.addBoundingBoxConstraint(BoundingBoxConstraint(-ones(3,1),ones(3,1)),obj.polygon_min_dist_c_idx(:,end));
+    end
+    
+  end
+  
+  methods(Access = protected)
+    function x0 = getSeparatingHyperplaneGuess(obj,q_seed,x0)
+      kinsol = obj.robot.doKinematics(q_seed,[],struct('compute_gradients',false));
+      for i = 1:length(obj.polygon_min_dist_cnstr_idx)
+        nlcon_idx = obj.polygon_min_dist_cnstr_idx(i);
+        x1 = obj.robot.forwardKin(kinsol,obj.nlcon{nlcon_idx}.body_pair(1),obj.nlcon{nlcon_idx}.body1_pts);
+        x2 = obj.robot.forwardKin(kinsol,obj.nlcon{nlcon_idx}.body_pair(2),obj.nlcon{nlcon_idx}.body2_pts);
+        [x0(obj.polygon_min_dist_c_idx(:,i)),x0(obj.polygon_min_dist_d_idx(i))] = getMaxSeparationHyperplane(x1,x2);
+      end
     end
   end
 end
