@@ -1,5 +1,14 @@
 function testConvexObjectMinDistConstraint()
 r = RigidBodyManipulator([getDrakePath,'/examples/Atlas/urdf/atlas_convex_hull.urdf'],struct('floating',true));
+box1_pos = [0.3;-0.45;1];
+box1_dim = [0.05;0.05;0.05];
+box1_pt = bsxfun(@times,box1_pos,ones(1,8)) + bsxfun(@times,box1_dim,ones(1,8)).*[1 1 1 1 -1 -1 -1 -1;1 1 -1 -1 1 1 -1 -1;1 -1 1 -1 1 -1 1 -1];
+lcmgl = drake.util.BotLCMGLClient(lcm.lcm.LCM.getSingleton(),'box1');
+lcmgl.glColor3f(1,0,0);
+lcmgl.box(box1_pos,box1_dim*2);
+lcmgl.switchBuffers();
+r = r.addRobotFromURDF('block.urdf',box1_pos,zeros(3,1),struct('floating',false'));
+r = r.compile();
 v = r.constructVisualizer(struct('use_collision_geometry',true));
 nq = r.getNumPositions();
 l_foot = r.findLinkId('l_foot');
@@ -25,13 +34,7 @@ r_lfarm = r.findLinkId('r_lfarm');
 r_lfarm_geo = r.getBody(r_lfarm).getCollisionGeometry();
 r_lfarm_pts = r_lfarm_geo{1}.getPoints();
 
-box1_pos = [0.3;-0.45;1];
-box1_dim = [0.05;0.05;0.05];
-box1_pt = bsxfun(@times,box1_pos,ones(1,8)) + bsxfun(@times,box1_dim,ones(1,8)).*[1 1 1 1 -1 -1 -1 -1;1 1 -1 -1 1 1 -1 -1;1 -1 1 -1 1 -1 1 -1];
-lcmgl = drake.util.BotLCMGLClient(lcm.lcm.LCM.getSingleton(),'box1');
-lcmgl.glColor3f(1,0,0);
-lcmgl.box(box1_pos,box1_dim*2);
-lcmgl.switchBuffers();
+
 nom_data = load([getDrakePath,'/examples/Atlas/data/atlas_fp.mat']);
 qstar = nom_data.xstar(1:nq);
 kinsol_star = r.doKinematics(qstar);
@@ -56,7 +59,7 @@ min_dist3 = PolygonMinDistConstraint(r,[r_lfarm,1],r_lfarm_pts,box1_pt,0.03);
 p = p.addPolygonMinDistConstraint(min_dist1);
 p = p.addPolygonMinDistConstraint(min_dist2);
 p = p.addPolygonMinDistConstraint(min_dist3);
-p = p.setSolverOptions('snopt','MajorIterationsLimit',500);
+p = p.setSolverOptions('snopt','MajorIterationsLimit',1000);
 tic;[q2,F,info] = p.solve(q);toc;
 
 end
