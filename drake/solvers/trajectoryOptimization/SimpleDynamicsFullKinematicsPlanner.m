@@ -19,7 +19,7 @@ classdef SimpleDynamicsFullKinematicsPlanner < DirectTrajectoryOptimization
     contact_wrench_active_knot  % A cell with same length as contact_wrench. contact_wrench_active_knot{i} contains all the indices of the knots that the constraint is active
     unique_contact_bodies; % An integer array. The indices of the unique contact bodies. It is in the order of obj.contact_wrench. Namely if obj.contact_wrench has body indices [3 2 4 3 1 2], theun unique_contact_bodies = [3 2 4 1]
     unique_body_contact_pts; % A length(unique_contact_bodies x 1) cell. unique_body_contact_pts{i} is a 3 x num_pts array, which contains all the contact points for unique_contact_bodies(i)
-    lambda_inds % A length(unique_contact_bodies) x 1 cell. lambda_idx{i} is an N x size(unique_body_contact_pts{i},2) x N array. where N is the number of force parameters for one contact point
+    lambda_inds % A length(unique_contact_bodies) x 1 cell. lambda_idx{i} is an m x size(unique_body_contact_pts{i},2) x obj.N array. where m is the number of force parameters for one contact point
     lambda2contact_wrench % A length(unique_contact_bodies) x 1 cell....
                  % lambda2contact_wrench{i} is a size(unique_body_contact_pts{i},2) x obj.N matrix.
                  % lambda{i}(:,j,k) are the contact forces whose information are encoded
