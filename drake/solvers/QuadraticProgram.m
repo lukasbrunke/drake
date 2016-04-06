@@ -183,7 +183,7 @@ methods(Access=protected)
     params.method = 2; % -1=automatic, 0=primal simplex, 1=dual simplex, 2=barrier
     params.presolve = 0;
     if params.method == 2
-      params.bariterlimit = 20; % iteration limit
+      params.bariterlimit = 80; % iteration limit
       params.barhomogeneous = 0; % 0 off, 1 on
       params.barconvtol = 5e-4;
     end
