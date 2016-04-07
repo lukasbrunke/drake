@@ -2,6 +2,7 @@ function testJump(mode)
 % mode 0 play back
 % mode 1 trajectory optimization
 % Jumping with fixed contact sequence
+addpathTemporary([getDrakePath,'/examples/Atlas']);
 warning('off','Drake:RigidBody:SimplifiedCollisionGeometry');
 warning('off','Drake:RigidBody:NonPositiveInertiaMatrix');
 warning('off','Drake:RigidBodyManipulator:UnsupportedContactPoints');

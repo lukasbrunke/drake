@@ -137,7 +137,7 @@ valuecheck(diff(comdot_sol,[],2)./bsxfun(@times,ones(3,1),h_sol),comddot_sol(:,2
 valuecheck(diff(H_sol,[],2)./bsxfun(@times,ones(3,1),h_sol),Hdot_sol(:,2:end),1e-3);
 lfoot_force = reshape(l_foot_contact_wrench.cw.force*reshape(lambda_sol{1},[],nT),3,[],nT);
 rfoot_force = reshape(r_foot_contact_wrench.cw.force*reshape(lambda_sol{2},[],nT),3,[],nT);
-total_force = squeeze(sum(lfoot_force,2)+sum(rfoot_force,2))-bsxfun(@times,[0;0;cdfkp.robot_mass*cdfkp.g],ones(1,nT));
+total_force = squeeze(sum(lfoot_force,2)+sum(rfoot_force,2))-bsxfun(@times,[0;0;cdfkp.robot_mass*cdfkp.gravity],ones(1,nT));
 valuecheck(total_force/cdfkp.robot_mass,comddot_sol,1e-3);
 lfoot_contact_pos = robot.forwardKin(kinsol_star,l_foot,l_foot_bottom,0);
 rfoot_contact_pos = robot.forwardKin(kinsol_star,r_foot,r_foot_bottom,0);

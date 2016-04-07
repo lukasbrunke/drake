@@ -32,7 +32,7 @@ classdef ComDynamicsFullKinematicsPlanner < SimpleDynamicsFullKinematicsPlanner
       obj = obj@SimpleDynamicsFullKinematicsPlanner(plant,robot,N,tf_range,Q_contact_force,contact_wrench_struct,options);
 %       obj = obj.setSolverOptions('snopt','scaleoption',2);
       if(~isfield(options,'torque_multiplier'))
-        options.torque_multiplier = obj.robot_mass*obj.g*1;
+        options.torque_multiplier = obj.robot_mass*obj.gravity*1;
       else
         if(~isnumeric(options.torque_multiplier) || numel(options.torque_multiplier)~= 1 || options.torque_multiplier<=0)
           error('Drake:ComDynamicsFullKinematicsPlanner:torque_multiplier should be positive scaler');
@@ -271,7 +271,7 @@ classdef ComDynamicsFullKinematicsPlanner < SimpleDynamicsFullKinematicsPlanner
           lambda_count_tmp = lambda_count_tmp+num_lambda_j;
         end
         joint_idx = unique(joint_idx);
-        newton_cnstr = LinearConstraint([0;0;-obj.robot_mass*obj.g],[0;0;-obj.robot_mass*obj.g],[obj.robot_mass*eye(3) -A_force_stack]);
+        newton_cnstr = LinearConstraint([0;0;-obj.robot_mass*obj.gravity],[0;0;-obj.robot_mass*obj.gravity],[obj.robot_mass*eye(3) -A_force_stack]);
         newton_cnstr = newton_cnstr.setName([{sprintf('F_x=ma_x[%d]',knot_idx)};{sprintf('F_y=ma_y[%d]',knot_idx)};{sprintf('F_z=ma_z[%d]',knot_idx)}]);
         obj = obj.addLinearConstraint(newton_cnstr,[obj.comddot_inds(:,knot_idx);knot_lambda_idx{1}]);
         Hdot_cnstr = FunctionHandleConstraint(zeros(3,1),zeros(3,1),obj.nq+3+num_lambda1+3,@(~,com,lambda,Hdot,kinsol) singleTimeDynFun(kinsol,com,lambda,Hdot));

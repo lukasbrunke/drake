@@ -39,7 +39,7 @@ classdef ContactWrenchVisualizer < BotVisualizer
       obj.force_scaler = manip.getMass*9.81/3;
       obj.torque_scaler = manip.getMass*9.81/50;
       obj.display_dt = 0.033; % Otherwise there's just too much lcmgl
-      obj.atlas = Atlas();
+      obj.atlas = Atlas(manip.urdf{1});
     end
     
     function draw(obj,t,y)
