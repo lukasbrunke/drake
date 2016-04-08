@@ -39,6 +39,12 @@ classdef GraspWrenchPolytope < RigidBodyContactWrench
     function [pos,J] = contactPosition(obj,kinsol)
       [pos,J] = obj.robot.forwardKin(kinsol,obj.body,obj.body_pts,0);
     end
+    
+    function [c,dc] = evalWrenchConstraint(obj,kinsol,F,slack)
+      % return the constraint. There is no nonlinear constraint on the force paramter
+      c = [];
+      dc = zeros(0,obj.robot.getNumPositions+obj.num_pt_F*obj.num_pts+obj.num_slack);
+    end
   end
   
   methods(Access = protected)
