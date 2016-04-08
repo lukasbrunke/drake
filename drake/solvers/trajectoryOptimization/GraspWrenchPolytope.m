@@ -16,6 +16,7 @@ classdef GraspWrenchPolytope < RigidBodyContactWrench
     function obj = GraspWrenchPolytope(robot,body,grasp_pt,wrench_vert)
       % @param wrench_vert A 6 x num_wrench_vert matrix, the vertices of
       % the wrench polytope
+      sizecheck(grasp_pt,[3,1]);
       obj = obj@RigidBodyContactWrench(robot,body,grasp_pt);
       m_num_wrench_vert = size(wrench_vert,2);
       sizecheck(wrench_vert,[6,m_num_wrench_vert]);
