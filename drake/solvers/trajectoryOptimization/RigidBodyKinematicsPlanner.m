@@ -18,6 +18,10 @@ classdef RigidBodyKinematicsPlanner < DirectTrajectoryOptimization
     robot_mass  % A double scalar.
   end
   
+  properties(Access = protected)
+    floating_body_idx % robot.getBody(floating_body_idx(i)) is a floating body
+  end
+  
   methods
     function obj = RigidBodyKinematicsPlanner(plant,robot,N,tf_range,options)
       if(nargin<5)
@@ -31,6 +35,12 @@ classdef RigidBodyKinematicsPlanner < DirectTrajectoryOptimization
         error('Drake:SimpleDynamicsFullKinematicsPlanner:expect a RigidBodyManipulator or a TimeSteppingRigidBodyManipulator');
       end
       obj.robot = robot;
+      obj.floating_body_idx = [];
+      for i = 1:obj.robot.getNumBodies()
+        if(obj.robot.getBody(i).floating)
+          obj.floating_body_idx(end+1) = i;
+        end
+      end
       obj.nq = obj.robot.getNumPositions();
       obj.nv = obj.robot.getNumVelocities();
       obj.q_inds = obj.x_inds(1:obj.nq,:);
