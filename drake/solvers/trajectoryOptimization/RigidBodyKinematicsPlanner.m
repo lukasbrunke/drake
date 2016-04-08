@@ -83,6 +83,14 @@ classdef RigidBodyKinematicsPlanner < DirectTrajectoryOptimization
       end
     end
     
+    function obj = addConstraint(obj, constraint, varargin)
+      if isa(constraint, 'RigidBodyConstraint')
+        obj = addRigidBodyConstraint(obj,constraint, varargin{:});
+      else
+        obj = addConstraint@DirectTrajectoryOptimization(obj,constraint,varargin{:});
+      end
+    end
+    
     function obj = addKinematicConstraint(obj,constraint,time_index)
       % Add a kinematic constraint that is a function of the state at the
       % specified time or times.

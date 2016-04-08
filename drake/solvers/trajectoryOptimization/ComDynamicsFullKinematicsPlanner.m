@@ -131,16 +131,6 @@ classdef ComDynamicsFullKinematicsPlanner < SimpleDynamicsFullKinematicsPlanner
         df = [qQq, 2*h*(q-q_nom)'*Q];
       end
     end
-
-    function obj = addConstraint(obj, constraint, varargin)
-      if isa(constraint, 'RigidBodyConstraint')
-        obj = addRigidBodyConstraint(obj,constraint, varargin{:});
-      else
-        obj = addConstraint@SimpleDynamicsFullKinematicsPlanner(obj,constraint,varargin{:});
-      end
-    end
-    
-    
     
     function obj = addCoMBounds(obj,knot_idx,com_lb,com_ub)
       % @param knot_idx  The indices of the knots on which the com position will be
