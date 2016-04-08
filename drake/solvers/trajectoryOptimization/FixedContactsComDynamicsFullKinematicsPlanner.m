@@ -1,31 +1,21 @@
-classdef FixedContactsComDynamicsFullKinematicsPlanner < RigidBodyKinematicsPlanner
+classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamicsFullKineamticsPlanner
   % This planner fixes the contact locations, and compute the contact
   % wrench set at each knot. The goal is to maximize the margin in the
   % contact wrench set
   properties(SetAccess = protected)
-    robot % A RigidBodyManipulator or a TimeSteppingRigidBodyManipulator
-    nq % number of positions in state
-    nv % number of velocities in state
-    q_inds % An nq x obj.N matrix. x(q_inds(:,i)) is the posture at i'th knot
-    v_inds % An nv x obj.N matrix. x(v_inds(:,i)) is the velocity at i'th knot
-    qsc_weight_inds = {}
-    fix_initial_state = false
-    gravity
-    % N-element vector of indices into the shared_data, where
-    % shared_data{kinsol_dataind(i)} is the kinsol for knot point i
-    kinsol_dataind
-    
-    % kinematics cache pointers, one for each knot point
-    kinematics_cache_ptrs
-    
     % The CWS is described as Ain_cws{i}*w<=bin_cws{i} and
     % Aeq_cws{i}*w=beq_cws{i}
     Ain_cws % A nT x 1 cell
     bin_cws % A nT x 1 cell
     Aeq_cws % A nT x 1 cell
     beq_cws % A nT x 1 cell
-    cws_margin_ind % A scalar.
+    % An alternative way to describe the contact wrench set is w belongs to
+    % convexcone(cws_ray{i}) + convexhull(cws_vert{i});
+    cws_ray % A nT x 1 cell
+    cws_vert % A nT x 1 cell
+    
   end
+  
   methods
     function obj = FixedContactsComDynamicsFullKinematicsPlanner(robot,N,tf_range,Q_comddot,Qv,Q,q_nom,contact_wrench_struct,options)
       % @param contact_wrench_struct  A cell of of structs, with fields
@@ -34,8 +24,7 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < RigidBodyKinematicsPlan
       if(nargin<9)
         options = struct();
       end
-      plant = SimpleDynamicsDummyPlant(robot.getNumPositions());
-      obj = obj@RigidBodyKinematicsPlanner(plant,robot,N,tf_range,options);
+      obj = obj@ContactWrenchSetDynamicsFullKineamticsPlanner(robot,N,tf_range,Q_comddot,Qv,Q,q_nom,contact_wrench_struct,options);
       
       obj = obj.setSolverOptions('snopt','majoroptimalitytolerance',1e-5);
       obj = obj.setSolverOptions('snopt','superbasicslimit',2000);
@@ -44,33 +33,7 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < RigidBodyKinematicsPlan
       obj = obj.setSolverOptions('snopt','majoriterationslimit',200);
     end
     
-    function data = kinematicsData(obj,q,kinematics_cache_ptr)
-      options.compute_gradients = true;
-      options.use_mex = true;
-      options.kinematics_cache_ptr_to_use = kinematics_cache_ptr;
-      data = doKinematics(obj.robot,q,[],options);
-    end
-    
-    function obj = setFixInitialState(obj,flag,x0)
-      % set obj.fix_initial_state = flag. If flag = true, then fix the initial state to x0
-      % @param x0   A 2*obj.robot.getNumPositions() x 1 double vector. x0 = [q0;qdot0]. The initial state
-      sizecheck(flag,[1,1]);
-      flag = logical(flag);
-      if(isempty(obj.bbcon))
-        obj.fix_initial_state = flag;
-        if(obj.fix_initial_state)
-          obj = obj.addBoundingBoxConstraint(BoundingBoxConstraint(x0,x0),obj.x_inds(:,1));
-        else
-          obj = obj.addBoundingBoxConstraint(BoundingBoxConstraint(-inf(obj.robot.getNumStates(),1),inf(obj.robot.getNumStates(),1)),obj.x_inds(:,1));
-        end
-      elseif(obj.fix_initial_state ~= flag)
-        obj.fix_initial_state = flag;
-        if(obj.fix_initial_state)
-          obj = obj.addBoundingBoxConstraint(BoundingBoxConstraint(x0,x0),obj.x_inds(:,1));
-        else
-          obj = obj.addBoundingBoxConstraint(BoundingBoxConstraint(-inf(obj.robot.getNumStates(),1),inf(obj.robot.getNumStates(),1)),obj.x_inds(:,1));
-        end
-      end
+    function obj = addRunningCost(obj,running_cost_function)
     end
     
   end
@@ -80,8 +43,8 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < RigidBodyKinematicsPlan
       % parse the contact_wrench_struct, to compute the H representation of
       % the contact wrench set
       num_cw = numel(contact_wrench_struct);
-      obj.cws_ray = cell(obj.nT,1);
-      obj.cws_vert = cell(obj.nT,1);
+      obj.cws_ray = cell(obj.N,1);
+      obj.cws_vert = cell(obj.N,1);
       for i = 1:num_cw
         if(~isstruct(contact_wrench_struct) || ~isfield(contact_wrench_struct(i),'active_knot') || ~isfield(contact_wrench_struct(i),'cw') ||...
             ~isfield(contact_wrench_struct(i),'contact_pos') || ~isa(contact_wrench_struct(i).cw,'RigidBodyContactWrench'))
@@ -114,8 +77,8 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < RigidBodyKinematicsPlan
           error('Not supported');
         end
       end
-      for i = 1:obj.nT
-        P = Polyhedron('V',obj.cws_vert','R',obj.cws_ray');
+      for i = 1:obj.N
+        P = Polyhedron('V',obj.cws_vert{i}','R',obj.cws_ray{i}');
         P = P.minHRep();
         obj.Ain_cws{i} = P.H(:,1:6);
         obj.bin_cws{i} = P.H(:,7);
