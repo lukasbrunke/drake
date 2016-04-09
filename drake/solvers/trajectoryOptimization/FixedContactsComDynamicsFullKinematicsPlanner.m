@@ -17,14 +17,16 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
   end
   
   methods
-    function obj = FixedContactsComDynamicsFullKinematicsPlanner(robot,N,tf_range,Q_comddot,Qv,Q,q_nom,contact_wrench_struct,options)
+    function obj = FixedContactsComDynamicsFullKinematicsPlanner(robot,N,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,options)
       % @param contact_wrench_struct  A cell of of structs, with fields
       % 'active_knot', 'cw' and 'contact_pos', where 'cw' fields contain the
       % RigidBodyContactWrench objects
-      if(nargin<9)
+      if(nargin<10)
         options = struct();
       end
-      obj = obj@ContactWrenchSetDynamicsFullKineamticsPlanner(robot,N,tf_range,Q_comddot,Qv,Q,q_nom,contact_wrench_struct,options);
+      obj = obj@ContactWrenchSetDynamicsFullKineamticsPlanner(robot,N,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,options);
+      
+      obj = obj.parseContactWrenchStruct(contact_wrench_struct);
       
       obj = obj.setSolverOptions('snopt','majoroptimalitytolerance',1e-5);
       obj = obj.setSolverOptions('snopt','superbasicslimit',2000);
