@@ -187,5 +187,13 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
       dc(4:9,obj.nq+(1:obj.nv)) = -A;
       dc(4:9,obj.nq+obj.nv+3+(1:6)) = eye(6);
     end
+    
+    function [c,dc] = momentumInterpolationFun(obj,centroidal_momentum,momentum_dot,com,dt)
+      % Use mid-point interpolation for momentum
+      % first compute the centroidal momentum dot
+      hdot = [momentum_dot(4:6,:);momentum_dot(1:3,:)];
+      hdot(1:3,:) = hdot(1:3,:)+cross(hdot(4:6,:),com);
+      
+    end
   end
 end
