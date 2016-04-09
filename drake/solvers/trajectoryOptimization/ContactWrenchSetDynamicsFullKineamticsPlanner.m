@@ -4,7 +4,7 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
     com_inds % A 3 x obj.N matrix
     comdot_inds % A 3 x obj.N matrix
     comddot_inds % A 3 x obj.N matrix
-    centroidal_momentum_inds % A 3 x obj.N matrix
+    centroidal_momentum_inds % A 6 x obj.N matrix
     world_momentum_dot_inds % A 3 x obj.N matrix
     
     cws_margin_cost % A positive scalar. The cost is -cws_margin_cost*cws_margin
@@ -35,6 +35,8 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
       obj = obj.addState();
       
       obj = obj.addPostureInterpolation();
+      
+      obj = obj.addCentroidalConstraint();
     end
     
     function obj = addDynamicConstraints(obj)
@@ -73,16 +75,27 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
       
       x_name = cell(6*obj.N,1);
       for i = 1:obj.N
-        x_name{(i-1)*3+1} = sprintf('centroidal_momentum_x[%d]',i);
-        x_name{(i-1)*3+2} = sprintf('centroidal_momentum_y[%d]',i);
-        x_name{(i-1)*3+3} = sprintf('centroidal_momentum_z[%d]',i);
-        x_name{3*obj.N+(i-1)*3+1} = sprintf('momentum_dot_x[%d]',i);
-        x_name{3*obj.N+(i-1)*3+2} = sprintf('momentum_dot_y[%d]',i);
-        x_name{3*obj.N+(i-1)*3+3} = sprintf('momentum_dot_z[%d]',i);
+        x_name{(i-1)*6+1} = sprintf('centroidal_agl_momentum_x[%d]',i);
+        x_name{(i-1)*6+2} = sprintf('centroidal_agl_momentum_y[%d]',i);
+        x_name{(i-1)*6+3} = sprintf('centroidal_agl_momentum_z[%d]',i);
+        x_name{(i-1)*6+4} = sprintf('centroidal_lin_momentum_x[%d]',i);
+        x_name{(i-1)*6+5} = sprintf('centroidal_lin_momentum_y[%d]',i);
+        x_name{(i-1)*6+6} = sprintf('centroidal_lin_momentum_z[%d]',i);
       end
       [obj,tmp_idx] = obj.addDecisionVariable(6*obj.N,x_name);
-      obj.centroidal_momentum_inds = reshape(tmp_idx(1:3*obj.N),3,obj.N);
-      obj.world_momentum_dot_inds = reshape(tmp_idx(3*obj.N+(1:3*obj.N)),3,obj.N);
+      obj.centroidal_momentum_inds = reshape(tmp_idx,6,obj.N);
+      
+      x_name = cell(6*obj.N,1);
+      for i = 1:obj.N
+        x_name{(i-1)*6+1} = sprintf('lin_momentum_dot_x[%d]',i);
+        x_name{(i-1)*6+2} = sprintf('lin_momentum_dot_y[%d]',i);
+        x_name{(i-1)*6+3} = sprintf('lin_momentum_dot_z[%d]',i);
+        x_name{(i-1)*6+4} = sprintf('agl_momentum_dot_x[%d]',i);
+        x_name{(i-1)*6+5} = sprintf('agl_momentum_dot_y[%d]',i);
+        x_name{(i-1)*6+6} = sprintf('agl_momentum_dot_z[%d]',i);
+      end
+      [obj,tmp_idx] = obj.addDecisionVariable(6*obj.N,x_name);
+      obj.world_momentum_dot_inds = reshape(tmp_idx,6,obj.N);
       
       if(~isempty(obj.q_quat_inds))
         num_quat = size(obj.q_quat_inds,2);
@@ -149,7 +162,7 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
     function obj = addCentroidalConstraint(obj)
       % com = robot.getCOM()
       % centroidal_momentum = robot.centroidalMomentumMatrix*v
-      cnstr = FunctionHandleConstraint(zeros(9,1),zeros(9,1),obj.nq+obj.nv+9,@(~,~,com,centroidal_momentum,kinsol) centroidalConstraint(obj,kinsol,com,centroidal_momentum));
+      cnstr = FunctionHandleConstraint(zeros(9,1),zeros(9,1),obj.nq+obj.nv+9,@(~,v,com,centroidal_momentum,kinsol) centroidalConstraintFun(obj,kinsol,v,com,centroidal_momentum));
       name = [repmat({'com = com(q)'},3,1);repmat({'centroidal_momentum=A(q)*v'},6,1)];
       cnstr = cnstr.setName(name);
       sparse_pattern = [ones(3,obj.nq) zeros(3,obj.nv) eye(3) zeros(3,6);ones(6,obj.nq+obj.nv) zeros(6,3) eye(6)];
@@ -160,7 +173,7 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
       end
     end
     
-    function [c,dc] = centroidalConstraintFun(obj,kinsol,com,centroidal_momentum)
+    function [c,dc] = centroidalConstraintFun(obj,kinsol,v,com,centroidal_momentum)
       c = zeros(9,1);
       dc = zeros(9,obj.nq+obj.nv+9);
       [com_kinsol,dcom_kinsol] = obj.robot.getCOM(kinsol);
@@ -168,11 +181,11 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
       dc(1:3,1:obj.nq) = -dcom_kinsol;
       dc(1:3,obj.nq+obj.nv+(1:3)) = eye(3);
       [A,dA] = obj.robot.centroidalMomentumMatrix(kinsol);
-      h = A*kinsol.v;
+      h = A*v;
       c(4:9) = centroidal_momentum-h;
-      dc(4:9,1:obj.nq) = dA;
-      dc(4:9,obj.nq+(1:obj.nv)) = A;
-      A(4:9,obj.nq+obj.nv+3+(1:6)) = -eye(6);
+      dc(4:9,1:obj.nq) = -matGradMult(dA,v);
+      dc(4:9,obj.nq+(1:obj.nv)) = -A;
+      dc(4:9,obj.nq+obj.nv+3+(1:6)) = eye(6);
     end
   end
 end
