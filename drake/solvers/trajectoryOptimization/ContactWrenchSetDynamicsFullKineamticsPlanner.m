@@ -110,9 +110,12 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
       
       if(~isempty(obj.q_quat_inds))
         sparsity_pattern = [ones(obj.nq,2*obj.nq+2*obj.nv+1) sparse(obj.q_quat_inds(:),reshape(bsxfun(@times,ones(4,1),1:m_num_quat),[],1),ones(4*m_num_quat,1),obj.nq,m_num_quat)];
-        [iCfun,jCvar] = find(sparsity_pattern);
-        cnstr = cnstr.setSparseStructure(iCfun,jCvar);
+      else
+        sparsity_pattern = [eye(obj.nq) eye(obj.nq) eye(obj.nq) eye(obj.nq) ones(obj.nq,1)];
       end
+      [iCfun,jCvar] = find(sparsity_pattern);
+      cnstr = cnstr.setSparseStructure(iCfun,jCvar);
+      
       for i = 1:obj.N-1
         if(~isempty(obj.q_quat_inds))
           quat_slack_correction_idx = obj.quat_correction_slack_inds(:,i);
@@ -141,6 +144,35 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
         dc(obj.q_quat_inds(:),obj.nq+(obj.q_quat_inds(:))) = dc(obj.q_quat_inds(:),obj.nq+(obj.q_quat_inds(:)))-dquat_correction_dqr;
         dc(obj.q_quat_inds(:),obj.nq*2+obj.nv*2+1+(1:num_quat)) = -dquat_correction_dslack;
       end
+    end
+    
+    function obj = addCentroidalConstraint(obj)
+      % com = robot.getCOM()
+      % centroidal_momentum = robot.centroidalMomentumMatrix*v
+      cnstr = FunctionHandleConstraint(zeros(9,1),zeros(9,1),obj.nq+obj.nv+9,@(~,~,com,centroidal_momentum,kinsol) centroidalConstraint(obj,kinsol,com,centroidal_momentum));
+      name = [repmat({'com = com(q)'},3,1);repmat({'centroidal_momentum=A(q)*v'},6,1)];
+      cnstr = cnstr.setName(name);
+      sparse_pattern = [ones(3,obj.nq) zeros(3,obj.nv) eye(3) zeros(3,6);ones(6,obj.nq+obj.nv) zeros(6,3) eye(6)];
+      [iCfun,jCvar] = find(sparse_pattern);
+      cnstr = cnstr.setSparseStructure(iCfun,jCvar);
+      for i = 1:obj.N
+        obj = obj.addConstraint(cnstr,[{obj.q_inds(:,i)};{obj.v_inds(:,i)};{obj.com_inds(:,i)};{obj.centroidal_momentum_inds(:,i)}],obj.kinsol_dataind(i));
+      end
+    end
+    
+    function [c,dc] = centroidalConstraintFun(obj,kinsol,com,centroidal_momentum)
+      c = zeros(9,1);
+      dc = zeros(9,obj.nq+obj.nv+9);
+      [com_kinsol,dcom_kinsol] = obj.robot.getCOM(kinsol);
+      c(1:3) = com-com_kinsol;
+      dc(1:3,1:obj.nq) = -dcom_kinsol;
+      dc(1:3,obj.nq+obj.nv+(1:3)) = eye(3);
+      [A,dA] = obj.robot.centroidalMomentumMatrix(kinsol);
+      h = A*kinsol.v;
+      c(4:9) = centroidal_momentum-h;
+      dc(4:9,1:obj.nq) = dA;
+      dc(4:9,obj.nq+(1:obj.nv)) = A;
+      A(4:9,obj.nq+obj.nv+3+(1:6)) = -eye(6);
     end
   end
 end

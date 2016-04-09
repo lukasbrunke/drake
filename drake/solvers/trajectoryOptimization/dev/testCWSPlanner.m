@@ -1,5 +1,10 @@
 function testCWSPlanner
-robot = RigidBodyManipulator([getDrakePath,'/examples/Atlas/urdf/atlas_minimal_contact.urdf'],struct('floating','quat'));
+warning('off','Drake:RigidBody:SimplifiedCollisionGeometry');
+warning('off','Drake:RigidBody:NonPositiveInertiaMatrix');
+warning('off','Drake:RigidBodyManipulator:UnsupportedContactPoints');
+warning('off','Drake:RigidBodyManipulator:UnsupportedVelocityLimits');
+warning('off','Drake:RigidBodyManipulator:ReplacedCylinder');
+robot = RigidBodyManipulator([getDrakePath,'/examples/Atlas/urdf/atlas_minimal_contact.urdf'],struct('floating',true));
 nq = robot.getNumPositions();
 nv = robot.getNumVelocities();
 
@@ -90,4 +95,9 @@ q_nom = repmat(q0,1,nT);
 contact_wrench_struct = [lfoot_contact_wrench rfoot_contact_wrench1 rfoot_contact_wrench2 rhand_contact_wrench];
 cws_margin_cost = 100;
 fccdfkp = FixedContactsComDynamicsFullKinematicsPlanner(robot,nT,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct);
+
+fccdfkp = fccdfkp.setSolverOptions('snopt','print','test_fccdfkp.out');
+tic
+[x_sol,info] = fccdfkp.solve(x_init);
+toc
 end
