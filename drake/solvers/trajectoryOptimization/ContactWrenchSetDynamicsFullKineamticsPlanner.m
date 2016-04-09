@@ -7,7 +7,7 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
     centroidal_momentum_inds % A 3 x obj.N matrix
     world_momentum_dot_inds % A 3 x obj.N matrix
     
-    cws_margin_cost % A positive scalar. The cost is cws_margin_cost*cws_margin
+    cws_margin_cost % A positive scalar. The cost is -cws_margin_cost*cws_margin
     
     quat_correction_slack_inds % A size(q_quat_inds,2) x obj.N-1 matrix. The slack variable for interpolating the quaternion
   end
@@ -30,7 +30,26 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
         if(obj.robot.getBody(i).floating == 2)
           obj.q_quat_inds(:,end+1) = obj.robot.getBody(i).position_num(4:7);
         end
+      end      
+      
+      obj = obj.addPostureInterpolation();
+    end
+    
+    function obj = addDynamicConstraints(obj)
+    end
+    
+    function obj = setCWSMarginCost(obj,cws_margin_cost)
+      sizecheck(cws_margin_cost,[1,1]);
+      if(cws_margin_cost<0)
+        error('cws_margin_cost should be non-negative');
       end
+      obj.cws_margin_cost = cws_margin_cost;
+    end
+    
+  end
+  
+  methods(Access = protected)
+    function obj = addState(obj)
       [obj,obj.cws_margin_ind] = obj.addDecisionVariable(1,{'cws_margin'});
       
       x_name = cell(9*obj.N,1);
@@ -74,45 +93,51 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
         [obj,tmp_idx] = obj.addDecisionVariable(num_quat*(obj.N-1),x_name);
         obj.quat_correction_slack_inds = reshape(tmp_idx,num_quat,obj.N-1);
       end
-      
-      obj = obj.parseContactWrenchStruct(contact_wrench_struct);
     end
     
-    function obj = addDynamicConstraints(obj)
-    end
     
-    function obj = setCWSMarginCost(obj,cws_margin_cost)
-      sizecheck(cws_margin_cost,[1,1])
-      if(cws_margin_cost<0)
-        error('cws_margin_cost should be non-negative');
-      end
-      obj.cws_margin_cost = cws_margin_cost;
-    end
-    
-  end
-  
-  methods(Access = protected)
     function obj = addPostureInterpolation(obj)
       % Use the mid-point interpolation for joint q and v
-      function [c,dc] = postureInterpolationFun(obj,kinsol_l,kinsol_r,v_l,v_r,dt,quat_correction_slack)
-        [VqInv_l,dVqInv_l] = obj.robot.vToqdot(kinsol_l);
-        [VqInv_r,dVqInv_r] = obj.robot.vToqdot(kinsol_r);
-        qdot_l = VqInv_l*v_l;
-        qdot_r = VqInv_r*v_r;
-        dqdot_l = [VqInv_l matGradMult(dVqInv_l,v_l)];
-        dqdot_r = [VqInv_r matGradMult(dVqInv_r,v_r)];
-        c = kinsol_r.q-kinsol_l.q-0.5*(qdot_l+qdot_r)*dt;
-        dc = [-eye(obj.nq)-0.5*dt*dqdot_l(:,1:nq) eye(obj.nq)-0.5*dt*dqdot_r(:,1:obj.nq) -0.5*dt*dqdot_l(:,obj.nq+(1:obj.nv)) -0.5*dt*dqdot_r(:,obj.nq+(1:obj.nv)) -0.5*(qdot_l+qdot_r)];
+      m_num_quat = size(obj.q_quat_inds,2);
+      cnstr = FunctionHandleConstraint(zeros(obj.nq,1),zeros(obj.nq,1),2*obj.nq+2*obj.nv+1+m_num_quat,@(~,~,v_l,v_r,dt,quat_correction_slack,kinsol_l,kinsol_r) postureInterpolationFun(obj,kinsol_l,kinsol_r,v_l,v_r,dt,quat_correction_slack));
+      cnstr_name = cell(obj.nq,1);
+      for i = 1:obj.nq
+        cnstr_name{i} = sprintf('q%d_interpolation',i);
+      end
+      cnstr = cnstr.setName(cnstr_name);
+      
+      if(~isempty(obj.q_quat_inds))
+        sparsity_pattern = [ones(obj.nq,2*obj.nq+2*obj.nv+1) sparse(obj.q_quat_inds(:),reshape(bsxfun(@times,ones(4,1),1:m_num_quat),[],1),ones(4*m_num_quat,1),obj.nq,obj.num_quat)];
+        [iCfun,jCvar] = find(sparsity_pattern);
+        cnstr = cnstr.setSparseStructure(iCfun,jCvar);
+      end
+      for i = 1:obj.N-1
         if(~isempty(obj.q_quat_inds))
-          num_quat = size(obj.q_quat_inds,2);
-          quat_correction = reshape(reshape(kinsol_r.q(obj.q_quat_inds),4,[])*bsxfun(@times,quat_correction_slack',ones(4,1)),[],1);
-          dquat_correction_dqr = sparse((1:4*num_quat)',(1:4*num_quat)',reshape(bsxfun(@times,ones(4,1),quat_correction_slack'),[],1),4*num_quat,4*num_quat);
-          dquat_correction_dslack = sparse((1:4*num_quat)',reshape(bsxfun(@times,ones(4,1),1:num_quat),[],1),kinsol_r.q(obj.q_quat_inds),4*num_quat,num_quat);
-          c(obj.q_quat_inds(:)) = c(obj.q_quat_inds(:))-quat_correction;
-          dc(obj.q_quat_inds(:),obj.nq+(obj.q_quat_inds(:))) = -dquat_correction_dqr;
-          dc(obj.q_quat_inds(:),obj.nq*2+obj.nv*2+q+(1:num_quat)) = -dquat_correction_dslack;
+          quat_slack_correction_idx = obj.quat_correction_slack_inds(:,i);
+        else
+          quat_slack_correction_idx = [];
         end
-        
+        obj = obj.addConstraint(cnstr,[{obj.q_inds(:,i)};{obj.q_inds(:,i+1)};{obj.v_inds(:,i)};{obj.v_inds(:,i+1)};{obj.h_inds(i)};{quat_slack_correction_idx}],[obj.kinsol_dataind(i);obj.kinsol_dataind(i+1)]);
+      end
+    end
+    
+    function [c,dc] = postureInterpolationFun(obj,kinsol_l,kinsol_r,v_l,v_r,dt,quat_correction_slack)
+      [VqInv_l,dVqInv_l] = obj.robot.vToqdot(kinsol_l);
+      [VqInv_r,dVqInv_r] = obj.robot.vToqdot(kinsol_r);
+      qdot_l = VqInv_l*v_l;
+      qdot_r = VqInv_r*v_r;
+      dqdot_l = [matGradMult(dVqInv_l,v_l) VqInv_l ];
+      dqdot_r = [matGradMult(dVqInv_r,v_r) VqInv_r ];
+      c = kinsol_r.q-kinsol_l.q-0.5*(qdot_l+qdot_r)*dt;
+      dc = [-eye(obj.nq)-0.5*dt*dqdot_l(:,1:obj.nq) eye(obj.nq)-0.5*dt*dqdot_r(:,1:obj.nq) -0.5*dt*dqdot_l(:,obj.nq+(1:obj.nv)) -0.5*dt*dqdot_r(:,obj.nq+(1:obj.nv)) -0.5*(qdot_l+qdot_r)];
+      if(~isempty(obj.q_quat_inds))
+        num_quat = size(obj.q_quat_inds,2);
+        quat_correction = reshape(reshape(kinsol_r.q(obj.q_quat_inds),4,[])*bsxfun(@times,quat_correction_slack',ones(4,1)),[],1);
+        dquat_correction_dqr = sparse((1:4*num_quat)',(1:4*num_quat)',reshape(bsxfun(@times,ones(4,1),quat_correction_slack'),[],1),4*num_quat,4*num_quat);
+        dquat_correction_dslack = sparse((1:4*num_quat)',reshape(bsxfun(@times,ones(4,1),1:num_quat),[],1),kinsol_r.q(obj.q_quat_inds),4*num_quat,num_quat);
+        c(obj.q_quat_inds(:)) = c(obj.q_quat_inds(:))-quat_correction;
+        dc(obj.q_quat_inds(:),obj.nq+(obj.q_quat_inds(:))) = -dquat_correction_dqr;
+        dc(obj.q_quat_inds(:),obj.nq*2+obj.nv*2+q+(1:num_quat)) = -dquat_correction_dslack;
       end
     end
   end

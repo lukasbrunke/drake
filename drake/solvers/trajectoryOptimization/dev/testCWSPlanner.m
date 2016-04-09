@@ -81,5 +81,6 @@ T_ub = 1;
 tf_range = [T_lb,T_ub];
 q_nom = repmat(q0,1,nT);
 contact_wrench_struct = [lfoot_contact_wrench rfoot_contact_wrench1 rfoot_contact_wrench2 rhand_contact_wrench];
-fccdfkp = FixedContactsComDynamicsFullKinematicsPlanner(robot,nT,tf_range,Q_comddot,Qv,Q,q_nom,contact_wrench_struct);
+cws_margin_cost = 100;
+fccdfkp = FixedContactsComDynamicsFullKinematicsPlanner(robot,nT,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct);
 end
