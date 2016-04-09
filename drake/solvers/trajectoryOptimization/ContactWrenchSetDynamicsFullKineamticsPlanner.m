@@ -32,6 +32,8 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
         end
       end      
       
+      obj = obj.addState();
+      
       obj = obj.addPostureInterpolation();
     end
     
@@ -84,7 +86,7 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
       
       if(~isempty(obj.q_quat_inds))
         num_quat = size(obj.q_quat_inds,2);
-        x_name = cell(num_quat*(obj.N-1));
+        x_name = cell(num_quat*(obj.N-1),1);
         for i = 1:num_quat
           for j = 1:obj.N-1
             x_name{(i-1)*(obj.N-1)+j} = sprintf('%s_quat_correction_slack[%d]',obj.robot.getBody(obj.floating_body_idx(i)).linkname,j+1);
@@ -107,7 +109,7 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
       cnstr = cnstr.setName(cnstr_name);
       
       if(~isempty(obj.q_quat_inds))
-        sparsity_pattern = [ones(obj.nq,2*obj.nq+2*obj.nv+1) sparse(obj.q_quat_inds(:),reshape(bsxfun(@times,ones(4,1),1:m_num_quat),[],1),ones(4*m_num_quat,1),obj.nq,obj.num_quat)];
+        sparsity_pattern = [ones(obj.nq,2*obj.nq+2*obj.nv+1) sparse(obj.q_quat_inds(:),reshape(bsxfun(@times,ones(4,1),1:m_num_quat),[],1),ones(4*m_num_quat,1),obj.nq,m_num_quat)];
         [iCfun,jCvar] = find(sparsity_pattern);
         cnstr = cnstr.setSparseStructure(iCfun,jCvar);
       end
@@ -132,12 +134,12 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
       dc = [-eye(obj.nq)-0.5*dt*dqdot_l(:,1:obj.nq) eye(obj.nq)-0.5*dt*dqdot_r(:,1:obj.nq) -0.5*dt*dqdot_l(:,obj.nq+(1:obj.nv)) -0.5*dt*dqdot_r(:,obj.nq+(1:obj.nv)) -0.5*(qdot_l+qdot_r)];
       if(~isempty(obj.q_quat_inds))
         num_quat = size(obj.q_quat_inds,2);
-        quat_correction = reshape(reshape(kinsol_r.q(obj.q_quat_inds),4,[])*bsxfun(@times,quat_correction_slack',ones(4,1)),[],1);
+        quat_correction = reshape(reshape(kinsol_r.q(obj.q_quat_inds),4,[]).*bsxfun(@times,quat_correction_slack',ones(4,1)),[],1);
         dquat_correction_dqr = sparse((1:4*num_quat)',(1:4*num_quat)',reshape(bsxfun(@times,ones(4,1),quat_correction_slack'),[],1),4*num_quat,4*num_quat);
         dquat_correction_dslack = sparse((1:4*num_quat)',reshape(bsxfun(@times,ones(4,1),1:num_quat),[],1),kinsol_r.q(obj.q_quat_inds),4*num_quat,num_quat);
         c(obj.q_quat_inds(:)) = c(obj.q_quat_inds(:))-quat_correction;
-        dc(obj.q_quat_inds(:),obj.nq+(obj.q_quat_inds(:))) = -dquat_correction_dqr;
-        dc(obj.q_quat_inds(:),obj.nq*2+obj.nv*2+q+(1:num_quat)) = -dquat_correction_dslack;
+        dc(obj.q_quat_inds(:),obj.nq+(obj.q_quat_inds(:))) = dc(obj.q_quat_inds(:),obj.nq+(obj.q_quat_inds(:)))-dquat_correction_dqr;
+        dc(obj.q_quat_inds(:),obj.nq*2+obj.nv*2+1+(1:num_quat)) = -dquat_correction_dslack;
       end
     end
   end

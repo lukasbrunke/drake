@@ -1,5 +1,5 @@
 function testCWSPlanner
-robot = RigidBodyManipulator([getDrakePath,'/examples/Atlas/urdf/atlas_minimal_contact.urdf'],struct('floating',true));
+robot = RigidBodyManipulator([getDrakePath,'/examples/Atlas/urdf/atlas_minimal_contact.urdf'],struct('floating','quat'));
 nq = robot.getNumPositions();
 nv = robot.getNumVelocities();
 
@@ -20,7 +20,14 @@ utorso = robot.findLinkId('utorso');
 
 xstar = load([getDrakePath,'/examples/Atlas/data/atlas_fp.mat'],'xstar');
 xstar = xstar.xstar;
-qstar = xstar(1:nq);
+if(robot.getBody(pelvis).floating == 1)
+  qstar = xstar(1:nq);
+elseif(robot.getBody(pelvis).floating == 2)
+  qstar = zeros(nq,1);
+  qstar(1:3) = xstar(1:3);
+  qstar(4:7) = rpy2quat(xstar(4:6));
+  qstar(8:nq) = xstar(7:nq-1);
+end
 vstar = zeros(nv,1);
 kinsol_star = robot.doKinematics(qstar,vstar,struct('use_mex',false));
 rhand_pos_star = robot.forwardKin(kinsol_star,r_hand,r_hand_pt,2);
