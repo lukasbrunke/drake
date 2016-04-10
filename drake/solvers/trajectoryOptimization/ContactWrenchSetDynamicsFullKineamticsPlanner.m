@@ -188,12 +188,50 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
       dc(4:9,obj.nq+obj.nv+3+(1:6)) = eye(6);
     end
     
+    function obj = addMomentumInterpolationConstraint(obj)
+      cnstr = FunctionHandleConstraint(zeros(6*(obj.N-1),1),zeros(6*(obj.N-1),1),16*obj.N-1,@(centroidal_momentum,momentum_dot,com,dt) obj.momentumInterpolation(obj,centroidal_momentum,momentum_dot,com,dt));
+      name = cell(6*obj.(N-1),1);
+      for i = 1:obj.N-1
+        name(6*(i-1)+1+6) = repmat({sprintf('h[%d]-h[%d]=(hdot[%d]+hdot[%d])*dt[%d]',i+1,i,i,i+1,i)},6,1);
+      end
+      cnstr = cnstr.setNmae(name);
+      iCfun = [(1:6*(obj.N-1))';(1:6*(obj.N-1))'];
+      jCvar = [(1:6*(obj.N-1))';6+(1:6*(obj.N-1))'];
+      iCfun = [iCfun;reshape(bsxfun(@plus,[2;3;4;1;3;5;1;2;6;1;2;3],6*(0:(obj.N-2))),[],1)];
+      jCvar = [jCvar;reshape(bsxfun(@plus,6*obj.N+[1;1;1;2;2;2;3;3;3;4;5;6],6*(0:(obj.N-2))),[],1)];
+      iCfun = [iCfun;reshape(bsxfun(@plus,[2;3;4;1;3;5;1;2;6;1;2;3],6*(0:(obj.N-2))),[],1)];
+      jCvar = [jCvar;reshape(bsxfun(@plus,6*obj.N+6+[1;1;1;2;2;2;3;3;3;4;5;6],6*(0:(obj.N-2))),[],1)];
+      iCfun = [iCfun;reshape(bsxfun(@plus,[2;3;1;3;1;2],6*(0:(obj.N-2))),[],1)];
+      jCvar = [jCvar;reshape(bsxfun(@plus,12*obj.N+[1;1;2;2;3;3],3*(0:(obj.N-2))),[],1)];
+      iCfun = [iCfun;reshape(bsxfun(@plus,[2;3;1;3;1;2],6*(0:(obj.N-2))),[],1)];
+      jCvar = [jCvar;reshape(bsxfun(@plus,12*obj.N+3+[1;1;2;2;3;3],3*(0:(obj.N-2))),[],1)];
+      iCfun = [iCfun;(1:6*(obj.N-1))'];
+      jCvar = [jCvar;reshape(bsxfun(@times,15*obj.N+(1:obj.N-1),ones(6,1)),[],1)];
+      cnstr = cnstr.setSparseStructure(iCfun,jCvar);
+      obj = obj.addConstraint(cnstr,[{obj.centroidal_momentum_inds(:)};{obj.world_momentum_dot_inds(:)};{obj.com_inds(:)};{obj.h_inds(:)}]);
+    end
+    
     function [c,dc] = momentumInterpolationFun(obj,centroidal_momentum,momentum_dot,com,dt)
       % Use mid-point interpolation for momentum
       % first compute the centroidal momentum dot
+      centroidal_momentum = reshape(centroidal_momentum,6,obj.N);
+      momentum_dot = reshape(momentum_dot,6,obj.N);
+      com = reshape(com,3,obj.N);
+      dt = reshape(dt,1,obj.N-1);
       hdot = [momentum_dot(4:6,:);momentum_dot(1:3,:)];
       hdot(1:3,:) = hdot(1:3,:)+cross(hdot(4:6,:),com);
-      
+      c = reshape(diff(centroidal_momentum,[],2)-0.5*(hdot(:,1:end-1)+hdot(:,2:end)).*bsxfun(@times,dt,ones(6,1)),[],1);
+      dc_dcentroidal_momentum = -speye(6*(obj.N-1),6*obj.N)+[sparse(6*(obj.N-1),6) speye(6*(obj.N-1))];
+      com_cross = [0 0 1;0 -1 0;0 0 -1;1 0 0;0 1 0;-1 0 0]*com;
+      dc_dmomentum_dot = -0.5*sparse((1:6*(obj.N-1))',reshape(bsxfun(@plus,[4;5;6;1;2;3],6*(0:(obj.N-2))),[],1),reshape(bsxfun(@times,dt,ones(6,1)),[],1),6*(obj.N-1),6*obj.N)...
+        -0.5*sparse((1:6*(obj.N-1))',reshape(bsxfun(@plus,[4;5;6;1;2;3],6*(1:(obj.N-1))),[],1),reshape(bsxfun(@times,dt,ones(6,1)),[],1),6*(obj.N-1),6*obj.N)...
+        -0.5*sparse(reshape(bsxfun(@plus,[2;3;1;3;1;2],6*(0:(obj.N-2))),[],1),reshape(bsxfun(@plus,[1;1;2;2;3;3;],6*(0:(obj.N-2))),[],1),reshape(-com_cross(:,1:end-1).*bsxfun(@times,dt,ones(6,1)),[],1),6*(obj.N-1),6*obj.N)...
+        -0.5*sparse(reshape(bsxfun(@plus,[2;3;1;3;1;2],6*(0:(obj.N-2))),[],1),reshape(bsxfun(@plus,6+[1;1;2;2;3;3;],6*(0:(obj.N-2))),[],1),reshape(-com_cross(:,2:end).*bsxfun(@times,dt,ones(6,1)),[],1),6*(obj.N-1),6*obj.N);
+      f_cross = [0 0 1;0 -1 0;0 0 -1;1 0 0;0 1 0;-1 0 0]*momentum_dot(1:3,:);
+      dc_dcom = -0.5*sparse(reshape(bsxfun(@plus,[2;3;1;3;1;2],6*(0:(obj.N-2))),[],1),reshape(bsxfun(@plus,[1;1;2;2;3;3;],3*(0:(obj.N-2))),[],1),reshape(f_cross(:,1:end-1).*bsxfun(@times,ones(6,1),dt),[],1),6*(obj.N-1),3*obj.N)...
+        -0.5*sparse(reshape(bsxfun(@plus,[2;3;1;3;1;2],6*(0:(obj.N-2))),[],1),reshape(bsxfun(@plus,3+[1;1;2;2;3;3;],3*(0:(obj.N-2))),[],1),reshape(f_cross(:,2:end).*bsxfun(@times,ones(6,1),dt),[],1),6*(obj.N-1),3*obj.N);
+      dc_ddt = sparse((1:6*(obj.N-1))',reshape(bsxfun(@times,ones(6,1),(1:obj.N-1)),[],1),-0.5*(hdot(:,1:end-1)+hdot(:,2:end)),6*(obj.N-1),obj.N-1);
+      dc = [dc_dcentroidal_momentum dc_dmomentum_dot dc_dcom dc_ddt];
     end
   end
 end
