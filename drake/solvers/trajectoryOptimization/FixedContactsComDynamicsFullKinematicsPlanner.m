@@ -106,7 +106,7 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
         if(~isempty(obj.Ain_cws{i}))
           cnstr = LinearConstraint(-inf(size(obj.Ain_cws{i},1),1),obj.bin_cws{i},[obj.Ain_cws{i} ones(size(obj.Ain_cws{i},1),1)]);
           cnstr = cnstr.setName(repmat({sprintf('CWS constraint[%d]',i)},size(obj.Ain_cws{i},1),1));
-          obj = obj.addLinearConstraint(cnstr,[obj.momentum_dot(:,i);obj.cws_margin_ind]);
+          obj = obj.addLinearConstraint(cnstr,[obj.world_momentum_dot_inds(:,i);obj.cws_margin_ind]);
         end
       end
       obj = obj.addConstraint(BoundingBoxConstraint(0,inf),obj.cws_margin_ind);
