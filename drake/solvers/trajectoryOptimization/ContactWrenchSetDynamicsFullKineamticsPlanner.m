@@ -35,6 +35,8 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
       
       obj = obj.addCentroidalConstraint();
       
+      obj = obj.addMomentumInterpolationConstraint();
+      
       obj = obj.setCWSMarginCost(cws_margin_cost);
       
       obj = obj.setPostureErrCost(Q,q_nom);
@@ -296,12 +298,12 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
     end
     
     function obj = addMomentumInterpolationConstraint(obj)
-      cnstr = FunctionHandleConstraint(zeros(6*(obj.N-1),1),zeros(6*(obj.N-1),1),16*obj.N-1,@(centroidal_momentum,momentum_dot,com,dt) obj.momentumInterpolation(obj,centroidal_momentum,momentum_dot,com,dt));
-      name = cell(6*obj.(N-1),1);
+      cnstr = FunctionHandleConstraint(zeros(6*(obj.N-1),1),zeros(6*(obj.N-1),1),16*obj.N-1,@(centroidal_momentum,momentum_dot,com,dt) obj.momentumInterpolationFun(centroidal_momentum,momentum_dot,com,dt));
+      name = cell(6*(obj.N-1),1);
       for i = 1:obj.N-1
-        name(6*(i-1)+1+6) = repmat({sprintf('h[%d]-h[%d]=(hdot[%d]+hdot[%d])*dt[%d]',i+1,i,i,i+1,i)},6,1);
+        name(6*(i-1)+(1:6)) = repmat({sprintf('h[%d]-h[%d]=(hdot[%d]+hdot[%d])*dt[%d]',i+1,i,i,i+1,i)},6,1);
       end
-      cnstr = cnstr.setNmae(name);
+      cnstr = cnstr.setName(name);
       iCfun = [(1:6*(obj.N-1))';(1:6*(obj.N-1))'];
       jCvar = [(1:6*(obj.N-1))';6+(1:6*(obj.N-1))'];
       iCfun = [iCfun;reshape(bsxfun(@plus,[2;3;4;1;3;5;1;2;6;1;2;3],6*(0:(obj.N-2))),[],1)];

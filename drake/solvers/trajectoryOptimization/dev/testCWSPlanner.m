@@ -109,7 +109,7 @@ fccdfkp = fccdfkp.addConstraint(cnstr,num2cell(rfoot_takeoff_idx+1:rfoot_land_id
 
 x_init = fccdfkp.setInitialVar(repmat(q0,1,nT),zeros(nv,nT),0.1*ones(nT-1,1));
 tic
-[x_sol,info] = fccdfkp.solve(x_init);
+[x_sol,cost,info] = fccdfkp.solve(x_init);
 toc
 if(info < 10)
   sol = fccdfkp.retrieveSolution(x_sol);
