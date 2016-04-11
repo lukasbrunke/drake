@@ -40,6 +40,24 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
     function obj = addRunningCost(obj,running_cost_function)
     end
     
+    function checkSolution(obj,sol)
+      mg = [0;0;-obj.robot_mass*obj.gravity];
+      wrench_gravity = [repmat(mg,1,obj.N);cross(sol.com,repmat(mg,1,obj.N))];
+      cws_margin = -inf(obj.N,1);
+      for i = 1:obj.N
+        if(~isempty(obj.Aeq_cws{i}))
+          valuecheck(obj.Aeq_cws{i}*(sol.momentum_dot-wrench_gravity),obj.beq_cws{i},1e-4);
+        end
+        if(~isempty(obj.Ain_cws{i}))
+          cws_margin(i) = min(obj.bin_cws{i}-obj.Ain_cws{i}*(sol.momentum_dot(:,i)-wrench_gravity(:,i)));
+        end
+      end
+      cws_margin = min(cws_margin);
+      if(cws_margin<-1e-5)
+        error('The wrench is not within the contact wrench set');
+      end
+      valuecheck(cws_margin,sol.cws_margin,1e-4);
+    end
   end
   
   methods(Access = protected)
@@ -102,6 +120,9 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
           P = P.minHRep();
           obj.Ain_cws{i} = P.H(:,1:6);
           obj.bin_cws{i} = P.H(:,7);
+          normalizer = sqrt(sum(obj.Ain_cws{i}.^2,2));
+          obj.Ain_cws{i} = obj.Ain_cws{i}./bsxfun(@times,normalizer,ones(1,6));
+          obj.bin_cws{i} = obj.bin_cws{i}./normalizer;
           obj.Aeq_cws{i} = P.He(:,1:6);
           obj.beq_cws{i} = P.He(:,7);
         catch
@@ -112,16 +133,20 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
     
     function obj = addCWSMarginConstraint(obj)
       % momentum_dot in the CWS margin
+      % Ain*(momentum_dot-wg)+cws_margin<bin
+      % Aeq*(momentum_dot-wg) = beq
       for i = 1:obj.N
         if(~isempty(obj.Aeq_cws{i}))
-          cnstr = LinearConstraint(obj.beq_cws{i},obj.beq_cws{i},obj.Aeq_cws{i});
+          beq = obj.beq_cws{i}-obj.Aeq_cws{i}*[0;0;obj.robot_mass*obj.gravity;zeros(3,1)];
+          cnstr = LinearConstraint(beq,beq,[obj.Aeq_cws{i} -obj.Aeq_cws{i}*[zeros(3);crossSkewSymMat([0;0;obj.robot_mass*obj.gravity])]]);
           cnstr = cnstr.setName(repmat({sprintf('CWS constraint[%d]',i)},size(obj.beq_cws{i},1),1));
-          obj = obj.addLinearConstraint(cnstr,obj.momentum_dot(:,i));
+          obj = obj.addLinearConstraint(cnstr,[obj.world_momentum_dot_inds(:,i);obj.com_inds(:,i)]);
         end
         if(~isempty(obj.Ain_cws{i}))
-          cnstr = LinearConstraint(-inf(size(obj.Ain_cws{i},1),1),obj.bin_cws{i},[obj.Ain_cws{i} ones(size(obj.Ain_cws{i},1),1)]);
+          bin = obj.bin_cws{i}-obj.Ain_cws{i}*[0;0;obj.robot_mass*obj.gravity;zeros(3,1)];
+          cnstr = LinearConstraint(-inf(size(obj.Ain_cws{i},1),1),bin,[obj.Ain_cws{i} -obj.Ain_cws{i}*[zeros(3);crossSkewSymMat([0;0;obj.robot_mass*obj.gravity])] ones(size(obj.Ain_cws{i},1),1)]);
           cnstr = cnstr.setName(repmat({sprintf('CWS constraint[%d]',i)},size(obj.Ain_cws{i},1),1));
-          obj = obj.addLinearConstraint(cnstr,[obj.world_momentum_dot_inds(:,i);obj.cws_margin_ind]);
+          obj = obj.addLinearConstraint(cnstr,[obj.world_momentum_dot_inds(:,i);obj.com_inds(:,i);obj.cws_margin_ind]);
         end
       end
       obj = obj.addConstraint(BoundingBoxConstraint(0,inf),obj.cws_margin_ind);

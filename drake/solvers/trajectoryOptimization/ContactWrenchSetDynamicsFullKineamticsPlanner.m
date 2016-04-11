@@ -129,12 +129,18 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
         kinsol = obj.robot.doKinematics(sol.q(:,i));
         qdot(:,i) = obj.robot.vToqdot(kinsol)*sol.v(:,i);
         valuecheck(sol.centroidal_momentum(:,i),obj.robot.centroidalMomentumMatrix(kinsol)*sol.v(:,i),1e-2);
+        valuecheck(sol.com(:,i),obj.robot.getCOM(kinsol),1e-3);
       end
       q_err = diff(sol.q,[],2)-0.5*(qdot(:,1:end-1)+qdot(:,2:end)).*bsxfun(@times,ones(obj.nq,1),sol.dt');
-      for j = 1:size(obj.q_quat_inds,2)
-        q_err(obj.q_quat_inds(:,j),:) = q_err(obj.q_quat_inds(:,j),:)-sol.q(obj.q_quat_inds(:,j),2:end).*bsxfun(@times,ones(4,1),sol.quat_correction_slack(j,:));
+      if(~isempty(obj.q_quat_inds))
+        for j = 1:size(obj.q_quat_inds,2)
+          q_err(obj.q_quat_inds(:,j),:) = q_err(obj.q_quat_inds(:,j),:)-sol.q(obj.q_quat_inds(:,j),2:end).*bsxfun(@times,ones(4,1),sol.quat_correction_slack(j,:));
+        end
       end
       valuecheck(q_err,zeros(obj.nq,obj.N-1),1e-3);
+      centroidal_momentum_dot = [sol.momentum_dot(4:6,:);sol.momentum_dot(1:3,:)];
+      centroidal_momentum_dot(1:3,:) = centroidal_momentum_dot(1:3,:)-cross(sol.com,centroidal_momentum_dot(4:6,:));
+      valuecheck(diff(sol.centroidal_momentum,[],2),0.5*(centroidal_momentum_dot(:,1:end-1)+centroidal_momentum_dot(:,2:end)).*bsxfun(@times,ones(6,1),sol.dt'),1e-3);
     end
   end
   
@@ -205,15 +211,26 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
         cnstr = cnstr.setSparseStructure(iCfun,jCvar);
 
         for i = 1:obj.N-1
-          if(~isempty(obj.q_quat_inds))
-            quat_slack_correction_idx = obj.quat_correction_slack_inds(:,i);
-          else
-            quat_slack_correction_idx = [];
-          end
+          quat_slack_correction_idx = obj.quat_correction_slack_inds(:,i);
           obj = obj.addConstraint(cnstr,[{obj.q_inds(:,i)};{obj.q_inds(:,i+1)};{obj.v_inds(:,i)};{obj.v_inds(:,i+1)};{obj.h_inds(i)};{quat_slack_correction_idx}],[obj.kinsol_dataind(i);obj.kinsol_dataind(i+1)]);
         end
       else
-        
+        cnstr = FunctionHandleConstraint(zeros(obj.nq*(obj.N-1),1),zeros(obj.nq*(obj.N-1),1),obj.nq*obj.N+obj.nv*obj.N+obj.N-1,@(q,v,dt) postureInterpolationFun2(obj,q,v,dt));
+        name = cell(obj.nq*(obj.N-1),1);
+        for i = 1:obj.N-1
+          for j = 1:obj.nq
+            name{(i-1)*obj.nq+j} = sprintf('q%d[%d] interpolation',j,i);
+          end
+        end
+        cnstr = cnstr.setName(name);
+        iCfun = [(1:obj.nq*(obj.N-1))';(1:obj.nq*(obj.N-1))'];
+        jCvar = [(1:obj.nq*(obj.N-1))';obj.nq+(1:obj.nv*(obj.N-1))'];
+        iCfun = [iCfun;(1:obj.nq*(obj.N-1))';(1:obj.nq*(obj.N-1))'];
+        jCvar = [jCvar;obj.nq*obj.N+(1:obj.nv*(obj.N-1))';obj.nq*obj.N+obj.nv+(1:obj.nv*(obj.N-1))'];
+        iCfun = [iCfun;(1:obj.nq*(obj.N-1))'];
+        jCvar = [jCvar;reshape(bsxfun(@times,obj.nq*obj.N+obj.nv*obj.N+(1:obj.N-1),ones(obj.nq,1)),[],1)];
+        cnstr = cnstr.setSparseStructure(iCfun,jCvar);
+        obj = obj.addConstraint(cnstr,[{obj.q_inds(:)};{obj.v_inds(:)};{obj.h_inds}]);
       end
     end
     
@@ -243,7 +260,10 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
       dt = reshape(dt,1,obj.N-1);
       c = reshape(diff(q,[],2)-0.5*(v(:,1:end-1)+v(:,2:end)).*bsxfun(@times,ones(obj.nq,1),dt),[],1);
       dcdq = -speye(obj.nq*(obj.N-1),obj.nq*obj.N) + [sparse(obj.nq*(obj.N-1),obj.nq) speye(obj.nq*(obj.N-1))];
-      
+      dcdv = -0.5*sparse((1:obj.nq*(obj.N-1))',(1:obj.nv*(obj.N-1))',reshape(bsxfun(@times,ones(obj.nq,1),dt),[],1),obj.nq*(obj.N-1),obj.nq*obj.N)...
+        -0.5*sparse((1:obj.nq*(obj.N-1))',obj.nv+(1:obj.nv*(obj.N-1))',reshape(bsxfun(@times,ones(obj.nq,1),dt),[],1),obj.nq*(obj.N-1),obj.nq*obj.N);
+      dcddt = sparse((1:obj.nq*(obj.N-1))',reshape(bsxfun(@times,ones(obj.nq,1),1:obj.N-1),[],1),reshape(-0.5*(v(:,1:end-1)+v(:,2:end)),[],1),obj.nq*(obj.N-1),obj.N-1);
+      dc = [dcdq dcdv dcddt];
     end
     
     function obj = addCentroidalConstraint(obj)
