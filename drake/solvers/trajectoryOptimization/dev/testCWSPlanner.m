@@ -97,7 +97,9 @@ cws_margin_cost = 100;
 fccdfkp = FixedContactsComDynamicsFullKinematicsPlanner(robot,nT,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct);
 
 fccdfkp = fccdfkp.setSolverOptions('snopt','print','test_fccdfkp.out');
+x_init = fccdfkp.setInitialVar(repmat(q0,1,nT),zeros(nv,nT),0.1*ones(nT-1,1));
 tic
 [x_sol,info] = fccdfkp.solve(x_init);
 toc
+keyboard;
 end

@@ -58,7 +58,7 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
     end
     
     function obj = setPostureErrCost(obj,Q,q_nom)
-      sizecheck(Q,[obj.nq,obj.nq])
+      sizecheck(Q,[obj.nq,obj.nq]);
       Q = (Q+Q')/2;
       if(any(eig(Q)<0))
         error('Q should be psd');
@@ -75,7 +75,7 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
         error('Q_comddot should be psd');
       end
       cost = QuadraticSumConstraint(-inf,inf,Q_comddot,zeros(3,obj.N));
-      obj = obj.addCost(cost,obj.momentum_dot(1:3,:));
+      obj = obj.addCost(cost,obj.world_momentum_dot_inds(1:3,:));
     end
     
     function obj = setVelocityCost(obj,Qv)
@@ -89,6 +89,7 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
     end
     
     function x_guess = setInitialVar(obj,q,v,dt)
+      x_guess = zeros(obj.num_vars,1);
       sizecheck(q,[obj.nq,obj.N]);
       x_guess(obj.q_inds(:)) = q;
       sizecheck(v,[obj.nv,obj.N]);
@@ -102,12 +103,12 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
         com(:,i) = obj.robot.getCOM(kinsol);
         x_guess(obj.com_inds(:,i)) = com(:,i);
         A = obj.robot.centroidalMomentumMatrix(kinsol);
-        centroidal_momentum(:,i) = A*v;
+        centroidal_momentum(:,i) = A*v(:,i);
         x_guess(obj.centroidal_momentum_inds(:,i)) = centroidal_momentum(:,i);
       end
-      world_momentum_dot = diff([centroidal_momentum(4:6,:);centroidal_momentum(1:3,:)-cross(centroidal_momentum(4:6,:),com)],[],2)/bsxfun(@times,ones(6,1),dt');
+      world_momentum_dot = diff([centroidal_momentum(4:6,:);centroidal_momentum(1:3,:)-cross(centroidal_momentum(4:6,:),com)],[],2)./bsxfun(@times,ones(6,1),dt');
       world_momentum_dot = 0.5*([zeros(6,1) world_momentum_dot]+[world_momentum_dot zeros(6,1)]);
-      x_guess(obj.world_momentum_dot_inds(:)) = world_momentum_dot;
+      x_guess(obj.world_momentum_dot_inds(:)) = reshape(world_momentum_dot,[],1);
     end
   end
   
@@ -124,7 +125,7 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
         x_name{3*obj.N+(i-1)*3+2} = sprintf('comdot_y[%d]',i);
         x_name{3*obj.N+(i-1)*3+3} = sprintf('comdot_z[%d]',i);
       end
-      [obj,tmp_idx] = obj.addDecisionVariable(9*obj.N,x_name);
+      [obj,tmp_idx] = obj.addDecisionVariable(6*obj.N,x_name);
       obj.com_inds = reshape(tmp_idx(1:3*obj.N),3,obj.N);
       obj.comdot_inds = reshape(tmp_idx(3*obj.N+(1:3*obj.N)),3,obj.N);
       
