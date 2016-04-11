@@ -94,7 +94,9 @@ tf_range = [T_lb,T_ub];
 q_nom = repmat(q0,1,nT);
 contact_wrench_struct = [lfoot_contact_wrench rfoot_contact_wrench1 rfoot_contact_wrench2 rhand_contact_wrench];
 cws_margin_cost = 100;
-fccdfkp = FixedContactsComDynamicsFullKinematicsPlanner(robot,nT,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct);
+disturbance_pos = repmat(com0,1,nT)+[linspace(0,0.1,nT);zeros(2,nT)];
+Qw = eye(6);
+fccdfkp = FixedContactsFixedDisturbanceComDynamicsFullKinematicsPlanner(robot,nT,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,Qw,disturbance_pos);
 
 fccdfkp = fccdfkp.setSolverOptions('snopt','print','test_fccdfkp.out');
 
@@ -109,5 +111,9 @@ x_init = fccdfkp.setInitialVar(repmat(q0,1,nT),zeros(nv,nT),0.1*ones(nT-1,1));
 tic
 [x_sol,info] = fccdfkp.solve(x_init);
 toc
+if(info < 10)
+  sol = fccdfkp.retrieveSolution(x_sol);
+  fccdfkp.checkSolution(sol);
+end
 keyboard;
 end

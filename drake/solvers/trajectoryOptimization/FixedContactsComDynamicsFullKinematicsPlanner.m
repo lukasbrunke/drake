@@ -14,21 +14,34 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
     cws_ray % A nT x 1 cell
     cws_vert % A nT x 1 cell
     
+    Qw % A 6 x 6 matrix, w'*Qw*w<=1 is the unit ball in the wrench space for wrench disturbance Qw
+  end
+  
+  properties(Access = protected)
+    Qw_inv;
   end
   
   methods
-    function obj = FixedContactsComDynamicsFullKinematicsPlanner(robot,N,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,options)
+    function obj = FixedContactsComDynamicsFullKinematicsPlanner(robot,N,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,Qw,options)
       % @param contact_wrench_struct  A cell of of structs, with fields
       % 'active_knot', 'cw' and 'contact_pos', where 'cw' fields contain the
       % RigidBodyContactWrench objects
-      if(nargin<10)
+      if(nargin<11)
         options = struct();
       end
       obj = obj@ContactWrenchSetDynamicsFullKineamticsPlanner(robot,N,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,options);
       
       obj = obj.parseContactWrenchStruct(contact_wrench_struct);
       
-      obj = obj.addCWSMarginConstraint();
+      sizecheck(Qw,[6,6]);
+      Qw = (Qw+Qw')/2;
+      if(any(eig(Qw)<=0))
+        error('Qw should be positive definite');
+      end
+      obj.Qw = Qw;
+      obj.Qw_inv = inv(obj.Qw);
+      
+      obj = obj.addCWSconstraint();
       
       obj = obj.setSolverOptions('snopt','majoroptimalitytolerance',1e-5);
       obj = obj.setSolverOptions('snopt','superbasicslimit',2000);
@@ -41,6 +54,7 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
     end
     
     function checkSolution(obj,sol)
+      checkSolution@ContactWrenchSetDynamicsFullKineamticsPlanner(obj,sol);
       mg = [0;0;-obj.robot_mass*obj.gravity];
       wrench_gravity = [repmat(mg,1,obj.N);cross(sol.com,repmat(mg,1,obj.N))];
       cws_margin = -inf(obj.N,1);
@@ -56,7 +70,6 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
       if(cws_margin<-1e-5)
         error('The wrench is not within the contact wrench set');
       end
-      valuecheck(cws_margin,sol.cws_margin,1e-4);
     end
   end
   
@@ -131,9 +144,9 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
       end
     end
     
-    function obj = addCWSMarginConstraint(obj)
-      % momentum_dot in the CWS margin
-      % Ain*(momentum_dot-wg)+cws_margin<bin
+    function obj = addCWSconstraint(obj)
+      % momentum_dot in the CWS 
+      % Ain*(momentum_dot-wg) <bin
       % Aeq*(momentum_dot-wg) = beq
       for i = 1:obj.N
         if(~isempty(obj.Aeq_cws{i}))
@@ -144,12 +157,11 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
         end
         if(~isempty(obj.Ain_cws{i}))
           bin = obj.bin_cws{i}-obj.Ain_cws{i}*[0;0;obj.robot_mass*obj.gravity;zeros(3,1)];
-          cnstr = LinearConstraint(-inf(size(obj.Ain_cws{i},1),1),bin,[obj.Ain_cws{i} -obj.Ain_cws{i}*[zeros(3);crossSkewSymMat([0;0;obj.robot_mass*obj.gravity])] ones(size(obj.Ain_cws{i},1),1)]);
+          cnstr = LinearConstraint(-inf(size(obj.Ain_cws{i},1),1),bin,[obj.Ain_cws{i} -obj.Ain_cws{i}*[zeros(3);crossSkewSymMat([0;0;obj.robot_mass*obj.gravity])]]);
           cnstr = cnstr.setName(repmat({sprintf('CWS constraint[%d]',i)},size(obj.Ain_cws{i},1),1));
-          obj = obj.addLinearConstraint(cnstr,[obj.world_momentum_dot_inds(:,i);obj.com_inds(:,i);obj.cws_margin_ind]);
+          obj = obj.addLinearConstraint(cnstr,[obj.world_momentum_dot_inds(:,i);obj.com_inds(:,i)]);
         end
       end
-      obj = obj.addConstraint(BoundingBoxConstraint(0,inf),obj.cws_margin_ind);
     end
   end
 end
