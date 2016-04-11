@@ -2,7 +2,6 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
   properties(SetAccess = protected)
     cws_margin_ind % A scalar.
     com_inds % A 3 x obj.N matrix
-    comdot_inds % A 3 x obj.N matrix
     centroidal_momentum_inds % A 6 x obj.N matrix
     world_momentum_dot_inds % A 3 x obj.N matrix
     
@@ -110,24 +109,47 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
       world_momentum_dot = 0.5*([zeros(6,1) world_momentum_dot]+[world_momentum_dot zeros(6,1)]);
       x_guess(obj.world_momentum_dot_inds(:)) = reshape(world_momentum_dot,[],1);
     end
+    
+    function sol = retrieveSolution(obj,x_sol)
+      sol.q = reshape(x_sol(obj.q_inds),obj.nq,obj.N);
+      sol.v = reshape(x_sol(obj.v_inds),obj.nv,obj.N);
+      sol.centroidal_momentum = reshape(x_sol(obj.centroidal_momentum_inds),6,obj.N);
+      sol.momentum_dot = reshape(x_sol(obj.world_momentum_dot_inds),6,obj.N);
+      sol.dt = x_sol(obj.h_inds);
+      sol.cws_margin = x_sol(obj.cws_margin_ind);
+      sol.com = reshape(x_sol(obj.com_inds),3,obj.N);
+      sol.quat_correction_slack = reshape(x_sol(obj.quat_correction_slack_inds),size(obj.q_quat_inds,2),obj.N-1);
+    end
+    
+    function checkSolution(obj,sol)
+      [q_lb,q_ub] = obj.robot.getJointLimits();
+      rangecheck(sol.q,reshape(repmat(q_lb,1,obj.N)-1e-3,[],1),reshape(repmat(q_ub,1,obj.N)+1e-3,[],1));
+      qdot = zeros(obj.nq,obj.N);
+      for i = 1:obj.N
+        kinsol = obj.robot.doKinematics(sol.q(:,i));
+        qdot(:,i) = obj.robot.vToqdot(kinsol)*sol.v(:,i);
+        valuecheck(sol.centroidal_momentum(:,i),obj.robot.centroidalMomentumMatrix(kinsol)*sol.v(:,i),1e-2);
+      end
+      q_err = diff(sol.q,[],2)-0.5*(qdot(:,1:end-1)+qdot(:,2:end)).*bsxfun(@times,ones(obj.nq,1),sol.dt');
+      for j = 1:size(obj.q_quat_inds,2)
+        q_err(obj.q_quat_inds(:,j),:) = q_err(obj.q_quat_inds(:,j),:)-sol.q(obj.q_quat_inds(:,j),2:end).*bsxfun(@times,ones(4,1),sol.quat_correction_slack(j,:));
+      end
+      valuecheck(q_err,zeros(obj.nq,obj.N-1),1e-3);
+    end
   end
   
   methods(Access = protected)
     function obj = addState(obj)
       [obj,obj.cws_margin_ind] = obj.addDecisionVariable(1,{'cws_margin'});
       
-      x_name = cell(6*obj.N,1);
+      x_name = cell(3*obj.N,1);
       for i = 1:obj.N
         x_name{(i-1)*3+1} = sprintf('com_x[%d]',i);
         x_name{(i-1)*3+2} = sprintf('com_y[%d]',i);
         x_name{(i-1)*3+3} = sprintf('com_z[%d]',i);
-        x_name{3*obj.N+(i-1)*3+1} = sprintf('comdot_x[%d]',i);
-        x_name{3*obj.N+(i-1)*3+2} = sprintf('comdot_y[%d]',i);
-        x_name{3*obj.N+(i-1)*3+3} = sprintf('comdot_z[%d]',i);
       end
-      [obj,tmp_idx] = obj.addDecisionVariable(6*obj.N,x_name);
-      obj.com_inds = reshape(tmp_idx(1:3*obj.N),3,obj.N);
-      obj.comdot_inds = reshape(tmp_idx(3*obj.N+(1:3*obj.N)),3,obj.N);
+      [obj,tmp_idx] = obj.addDecisionVariable(3*obj.N,x_name);
+      obj.com_inds = reshape(tmp_idx,3,obj.N);
       
       x_name = cell(6*obj.N,1);
       for i = 1:obj.N
@@ -170,32 +192,32 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
     function obj = addPostureInterpolation(obj)
       % Use the mid-point interpolation for joint q and v
       m_num_quat = size(obj.q_quat_inds,2);
-      cnstr = FunctionHandleConstraint(zeros(obj.nq,1),zeros(obj.nq,1),2*obj.nq+2*obj.nv+1+m_num_quat,@(~,~,v_l,v_r,dt,quat_correction_slack,kinsol_l,kinsol_r) postureInterpolationFun(obj,kinsol_l,kinsol_r,v_l,v_r,dt,quat_correction_slack));
-      cnstr_name = cell(obj.nq,1);
-      for i = 1:obj.nq
-        cnstr_name{i} = sprintf('q%d_interpolation',i);
-      end
-      cnstr = cnstr.setName(cnstr_name);
-      
-      if(~isempty(obj.q_quat_inds))
-        sparsity_pattern = [ones(obj.nq,2*obj.nq+2*obj.nv+1) sparse(obj.q_quat_inds(:),reshape(bsxfun(@times,ones(4,1),1:m_num_quat),[],1),ones(4*m_num_quat,1),obj.nq,m_num_quat)];
-      else
-        sparsity_pattern = [eye(obj.nq) eye(obj.nq) eye(obj.nq) eye(obj.nq) ones(obj.nq,1)];
-      end
-      [iCfun,jCvar] = find(sparsity_pattern);
-      cnstr = cnstr.setSparseStructure(iCfun,jCvar);
-      
-      for i = 1:obj.N-1
-        if(~isempty(obj.q_quat_inds))
-          quat_slack_correction_idx = obj.quat_correction_slack_inds(:,i);
-        else
-          quat_slack_correction_idx = [];
+      if(m_num_quat ~= 0)
+        cnstr = FunctionHandleConstraint(zeros(obj.nq,1),zeros(obj.nq,1),2*obj.nq+2*obj.nv+1+m_num_quat,@(~,~,v_l,v_r,dt,quat_correction_slack,kinsol_l,kinsol_r) postureInterpolationFun1(obj,kinsol_l,kinsol_r,v_l,v_r,dt,quat_correction_slack));
+        cnstr_name = cell(obj.nq,1);
+        for i = 1:obj.nq
+          cnstr_name{i} = sprintf('q%d_interpolation',i);
         end
-        obj = obj.addConstraint(cnstr,[{obj.q_inds(:,i)};{obj.q_inds(:,i+1)};{obj.v_inds(:,i)};{obj.v_inds(:,i+1)};{obj.h_inds(i)};{quat_slack_correction_idx}],[obj.kinsol_dataind(i);obj.kinsol_dataind(i+1)]);
+        cnstr = cnstr.setName(cnstr_name);
+
+        sparsity_pattern = [eye(obj.nq) eye(obj.nq) eye(obj.nq) eye(obj.nq) ones(obj.nq,1)];
+        [iCfun,jCvar] = find(sparsity_pattern);
+        cnstr = cnstr.setSparseStructure(iCfun,jCvar);
+
+        for i = 1:obj.N-1
+          if(~isempty(obj.q_quat_inds))
+            quat_slack_correction_idx = obj.quat_correction_slack_inds(:,i);
+          else
+            quat_slack_correction_idx = [];
+          end
+          obj = obj.addConstraint(cnstr,[{obj.q_inds(:,i)};{obj.q_inds(:,i+1)};{obj.v_inds(:,i)};{obj.v_inds(:,i+1)};{obj.h_inds(i)};{quat_slack_correction_idx}],[obj.kinsol_dataind(i);obj.kinsol_dataind(i+1)]);
+        end
+      else
+        
       end
     end
     
-    function [c,dc] = postureInterpolationFun(obj,kinsol_l,kinsol_r,v_l,v_r,dt,quat_correction_slack)
+    function [c,dc] = postureInterpolationFun1(obj,kinsol_l,kinsol_r,v_l,v_r,dt,quat_correction_slack)
       [VqInv_l,dVqInv_l] = obj.robot.vToqdot(kinsol_l);
       [VqInv_r,dVqInv_r] = obj.robot.vToqdot(kinsol_r);
       qdot_l = VqInv_l*v_l;
@@ -213,6 +235,15 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
         dc(obj.q_quat_inds(:),obj.nq+(obj.q_quat_inds(:))) = dc(obj.q_quat_inds(:),obj.nq+(obj.q_quat_inds(:)))-dquat_correction_dqr;
         dc(obj.q_quat_inds(:),obj.nq*2+obj.nv*2+1+(1:num_quat)) = -dquat_correction_dslack;
       end
+    end
+    
+    function [c,dc] = postureInterpolationFun2(obj,q,v,dt)
+      q = reshape(q,obj.nq,obj.N);
+      v = reshape(v,obj.nv,obj.N);
+      dt = reshape(dt,1,obj.N-1);
+      c = reshape(diff(q,[],2)-0.5*(v(:,1:end-1)+v(:,2:end)).*bsxfun(@times,ones(obj.nq,1),dt),[],1);
+      dcdq = -speye(obj.nq*(obj.N-1),obj.nq*obj.N) + [sparse(obj.nq*(obj.N-1),obj.nq) speye(obj.nq*(obj.N-1))];
+      
     end
     
     function obj = addCentroidalConstraint(obj)

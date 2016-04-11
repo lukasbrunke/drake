@@ -34,7 +34,7 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
       obj = obj.setSolverOptions('snopt','superbasicslimit',2000);
       obj = obj.setSolverOptions('snopt','majorfeasibilitytolerance',1e-6);
       obj = obj.setSolverOptions('snopt','iterationslimit',1e6);
-      obj = obj.setSolverOptions('snopt','majoriterationslimit',200);
+      obj = obj.setSolverOptions('snopt','majoriterationslimit',1000);
     end
     
     function obj = addRunningCost(obj,running_cost_function)
@@ -90,6 +90,8 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
           for j = 1:length(contact_wrench_struct(i).active_knot)
             obj.cws_vert{contact_wrench_struct(i).active_knot(j)} = [obj.cws_ray{contact_wrench_struct(i).active_knot(j)} wrench_vert];
           end
+          cnstr = WorldPositionConstraint(obj.robot,contact_wrench_struct(i).cw.body,contact_wrench_struct(i).cw.body_pts,contact_wrench_struct(i).contact_pos,contact_wrench_struct(i).contact_pos);
+          obj = obj.addRigidBodyConstraint(cnstr,num2cell(contact_wrench_struct(i).active_knot));
         else
           error('Not supported');
         end
