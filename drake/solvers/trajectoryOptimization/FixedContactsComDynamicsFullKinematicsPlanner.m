@@ -28,6 +28,8 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
       
       obj = obj.parseContactWrenchStruct(contact_wrench_struct);
       
+      obj = obj.addCWSMarginConstraint();
+      
       obj = obj.setSolverOptions('snopt','majoroptimalitytolerance',1e-5);
       obj = obj.setSolverOptions('snopt','superbasicslimit',2000);
       obj = obj.setSolverOptions('snopt','majorfeasibilitytolerance',1e-6);
@@ -80,13 +82,34 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
         end
       end
       for i = 1:obj.N
-        P = Polyhedron('V',obj.cws_vert{i}','R',obj.cws_ray{i}');
-        P = P.minHRep();
-        obj.Ain_cws{i} = P.H(:,1:6);
-        obj.bin_cws{i} = P.H(:,7);
-        obj.Aeq_cws{i} = P.He(:,1:6);
-        obj.beq_cws{i} = P.He(:,7);
+        try
+          P = Polyhedron('V',obj.cws_vert{i}','R',obj.cws_ray{i}');
+          P = P.minHRep();
+          obj.Ain_cws{i} = P.H(:,1:6);
+          obj.bin_cws{i} = P.H(:,7);
+          obj.Aeq_cws{i} = P.He(:,1:6);
+          obj.beq_cws{i} = P.He(:,7);
+        catch
+          [obj.Ain_cws{i},obj.bin_cws{i},obj.Aeq_cws{i},obj.beq_cws{i}] = vert2lcon([obj.cws_vert{i}.*bsxfun(@times,ones(6,1),(obj.robot_mass*obj.gravity*50./sqrt(sum(obj.cws_vert{i}.^2,1)))) obj.cws_vert{i}]');
+        end
       end
+    end
+    
+    function obj = addCWSMarginConstraint(obj)
+      % momentum_dot in the CWS margin
+      for i = 1:obj.N
+        if(~isempty(obj.Aeq_cws{i}))
+          cnstr = LinearConstraint(obj.beq_cws{i},obj.beq_cws{i},obj.Aeq_cws{i});
+          cnstr = cnstr.setName(repmat({sprintf('CWS constraint[%d]',i)},size(obj.beq_cws{i},1),1));
+          obj = obj.addLinearConstraint(cnstr,obj.momentum_dot(:,i));
+        end
+        if(~isempty(obj.Ain_cws{i}))
+          cnstr = LinearConstraint(-inf(size(obj.Ain_cws{i},1),1),obj.bin_cws{i},[obj.Ain_cws{i} ones(size(obj.Ain_cws{i},1),1)]);
+          cnstr = cnstr.setName(repmat({sprintf('CWS constraint[%d]',i)},size(obj.Ain_cws{i},1),1));
+          obj = obj.addLinearConstraint(cnstr,[obj.momentum_dot(:,i);obj.cws_margin_ind]);
+        end
+      end
+      obj = obj.addConstraint(BoundingBoxConstraint(0,inf),obj.cws_margin_ind);
     end
   end
 end
