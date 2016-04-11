@@ -33,7 +33,7 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
       obj = obj.setSolverOptions('snopt','majoroptimalitytolerance',1e-5);
       obj = obj.setSolverOptions('snopt','superbasicslimit',2000);
       obj = obj.setSolverOptions('snopt','majorfeasibilitytolerance',1e-6);
-      obj = obj.setSolverOptions('snopt','iterationslimit',1e5);
+      obj = obj.setSolverOptions('snopt','iterationslimit',1e6);
       obj = obj.setSolverOptions('snopt','majoriterationslimit',200);
     end
     
@@ -66,8 +66,21 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
           end
           % add the kinematic constraint that the body should reach those
           % contact positions
-          cnstr = WorldPositionConstraint(obj.robot,contact_wrench_struct(i).cw.body,contact_wrench_struct(i).cw.body_pts,contact_wrench_struct(i).contact_pos,contact_wrench_struct(i).contact_pos);
-          obj = obj.addRigidBodyConstraint(cnstr,num2cell(contact_wrench_struct(i).active_knot));
+          co_linear_flag = false;
+          body_pts_diff = diff(contact_wrench_struct(i).cw.body_pts,2);
+          if(size(body_pts_diff,2)<=1 || all(sum(cross(body_pts_diff(:,1:end-1),body_pts_diff(:,2:end)).^2,1)<1e-4))
+            co_linear_flag = true;
+          end
+          if(co_linear_flag)
+            cnstr = WorldPositionConstraint(obj.robot,contact_wrench_struct(i).cw.body,contact_wrench_struct(i).cw.body_pts,contact_wrench_struct(i).contact_pos,contact_wrench_struct(i).contact_pos);
+            obj = obj.addRigidBodyConstraint(cnstr,num2cell(contact_wrench_struct(i).active_knot));
+          else
+            T_body = findHomogeneousTransform(contact_wrench_struct(i).cw.body_pts(:,1:3),contact_wrench_struct(i).contact_pos(:,1:3));
+            cnstr = WorldPositionConstraint(obj.robot,contact_wrench_struct(i).cw.body,zeros(3,1),T_body(1:3,4),T_body(1:3,4));
+            obj = obj.addRigidBodyConstraint(cnstr,num2cell(contact_wrench_struct(i).active_knot));
+            cnstr = WorldQuatConstraint(obj.robot,contact_wrench_struct(i).cw.body,rotmat2quat(T_body(1:3,1:3)),0);
+            obj = obj.addRigidBodyConstraint(cnstr,num2cell(contact_wrench_struct(i).active_knot));
+          end
         elseif(isa(contact_wrench_struct(i).cw,'GraspWrenchPolytope'))
           sizecheck(contact_wrench_struct(i).contact_pos,[3,1]);
           valuecheck(contact_wrench_struct(i).cw.num_pts,1);
