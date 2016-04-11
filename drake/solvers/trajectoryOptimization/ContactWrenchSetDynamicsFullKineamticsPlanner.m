@@ -3,7 +3,6 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
     cws_margin_ind % A scalar.
     com_inds % A 3 x obj.N matrix
     comdot_inds % A 3 x obj.N matrix
-    comddot_inds % A 3 x obj.N matrix
     centroidal_momentum_inds % A 6 x obj.N matrix
     world_momentum_dot_inds % A 3 x obj.N matrix
     
@@ -23,7 +22,6 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
       end
       plant = SimpleDynamicsDummyPlant(robot.getNumPositions());
       obj = obj@RigidBodyKinematicsPlanner(plant,robot,N,tf_range,options);
-      obj = obj.setCWSMarginCost(cws_margin_cost);
       
       obj.q_quat_inds = [];
       for i = 1:obj.robot.getNumBodies()
@@ -37,6 +35,14 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
       obj = obj.addPostureInterpolation();
       
       obj = obj.addCentroidalConstraint();
+      
+      obj = obj.setCWSMarginCost(cws_margin_cost);
+      
+      obj = obj.setPostureErrCost(Q,q_nom);
+      
+      obj = obj.setCOMddotCost(Q_comddot);
+      
+      obj = obj.setVelocityCost(Qv);
     end
     
     function obj = addDynamicConstraints(obj)
@@ -48,15 +54,68 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
         error('cws_margin_cost should be non-negative');
       end
       obj.cws_margin_cost = cws_margin_cost;
+      obj = obj.addCost(LinearConstraint(-inf,inf,-obj.cws_margin_cost),obj.cws_margin_ind);
     end
     
+    function obj = setPostureErrCost(obj,Q,q_nom)
+      sizecheck(Q,[obj.nq,obj.nq])
+      Q = (Q+Q')/2;
+      if(any(eig(Q)<0))
+        error('Q should be psd');
+      end
+      sizecheck(q_nom,[obj.nq,obj.N]);
+      cost = QuadraticSumConstraint(-inf,inf,Q,q_nom);
+      obj = obj.addCost(cost,obj.q_inds(:));
+    end
+    
+    function obj = setCOMddotCost(obj,Q_comddot)
+      sizecheck(Q_comddot,[3,3]);
+      Q_comddot = ((Q_comddot+Q_comddot')/2)/obj.robot_mass;
+      if(any(eig(Q_comddot)<0))
+        error('Q_comddot should be psd');
+      end
+      cost = QuadraticSumConstraint(-inf,inf,Q_comddot,zeros(3,obj.N));
+      obj = obj.addCost(cost,obj.momentum_dot(1:3,:));
+    end
+    
+    function obj = setVelocityCost(obj,Qv)
+      sizecheck(Qv,[obj.nv,obj.nv]);
+      Qv = (Qv+Qv')/2;
+      if(any(eig(Qv)<0))
+        error('Qv should be psd');
+      end
+      cost = QuadraticSumConstraint(-inf,inf,Qv,zeros(obj.nv,obj.N));
+      obj = obj.addCost(cost,obj.v_inds(:));
+    end
+    
+    function x_guess = setInitialVar(obj,q,v,dt)
+      sizecheck(q,[obj.nq,obj.N]);
+      x_guess(obj.q_inds(:)) = q;
+      sizecheck(v,[obj.nv,obj.N]);
+      x_guess(obj.v_inds(:)) = v;
+      sizecheck(dt,[obj.N-1,1]);
+      x_guess(obj.h_inds) = dt;
+      centroidal_momentum = zeros(6,obj.N);
+      com = zeros(3,obj.N);
+      for i = 1:obj.N
+        kinsol = obj.robot.doKinematics(q(:,i));
+        com(:,i) = obj.robot.getCOM(kinsol);
+        x_guess(obj.com_inds(:,i)) = com(:,i);
+        A = obj.robot.centroidalMomentumMatrix(kinsol);
+        centroidal_momentum(:,i) = A*v;
+        x_guess(obj.centroidal_momentum_inds(:,i)) = centroidal_momentum(:,i);
+      end
+      world_momentum_dot = diff([centroidal_momentum(4:6,:);centroidal_momentum(1:3,:)-cross(centroidal_momentum(4:6,:),com)],[],2)/bsxfun(@times,ones(6,1),dt');
+      world_momentum_dot = 0.5*([zeros(6,1) world_momentum_dot]+[world_momentum_dot zeros(6,1)]);
+      x_guess(obj.world_momentum_dot_inds(:)) = world_momentum_dot;
+    end
   end
   
   methods(Access = protected)
     function obj = addState(obj)
       [obj,obj.cws_margin_ind] = obj.addDecisionVariable(1,{'cws_margin'});
       
-      x_name = cell(9*obj.N,1);
+      x_name = cell(6*obj.N,1);
       for i = 1:obj.N
         x_name{(i-1)*3+1} = sprintf('com_x[%d]',i);
         x_name{(i-1)*3+2} = sprintf('com_y[%d]',i);
@@ -64,14 +123,10 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
         x_name{3*obj.N+(i-1)*3+1} = sprintf('comdot_x[%d]',i);
         x_name{3*obj.N+(i-1)*3+2} = sprintf('comdot_y[%d]',i);
         x_name{3*obj.N+(i-1)*3+3} = sprintf('comdot_z[%d]',i);
-        x_name{6*obj.N+(i-1)*3+1} = sprintf('comddot_x[%d]',i);
-        x_name{6*obj.N+(i-1)*3+2} = sprintf('comddot_y[%d]',i);
-        x_name{6*obj.N+(i-1)*3+3} = sprintf('comddot_z[%d]',i);
       end
       [obj,tmp_idx] = obj.addDecisionVariable(9*obj.N,x_name);
       obj.com_inds = reshape(tmp_idx(1:3*obj.N),3,obj.N);
       obj.comdot_inds = reshape(tmp_idx(3*obj.N+(1:3*obj.N)),3,obj.N);
-      obj.comddot_inds = reshape(tmp_idx(6*obj.N+(1:3*obj.N)),3,obj.N);
       
       x_name = cell(6*obj.N,1);
       for i = 1:obj.N
