@@ -116,4 +116,37 @@ if(info < 10)
   fccdfkp.checkSolution(sol);
 end
 keyboard;
+num_fc_pts = zeros(nT,1);
+num_grasp_pts = zeros(nT,1);
+num_grasp_wrench_vert = cell(nT,1);
+fc_contact_pos = cell(nT,1);
+fc_axis = cell(nT,1);
+fc_mu = cell(nT,1);
+grasp_pos = cell(nT,1);
+grasp_wrench_vert = cell(nT,1);
+num_fc_pts(1:rfoot_takeoff_idx) = 8;
+num_fc_pts(rfoot_takeoff_idx+1:rfoot_land_idx-1) = 4;
+num_fc_pts(rfoot_land_idx:nT) = 8;
+num_grasp_pts = ones(nT,1);
+for i = 1:nT
+  num_grasp_wrench_vert{i} = rhand_cw.num_wrench_vert;
+  fc_contact_pos{i} = lfoot_contact_pos_star;
+  fc_axis{i} = repmat([0;0;1],1,4);
+  fc_mu{i} = mu_ground*ones(1,4);
+  grasp_pos{i} = rhand_pos0;
+  grasp_wrench_vert{i} = {rhand_cw.wrench_vert};
+end
+for i = 1:rfoot_takeoff_idx
+  fc_contact_pos{i} = [fc_contact_pos{i} rfoot_contact_pos_star];
+  fc_axis{i} = [fc_axis{i} repmat([0;0;1],1,4)];
+  fc_mu{i} = [fc_mu{i} mu_ground*ones(1,4)];
+end
+for i = rfoot_land_idx:nT
+  fc_contact_pos{i} = [fc_contact_pos{i} rfoot_contact_pos_land];
+  fc_axis{i} = [fc_axis{i} repmat([0;0;1],1,4)];
+  fc_mu{i} = [fc_mu{i} mu_ground*ones(1,4)];
+end
+prog_lagrangian = FixedMotionSearchCWSmarginLinFC(4,robot_mass,nT,Qw,num_fc_pts,num_grasp_pts,num_grasp_wrench_vert);
+[cws_margin_sol,l0,l1,l2,l3,l4,solver_sol,info] = prog_lagrangian.findCWSmargin(0,fc_contact_pos,fc_axis,fc_mu,grasp_pos,grasp_wrench_vert,disturbance_pos,sol.momentum_dot,sol.com);
+keyboard;
 end
