@@ -155,7 +155,16 @@ end
 prog_lagrangian = FixedMotionSearchCWSmarginLinFC(4,robot_mass,nT,Qw,num_fc_pts,num_grasp_pts,num_grasp_wrench_vert);
 [cws_margin_sol,l0,l1,l2,l3,l4,solver_sol,info] = prog_lagrangian.findCWSmargin(0,fc_contact_pos,fc_axis,fc_mu,grasp_pos,grasp_wrench_vert,disturbance_pos,sol.momentum_dot,sol.com);
 keyboard;
+
+lfoot_cw = FrictionConeWrench(robot,l_foot,l_foot_contact_pts,mu_ground,[0;0;1]);
+rfoot_cw = FrictionConeWrench(robot,r_foot,r_foot_contact_pts,mu_ground,[0;0;1]);
+rhand_cw = GraspWrenchPolytope(robot,r_hand,r_hand_pt,20*[eye(3) zeros(3);-eye(3) zeros(3)]');
+lfoot_contact_wrench = struct('active_knot',1:nT,'cw',lfoot_cw);
+rfoot_contact_wrench1 = struct('active_knot',1:rfoot_takeoff_idx,'cw',rfoot_cw);
+rfoot_contact_wrench2 = struct('active_knot',rfoot_land_idx:nT,'cw',rfoot_cw);
+rhand_contact_wrench = struct('active_knot',1:nT,'cw',rhand_cw);
+contact_wrench_struct = [lfoot_contact_wrench rfoot_contact_wrench1 rfoot_contact_wrench2 rhand_contact_wrench];
 options = struct('use_lin_fc',true);
-fccdfkp_sos_planner = SearchContactFixedDisturbanceFullKinematicsSOSPlanner(robot,nT,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,Qw,disturbance_pos,options);
+fccdfkp_sos_planner = SearchContactsFixedDisturbanceFullKinematicsSOSPlanner(robot,nT,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,Qw,disturbance_pos,options);
 
 end

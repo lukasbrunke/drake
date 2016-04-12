@@ -11,6 +11,8 @@ classdef SearchContactsFixedDisturbanceFullKinematicsSOSPlanner < SearchContacts
       obj = obj@SearchContactsComDynamicsFullKinematicsSOSPlanner(robot,N,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,Qw,options);
       sizecheck(disturbance_pos,[3,obj.N]);
       obj.disturbance_pos = disturbance_pos;
+      
+      obj = obj.addSOScondition();
     end
   end
 end
