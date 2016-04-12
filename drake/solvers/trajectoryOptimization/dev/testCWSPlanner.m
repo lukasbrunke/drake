@@ -1,4 +1,4 @@
-function testCWSPlanner
+function testCWSPlanner(mode)
 warning('off','Drake:RigidBody:SimplifiedCollisionGeometry');
 warning('off','Drake:RigidBody:NonPositiveInertiaMatrix');
 warning('off','Drake:RigidBodyManipulator:UnsupportedContactPoints');
@@ -107,13 +107,19 @@ fccdfkp = fccdfkp.addConstraint(BoundingBoxConstraint(0.05*ones(nT-1,1),0.15*one
 cnstr = WorldPositionConstraint(robot,r_foot,r_foot_contact_pts,[nan(2,4);0.03*ones(1,4)],nan(3,4));
 fccdfkp = fccdfkp.addConstraint(cnstr,num2cell(rfoot_takeoff_idx+1:rfoot_land_idx-1));
 
-x_init = fccdfkp.setInitialVar(repmat(q0,1,nT),zeros(nv,nT),0.1*ones(nT-1,1));
-tic
-[x_sol,cost,info] = fccdfkp.solve(x_init);
-toc
-if(info < 10)
-  sol = fccdfkp.retrieveSolution(x_sol);
-  fccdfkp.checkSolution(sol);
+if(mode == 1)
+  x_init = fccdfkp.setInitialVar(repmat(q0,1,nT),zeros(nv,nT),0.1*ones(nT-1,1));
+  tic
+  [x_sol,cost,info] = fccdfkp.solve(x_init);
+  toc
+  if(info < 10)
+    sol = fccdfkp.retrieveSolution(x_sol);
+    fccdfkp.checkSolution(sol);
+  end
+elseif(mode == 2)
+  load('test_fccdfkp.mat');
+else
+  error('mode is not given');
 end
 keyboard;
 num_fc_pts = zeros(nT,1);
@@ -149,4 +155,7 @@ end
 prog_lagrangian = FixedMotionSearchCWSmarginLinFC(4,robot_mass,nT,Qw,num_fc_pts,num_grasp_pts,num_grasp_wrench_vert);
 [cws_margin_sol,l0,l1,l2,l3,l4,solver_sol,info] = prog_lagrangian.findCWSmargin(0,fc_contact_pos,fc_axis,fc_mu,grasp_pos,grasp_wrench_vert,disturbance_pos,sol.momentum_dot,sol.com);
 keyboard;
+options = struct('use_lin_fc',true);
+fccdfkp_sos_planner = SearchContactFixedDisturbanceFullKinematicsSOSPlanner(robot,nT,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,Qw,disturbance_pos,options);
+
 end
