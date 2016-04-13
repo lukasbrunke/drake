@@ -89,7 +89,7 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
       obj = obj.addCost(cost,obj.v_inds(:));
     end
     
-    function x_guess = setInitialVar(obj,q,v,dt)
+    function x_guess = getInitialVars(obj,q,v,dt)
       x_guess = zeros(obj.num_vars,1);
       sizecheck(q,[obj.nq,obj.N]);
       x_guess(obj.q_inds(:)) = q;
