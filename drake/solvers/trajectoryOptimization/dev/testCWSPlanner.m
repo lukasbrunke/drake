@@ -115,6 +115,7 @@ if(mode == 1)
   if(info < 10)
     sol = fccdfkp.retrieveSolution(x_sol);
     fccdfkp.checkSolution(sol);
+    save('test_fccdfkp.mat','sol');
   end
 elseif(mode == 2)
   load('test_fccdfkp.mat');
@@ -122,48 +123,20 @@ else
   error('mode is not given');
 end
 keyboard;
-num_fc_pts = zeros(nT,1);
-num_grasp_pts = zeros(nT,1);
-num_grasp_wrench_vert = cell(nT,1);
-fc_contact_pos = cell(nT,1);
-fc_axis = cell(nT,1);
-fc_mu = cell(nT,1);
-grasp_pos = cell(nT,1);
-grasp_wrench_vert = cell(nT,1);
-num_fc_pts(1:rfoot_takeoff_idx) = 8;
-num_fc_pts(rfoot_takeoff_idx+1:rfoot_land_idx-1) = 4;
-num_fc_pts(rfoot_land_idx:nT) = 8;
-num_grasp_pts = ones(nT,1);
+friction_cones = sol.friction_cones;
+% set the length of each friction cone edge to be robot_mass*gravity;
 for i = 1:nT
-  num_grasp_wrench_vert{i} = rhand_cw.num_wrench_vert;
-  fc_contact_pos{i} = lfoot_contact_pos_star;
-  fc_axis{i} = repmat([0;0;1],1,4);
-  fc_mu{i} = mu_ground*ones(1,4);
-  grasp_pos{i} = rhand_pos0;
-  grasp_wrench_vert{i} = {rhand_cw.wrench_vert};
+  for j = 1:length(sol.friction_cones{i})
+    fc_edges = sol.friction_cones{i}(j).fc_edges;
+    fc_edges = fc_edges./bsxfun(@times,sqrt(sum(fc_edges.^2,1)),ones(3,1));
+    fc_edges = robot_mass*gravity*fc_edges;
+    friction_cones{i}(j) = LinearizedFrictionCone(friction_cones{i}(j).contact_pos,friction_cones{i}(j).cone_axis,friction_cones{i}(j).mu_face,fc_edges);
+  end
 end
-for i = 1:rfoot_takeoff_idx
-  fc_contact_pos{i} = [fc_contact_pos{i} rfoot_contact_pos_star];
-  fc_axis{i} = [fc_axis{i} repmat([0;0;1],1,4)];
-  fc_mu{i} = [fc_mu{i} mu_ground*ones(1,4)];
-end
-for i = rfoot_land_idx:nT
-  fc_contact_pos{i} = [fc_contact_pos{i} rfoot_contact_pos_land];
-  fc_axis{i} = [fc_axis{i} repmat([0;0;1],1,4)];
-  fc_mu{i} = [fc_mu{i} mu_ground*ones(1,4)];
-end
-prog_lagrangian = FixedMotionSearchCWSmarginLinFC(4,robot_mass,nT,Qw,num_fc_pts,num_grasp_pts,num_grasp_wrench_vert);
-[cws_margin_sol,l0,l1,l2,l3,l4,solver_sol,info] = prog_lagrangian.findCWSmargin(0,fc_contact_pos,fc_axis,fc_mu,grasp_pos,grasp_wrench_vert,disturbance_pos,sol.momentum_dot,sol.com);
+prog_lagrangian = FixedMotionSearchCWSmarginLinFC(4,robot_mass,nT,Qw,sol.num_fc_pts,sol.num_grasp_pts,sol.num_grasp_wrench_vert);
+[cws_margin_sol,l0,l1,l2,l3,l4,solver_sol,info] = prog_lagrangian.findCWSmargin(0,friction_cones,sol.grasp_pos,sol.grasp_wrench_vert,disturbance_pos,sol.momentum_dot,sol.com);
 keyboard;
 
-lfoot_cw = FrictionConeWrench(robot,l_foot,l_foot_contact_pts,mu_ground,[0;0;1]);
-rfoot_cw = FrictionConeWrench(robot,r_foot,r_foot_contact_pts,mu_ground,[0;0;1]);
-rhand_cw = GraspWrenchPolytope(robot,r_hand,r_hand_pt,20*[eye(3) zeros(3);-eye(3) zeros(3)]');
-lfoot_contact_wrench = struct('active_knot',1:nT,'cw',lfoot_cw);
-rfoot_contact_wrench1 = struct('active_knot',1:rfoot_takeoff_idx,'cw',rfoot_cw);
-rfoot_contact_wrench2 = struct('active_knot',rfoot_land_idx:nT,'cw',rfoot_cw);
-rhand_contact_wrench = struct('active_knot',1:nT,'cw',rhand_cw);
-contact_wrench_struct = [lfoot_contact_wrench rfoot_contact_wrench1 rfoot_contact_wrench2 rhand_contact_wrench];
 options = struct('use_lin_fc',true);
 fccdfkp_sos_planner = SearchContactsFixedDisturbanceFullKinematicsSOSPlanner(robot,nT,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,Qw,disturbance_pos,options);
 

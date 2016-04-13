@@ -15,6 +15,17 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
     cws_vert % A nT x 1 cell
     
     Qw % A 6 x 6 matrix, w'*Qw*w<=1 is the unit ball in the wrench space for wrench disturbance Qw
+    
+    num_fc_pts % A obj.N x 1 vecotr
+    fc_contact_pos % A obj.N x 1 cell, fc_contact_pos{i} is a 3 x num_fc_pts(i) matrix
+    fc_axis % A obj.N x 1 cell, fc_axis{i} is a 3 x num_fc_pts(i) matrix
+    fc_mu % A obj.N x 1 cell, fc_mu{i} is a 1 x num_fc_pts(i) vector
+    fc_edges % A obj.N x 1 cell, fc_edges{i} is a num_fc_pts(i) x 1 cell, fc_edges{i}{j} is a 3 x num_fc_edges matrix
+    
+    num_grasp_pts % A obj.N x 1 vector
+    grasp_pos % A obj.N x 1 cell, grasp_contact_pos{i} is a 3 x num_grasp_pos(i) matrix
+    num_grasp_wrench_vert % A obj.N x 1 cell
+    grasp_wrench_vert % A obj.N x 1 cell, grasp_wrench_vert{i} is a num_grasp_pos(i) x 1 cell, grasp_wrench_vert{i}{j} is a 6 x num_grasp_wrench_vert{i}(j) matrix
   end
   
   properties(Access = protected)
@@ -47,12 +58,29 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
       obj = obj.setSolverOptions('snopt','superbasicslimit',2000);
       obj = obj.setSolverOptions('snopt','majorfeasibilitytolerance',1e-6);
       obj = obj.setSolverOptions('snopt','iterationslimit',1e6);
-      obj = obj.setSolverOptions('snopt','majoriterationslimit',1000);
+      obj = obj.setSolverOptions('snopt','majoriterationslimit',500);
     end
     
     function obj = addRunningCost(obj,running_cost_function)
     end
     
+    function sol = retrieveSolution(obj,x_sol)
+      sol = retrieveSolution@ContactWrenchSetDynamicsFullKineamticsPlanner(obj,x_sol);
+      sol.friction_cones = cell(obj.N,1);
+      sol.num_fc_pts = obj.num_fc_pts;
+      sol.num_grasp_pts = obj.num_grasp_pts;
+      sol.num_grasp_wrench_vert = obj.num_grasp_wrench_vert;
+      sol.grasp_pos = cell(obj.N,1);
+      sol.gresp_wrench_vert = cell(obj.N,1);
+      for i = 1:obj.N
+        sol.friction_cones{i} = LinearizedFrictionCone.empty(obj.num_fc_pts(i),0);
+        for j = 1:obj.num_fc_pts(i)
+          sol.friction_cones{i}(j) = LinearizedFrictionCone(obj.fc_contact_pos{i}(:,j),obj.fc_axis{i}(:,j),obj.fc_mu{i}(j),obj.fc_edges{i}{j});
+        end
+        sol.grasp_pos{i} = obj.grasp_pos{i};
+        sol.grasp_wrench_vert{i} = obj.grasp_wrench_vert{i};
+      end
+    end
     function checkSolution(obj,sol)
       checkSolution@ContactWrenchSetDynamicsFullKineamticsPlanner(obj,sol);
       mg = [0;0;-obj.robot_mass*obj.gravity];
@@ -80,6 +108,16 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
       num_cw = numel(contact_wrench_struct);
       obj.cws_ray = cell(obj.N,1);
       obj.cws_vert = cell(obj.N,1);
+      
+      obj.num_fc_pts = zeros(obj.N,1);
+      obj.fc_contact_pos = cell(obj.N,1);
+      obj.fc_axis = cell(obj.N,1);
+      obj.fc_mu = cell(obj.N,1);
+      obj.fc_edges = cell(obj.N,1);
+      obj.num_grasp_pts = zeros(obj.N,1);
+      obj.grasp_pos = cell(obj.N,1);
+      obj.num_grasp_wrench_vert = cell(obj.N,1);
+      obj.grasp_wrench_vert = cell(obj.N,1);
       for i = 1:num_cw
         if(~isstruct(contact_wrench_struct) || ~isfield(contact_wrench_struct(i),'active_knot') || ~isfield(contact_wrench_struct(i),'cw') ||...
             ~isfield(contact_wrench_struct(i),'contact_pos') || ~isa(contact_wrench_struct(i).cw,'RigidBodyContactWrench'))
@@ -112,6 +150,13 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
             cnstr = WorldQuatConstraint(obj.robot,contact_wrench_struct(i).cw.body,rotmat2quat(T_body(1:3,1:3)),0);
             obj = obj.addRigidBodyConstraint(cnstr,num2cell(contact_wrench_struct(i).active_knot));
           end
+          obj.num_fc_pts(contact_wrench_struct(i).active_knot) = obj.num_fc_pts(contact_wrench_struct(i).active_knot)+num_pts;
+          for j = reshape(contact_wrench_struct(i).active_knot,1,[])
+            obj.fc_contact_pos{j} = [obj.fc_contact_pos{j} contact_wrench_struct(i).contact_pos];
+            obj.fc_axis{j} = [obj.fc_axis{j} contact_wrench_struct(i).cw.normal_dir];
+            obj.fc_mu{j} = [obj.fc_mu{j} contact_wrench_struct(i).cw.mu_face];
+            obj.fc_edges{j} = [obj.fc_edges{j} repmat({contact_wrench_struct(i).cw.FC_edge},1,num_pts)];
+          end
         elseif(isa(contact_wrench_struct(i).cw,'GraspWrenchPolytope'))
           sizecheck(contact_wrench_struct(i).contact_pos,[3,1]);
           valuecheck(contact_wrench_struct(i).cw.num_pts,1);
@@ -123,6 +168,12 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
           end
           cnstr = WorldPositionConstraint(obj.robot,contact_wrench_struct(i).cw.body,contact_wrench_struct(i).cw.body_pts,contact_wrench_struct(i).contact_pos,contact_wrench_struct(i).contact_pos);
           obj = obj.addRigidBodyConstraint(cnstr,num2cell(contact_wrench_struct(i).active_knot));
+          obj.num_grasp_pts(contact_wrench_struct(i).active_knot) = obj.num_grasp_pts(contact_wrench_struct(i).active_knot)+1;
+          for j = reshape(contact_wrench_struct(i).active_knot,1,[])
+            obj.grasp_pos{j} = [obj.grasp_pos{j} contact_wrench_struct(i).contact_pos];
+            obj.num_grasp_wrench_vert{j} = [obj.num_grasp_wrench_vert{j} size(wrench_vert,2)];
+            obj.grasp_wrench_vert{j} = [obj.grasp_wrench_vert{j} {wrench_vert}];
+          end
         else
           error('Not supported');
         end
