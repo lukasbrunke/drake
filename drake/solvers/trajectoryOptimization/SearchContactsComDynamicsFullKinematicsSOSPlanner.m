@@ -52,6 +52,7 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
     b_indet
   end
   
+  
   methods
     function obj = SearchContactsComDynamicsFullKinematicsSOSPlanner(robot,N,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,Qw,options)
       if(nargin< 11)
@@ -292,8 +293,8 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       for i = 1:obj.N
         l0_gram{i} = msspoly.zeros(8,8);
         l0_gram{i}(triu_mask) = obj.l0_gram_var(:,i);
-        l0_gram{i} = l0_gram{i}*l0_gram{i}'+1;
-        l0(i) = ab_monomials1'*l0_gram{i}*ab_monomials1;
+        l0_gram{i} = l0_gram{i}*l0_gram{i}';
+        l0(i) = ab_monomials1'*l0_gram{i}*ab_monomials1+1;
 
         l1(i) = ab_monomials1'*obj.l1_gram_var(:,i);
 
@@ -464,7 +465,7 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
     end
     
     function V_gram_var_val = getVGramVarVal(obj,V)
-      if(deg(V)~=2)
+      if(deg(V)>2)
         error('V should be quadratic');
       end
       V_gram_var_val = zeros(36,obj.N);
