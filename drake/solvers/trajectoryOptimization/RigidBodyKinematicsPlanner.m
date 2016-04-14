@@ -93,15 +93,15 @@ classdef RigidBodyKinematicsPlanner < DirectTrajectoryOptimization
       end
     end
     
-    function obj = addConstraint(obj, constraint, varargin)
+    function [obj,cnstr_id] = addConstraint(obj, constraint, varargin)
       if isa(constraint, 'RigidBodyConstraint')
-        obj = addRigidBodyConstraint(obj,constraint, varargin{:});
+        [obj,cnstr_id] = addRigidBodyConstraint(obj,constraint, varargin{:});
       else
-        obj = addConstraint@DirectTrajectoryOptimization(obj,constraint,varargin{:});
+        [obj,cnstr_id] = addConstraint@DirectTrajectoryOptimization(obj,constraint,varargin{:});
       end
     end
     
-    function obj = addKinematicConstraint(obj,constraint,time_index)
+    function [obj,cnstr_id] = addKinematicConstraint(obj,constraint,time_index)
       % Add a kinematic constraint that is a function of the state at the
       % specified time or times.
       % @param constraint  a CompositeConstraint
@@ -114,7 +114,8 @@ classdef RigidBodyKinematicsPlanner < DirectTrajectoryOptimization
       if ~iscell(time_index)
         time_index = num2cell(reshape(time_index,1,[]));
       end
-      for j=1:length(time_index),
+      cnstr_id = zeros(1,length(time_index));
+      for j=1:length(time_index)
         kinsol_inds = obj.kinsol_dataind(time_index{j});
         cnstr_inds = mat2cell(obj.q_inds(:,time_index{j}),size(obj.q_inds,1),ones(1,length(time_index{j})));
 
@@ -124,11 +125,11 @@ classdef RigidBodyKinematicsPlanner < DirectTrajectoryOptimization
         obj.constraints{end}.kinsol_inds = kinsol_inds;
         obj.constraints{end}.time_index = time_index;
 
-        obj = obj.addConstraint(constraint,cnstr_inds,kinsol_inds);
+        [obj,cnstr_id(j)] = obj.addConstraint(constraint,cnstr_inds,kinsol_inds);
       end
     end
     
-    function obj = addRigidBodyConstraint(obj,constraint,time_index)
+    function [obj,cnstr_id] = addRigidBodyConstraint(obj,constraint,time_index)
       % Add a kinematic constraint that is a function of the state at the
       % specified time or times.
       % @param constraint  a RigidBodyConstraint object
@@ -138,6 +139,7 @@ classdef RigidBodyKinematicsPlanner < DirectTrajectoryOptimization
       %   ex2,. time_index = {[1 2], [3 4]} means the constraint is applied to knot
       %   points 1 and 2 together (taking the combined state as an argument)
       %   and 3 and 4 together.
+      cnstr_id = [];
       typecheck(constraint,'RigidBodyConstraint');
       if ~iscell(time_index)
         if isa(constraint,'MultipleTimeKinematicConstraint')
@@ -153,10 +155,10 @@ classdef RigidBodyKinematicsPlanner < DirectTrajectoryOptimization
       for j = 1:numel(time_index)
         if isa(constraint,'SingleTimeKinematicConstraint')
           cnstr = constraint.generateConstraint();
-          obj = obj.addKinematicConstraint(cnstr{1},time_index(j));
+          [obj,cnstr_id(end+1)] = obj.addKinematicConstraint(cnstr{1},time_index(j));
         elseif isa(constraint, 'PostureConstraint')
           cnstr = constraint.generateConstraint();
-          obj = obj.addBoundingBoxConstraint(cnstr{1}, ...
+          [obj,cnstr_id(end+1)] = obj.addBoundingBoxConstraint(cnstr{1}, ...
             obj.q_inds(:,time_index{j}));
         elseif isa(constraint,'QuasiStaticConstraint')
           cnstr = constraint.generateConstraint();
@@ -172,17 +174,17 @@ classdef RigidBodyKinematicsPlanner < DirectTrajectoryOptimization
             end
             obj.qsc_weight_inds{time_index{j}} = obj.num_vars+(1:constraint.num_pts)';
             obj = obj.addDecisionVariable(constraint.num_pts,qsc_weight_names);
-            obj = obj.addConstraint(cnstr{1},{obj.q_inds(:,time_index{j});obj.qsc_weight_inds{time_index{j}}},obj.kinsol_dataind(time_index{j}));
-            obj = obj.addConstraint(cnstr{2},obj.qsc_weight_inds{time_index{j}});
-            obj = obj.addConstraint(cnstr{3},obj.qsc_weight_inds{time_index{j}});
+            [obj,cnstr_id(end+1)] = obj.addConstraint(cnstr{1},{obj.q_inds(:,time_index{j});obj.qsc_weight_inds{time_index{j}}},obj.kinsol_dataind(time_index{j}));
+            [obj,cnstr_id(end+1)] = obj.addConstraint(cnstr{2},obj.qsc_weight_inds{time_index{j}});
+            [obj,cnstr_id(end+1)] = obj.addConstraint(cnstr{3},obj.qsc_weight_inds{time_index{j}});
           end
         elseif isa(constraint,'SingleTimeLinearPostureConstraint')
           cnstr = constraint.generateConstraint();
-          obj = obj.addLinearConstraint(cnstr{1},obj.q_inds(:,time_index{j}));
+          [obj,cnstr_id(end+1)] = obj.addLinearConstraint(cnstr{1},obj.q_inds(:,time_index{j}));
         elseif isa(constraint,'MultipleTimeKinematicConstraint')
-          cnstr = constraint.generateConstraint([],numel(time_index{j}));
+          cnstr = constraint.generateConstraint(zeros(1,numel(time_index{j})),numel(time_index{j}));
           if ~isempty(cnstr)
-            obj = obj.addKinematicConstraint(cnstr{1},time_index(j));
+            [obj,cnstr_id(end+1)] = obj.addKinematicConstraint(cnstr{1},time_index(j));
           end
         else
           id = ['Drake:SimpleDynamicsFullKinematicsPlanner:' ...
