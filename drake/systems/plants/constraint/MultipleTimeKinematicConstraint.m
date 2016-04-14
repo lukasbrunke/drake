@@ -52,13 +52,13 @@ classdef MultipleTimeKinematicConstraint < RigidBodyConstraint
           [lb,ub] = obj.bounds([],N);
           nq = obj.robot.getNumPositions;
           cnstr = {FunctionHandleConstraint(lb,ub,N*nq,@(varargin) obj.evalValidTime(varargin(N+(1:N))))};
-          %num_cnstr = obj.getNumConstraint(N);
-          %joint_idx = obj.kinematicPathJoints();
-          %iCfun = reshape(bsxfun(@times,(1:num_cnstr)',ones(1,length(joint_idx)*N)),[],1);
-          %jCvar = reshape(bsxfun(@times,ones(num_cnstr,1),reshape(bsxfun(@plus,nq*((1:N)-1),joint_idx'),1,[])),[],1);
-          %cnstr{1} = cnstr{1}.setSparseStructure(iCfun,jCvar);
-          %name_str = obj.name(t);
-          %cnstr{1} = cnstr{1}.setName(name_str);
+          num_cnstr = obj.getNumConstraint(t);
+          joint_idx = obj.kinematicPathJoints();
+          iCfun = reshape(bsxfun(@times,(1:num_cnstr)',ones(1,length(joint_idx)*N)),[],1);
+          jCvar = reshape(bsxfun(@times,ones(num_cnstr,1),reshape(bsxfun(@plus,nq*((1:N)-1),joint_idx'),1,[])),[],1);
+          cnstr{1} = cnstr{1}.setSparseStructure(iCfun,jCvar);
+          name_str = obj.name(t);
+          cnstr{1} = cnstr{1}.setName(name_str);
         else
           cnstr = {};
         end
