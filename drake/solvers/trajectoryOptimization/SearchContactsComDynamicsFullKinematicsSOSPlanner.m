@@ -52,6 +52,14 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
     b_indet
   end
   
+  properties(Access = private)
+    % if we do recomp(V_indet,V_power,V_coeff), then we get the residue of
+    % the sos condition, we want this residue to be 0
+    V_indet % A 7 x obj.N matrix
+    V_power % A obj.N x 1 cell
+    
+    sos_con_id % A obj.N x 1 vector
+  end
   
   methods
     function obj = SearchContactsComDynamicsFullKinematicsSOSPlanner(robot,N,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,Qw,options)
@@ -159,6 +167,17 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
     function x = setVGramVarVal(obj,x,V)
       V_gram_var_val = obj.getVGramVarVal(V);
       x(obj.V_gram_var_inds(:)) = V_gram_var_val(:);
+    end
+    
+    function V = computeSOSconditionFromVar(obj,x)
+      V = msspoly.zeros(obj.N,1);
+      shared_data = obj.evaluateSharedDataFunctions(x);
+      for i = 1:obj.N
+        [~,cnstr_idx] = obj.isNonlinearConstraintID(obj.sos_con_id(i));
+        args = [obj.getArgumentArray(x,obj.nlcon_xind{cnstr_idx});shared_data(obj.nlcon_dataind{cnstr_idx})];
+        V_coeff = obj.nlcon{cnstr_idx}.eval(args{:})';
+        V(i) = recomp(obj.V_indet(:,i),obj.V_power{i},V_coeff);
+      end
     end
   end
   
@@ -371,6 +390,10 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       obj.V_gram_var_inds = reshape(tmp_idx,36,obj.N);
       obj.V_gram_var = reshape(msspoly('v',36*obj.N),36,obj.N);
       ab_monomials2 = [cws_sos.a_indet;cws_sos.b_indet;1];
+      obj.V_indet = msspoly.zeros(7,obj.N);
+      obj.V_power = cell(obj.N,1);
+
+      obj.sos_con_id = zeros(obj.N,1);
       for i = 1:obj.N
         V_gram = msspoly.zeros(8,8);
         triu_mask = triu(ones(8))~=0;
@@ -379,8 +402,8 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
         V(i) = V(i)-ab_monomials2'*V_gram*ab_monomials2;
         decision_var = [obj.l0_gram_var(:,i);obj.l1_gram_var(:,i);obj.l2_gram_var{i}(:);obj.l3_gram_var(:,i);obj.l4_gram_var{i}(:);obj.V_gram_var(:,i);obj.momentum_dot_var(:,i);obj.com_var(:,i);obj.fc_pos_var{i}(:);obj.grasp_pos_var{i}(:);obj.cws_margin_var];
         decision_var_inds = [obj.l0_gram_var_inds(:,i);obj.l1_gram_var_inds(:,i);obj.l2_gram_var_inds{i}(:);obj.l3_gram_var_inds(:,i);obj.l4_gram_var_inds{i}(:);obj.V_gram_var_inds(:,i);obj.world_momentum_dot_inds(:,i);obj.com_inds(:,i);obj.fc_contact_pos_inds{i}(:);obj.grasp_contact_pos_inds{i}(:);obj.cws_margin_ind];
-        [V_indet,~,V_coeff] = decomp(V(i),decision_var);
-        mtch = match([cws_sos.a_indet;cws_sos.b_indet],V_indet);
+        [obj.V_indet(:,i),obj.V_power{i},V_coeff] = decomp(V(i),decision_var);
+        mtch = match([cws_sos.a_indet;cws_sos.b_indet],obj.V_indet(:,i));
         valuecheck(numel(unique(mtch)),7);
         sparse_pattern = zeros(length(V_coeff),length(decision_var));
         dV_coeff = diff(V_coeff',decision_var);
@@ -389,22 +412,18 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
           match_ij = match(decision_var,coeff_var_j);
           sparse_pattern(j,match_ij) = 1;
         end
-        [coeff_var,coeff_power,coeff_M] = decomp(V_coeff);
-        [dcoeff_var,dcoeff_power,dcoeff_M] = decomp(dV_coeff);
-        coeff_match = match(decision_var,coeff_var);
-        dcoeff_match = match(decision_var,dcoeff_var);
-        cnstr = FunctionHandleConstraint(zeros(length(V_coeff),1),zeros(length(V_coeff),1),length(decision_var_inds),@(x) obj.recompV(x,coeff_match,coeff_power,coeff_M,dcoeff_match,dcoeff_power,dcoeff_M));
+        cnstr = FunctionHandleConstraint(zeros(length(V_coeff),1),zeros(length(V_coeff),1),length(decision_var_inds),@(x) obj.recompV(x,V_coeff,dV_coeff,decision_var));
         [iCfun,jCvar] = find(sparse_pattern);
         cnstr = cnstr.setSparseStructure(iCfun,jCvar);
         name = repmat({sprintf('sos[%d]',i)},cnstr.num_cnstr,1);
         cnstr = cnstr.setName(name);
-        obj = obj.addConstraint(cnstr,decision_var_inds);
+        [obj,obj.sos_con_id(i)] = obj.addConstraint(cnstr,decision_var_inds);
       end
     end
     
-    function [c,dc] = recompV(obj,x,coeff_match,coeff_power,coeff_M,dcoeff_match,dcoeff_power,dcoeff_M)
-      c = coeff_M*prod(bsxfun(@times,x(coeff_match)',ones(size(coeff_power,1),1)).^coeff_power,2);
-      dc = reshape(dcoeff_M*prod(bsxfun(@times,x(dcoeff_match)',ones(size(dcoeff_power,1),1)).^dcoeff_power,2),length(c),length(x));
+    function [c,dc] = recompV(obj,x,V_coeff,dV_coeff,decision_var)
+      c = double(subs(V_coeff,decision_var,x))';
+      dc = double(subs(dV_coeff,decision_var,x));
     end
     
     function l0_gram_var_val = getL0GramVarVal(obj,l0)

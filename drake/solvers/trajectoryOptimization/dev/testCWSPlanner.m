@@ -108,7 +108,7 @@ cnstr = WorldPositionConstraint(robot,r_foot,r_foot_contact_pts,[nan(2,4);0.03*o
 fccdfkp = fccdfkp.addConstraint(cnstr,num2cell(rfoot_takeoff_idx+1:rfoot_land_idx-1));
 
 if(mode == 1)
-  x_init = fccdfkp.setInitialVar(repmat(q0,1,nT),zeros(nv,nT),0.1*ones(nT-1,1));
+  x_init = fccdfkp.getInitialVars(repmat(q0,1,nT),zeros(nv,nT),0.1*ones(nT-1,1));
   tic
   [x_sol,cost,info] = fccdfkp.solve(x_init);
   toc
@@ -134,7 +134,7 @@ for i = 1:nT
   end
 end
 prog_lagrangian = FixedMotionSearchCWSmarginLinFC(4,robot_mass,nT,Qw,sol.num_fc_pts,sol.num_grasp_pts,sol.num_grasp_wrench_vert);
-[cws_margin_sol,l0,l1,l2,l3,l4,solver_sol,info] = prog_lagrangian.findCWSmargin(0,friction_cones,sol.grasp_pos,sol.grasp_wrench_vert,disturbance_pos,sol.momentum_dot,sol.com);
+[cws_margin_sol,l0,l1,l2,l3,l4,V,solver_sol,info] = prog_lagrangian.findCWSmargin(0,friction_cones,sol.grasp_pos,sol.grasp_wrench_vert,disturbance_pos,sol.momentum_dot,sol.com);
 keyboard;
 
 options = struct('use_lin_fc',true);
