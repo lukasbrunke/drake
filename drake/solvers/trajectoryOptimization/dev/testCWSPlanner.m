@@ -124,15 +124,6 @@ else
 end
 keyboard;
 friction_cones = sol.friction_cones;
-% set the length of each friction cone edge to be robot_mass*gravity;
-for i = 1:nT
-  for j = 1:length(sol.friction_cones{i})
-    fc_edges = sol.friction_cones{i}(j).fc_edges;
-    fc_edges = fc_edges./bsxfun(@times,sqrt(sum(fc_edges.^2,1)),ones(3,1));
-    fc_edges = robot_mass*gravity*fc_edges;
-    friction_cones{i}(j) = LinearizedFrictionCone(friction_cones{i}(j).contact_pos,friction_cones{i}(j).cone_axis,friction_cones{i}(j).mu_face,fc_edges);
-  end
-end
 prog_lagrangian = FixedMotionSearchCWSmarginLinFC(4,robot_mass,nT,Qw,sol.num_fc_pts,sol.num_grasp_pts,sol.num_grasp_wrench_vert);
 [cws_margin_sol,l0,l1,l2,l3,l4,V,solver_sol,info] = prog_lagrangian.findCWSmargin(0,friction_cones,sol.grasp_pos,sol.grasp_wrench_vert,disturbance_pos,sol.momentum_dot,sol.com);
 keyboard;

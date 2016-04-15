@@ -11,7 +11,7 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
     grasp_contact_pos_inds % A obj.N x 1 cell, grasp_contact_pos_inds{i} is a 3 x num_grasp_pts(i) matrix
     l0_gram_var_inds % A 36 x nT matrix
     l1_gram_var_inds % A 8 x nT matrix
-    l2_gram_var_inds % A nT x 1 cell, l2_gram_var_inds{i} is a 36 x num_fc_pts x num_fc_edges) matrix
+    l2_gram_var_inds % A nT x 1 cell, l2_gram_var_inds{i} is a 36 x (num_fc_pts * num_fc_edges) matrix
     l3_gram_var_inds % A 36 x nT matrix
     l4_gram_var_inds % A nT x 1 cell, l4_gram_var_inds{i} is a 36 x prod(num_grasp_wrench_vert{i}) matrix
     
@@ -25,6 +25,8 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
     grasp_cw_active_knot % A length(grasp_cw) x 1 cell
     fc_cw_pos_inds % A length(fc_cw) x 1 cell, fc_cw_pos_inds{i} is a 3 x fc_cw.num_pts matrix
     grasp_cw_pos_inds % A length(grasp_cw) x 1 cell, grasp_cw_pos_inds{i} is a 3 x grasp_cw.num_pts matrix
+    
+    cws_margin_sos % A CWSMarginSOSconditionBase object
   end
   
   properties(Access = protected)
@@ -42,8 +44,7 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
     grasp_pos_var
     cws_margin_var
     
-    fc_axis
-    fc_mu
+    friction_cones % A nT x 1 cell, friction_cones{i} is a num_fc_pts(i) x 1 FrictionCone array
     grasp_wrench_vert
     
     fc_edge_scaling_factor
@@ -53,12 +54,18 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
   end
   
   properties(Access = private)
-    % if we do recomp(V_indet,V_power,V_coeff), then we get the residue of
+    % if we do recomp(V_indet,V_power,V_res_coeff), then we get the residue of
     % the sos condition, we want this residue to be 0
-    V_indet % A 7 x obj.N matrix
-    V_power % A obj.N x 1 cell
+    V_res_indet % A 7 x obj.N matrix
+    V_res_power % A obj.N x 1 cell
     
     sos_con_id % A obj.N x 1 vector
+    
+    l0
+    l1
+    l2
+    l3
+    l4
   end
   
   methods
@@ -75,7 +82,6 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       obj = obj@ContactWrenchSetDynamicsFullKineamticsPlanner(robot,N,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,options);
       obj.use_lin_fc = options.use_lin_fc;
       obj.num_fc_edges = 4;
-      obj.fc_edge_scaling_factor = options.fc_edge_scaling_factor;
       
       obj = obj.parseContactWrenchStruct(contact_wrench_struct);
       sizecheck(Qw,[6,6]);
@@ -169,15 +175,34 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       x(obj.V_gram_var_inds(:)) = V_gram_var_val(:);
     end
     
-    function V = computeSOSconditionFromVar(obj,x)
-      V = msspoly.zeros(obj.N,1);
+    function V_res = computeSOSconditionFromVar(obj,x)
+      V_res = msspoly.zeros(obj.N,1);
       shared_data = obj.evaluateSharedDataFunctions(x);
       for i = 1:obj.N
         [~,cnstr_idx] = obj.isNonlinearConstraintID(obj.sos_con_id(i));
         args = [obj.getArgumentArray(x,obj.nlcon_xind{cnstr_idx});shared_data(obj.nlcon_dataind{cnstr_idx})];
-        V_coeff = obj.nlcon{cnstr_idx}.eval(args{:})';
-        V(i) = recomp(obj.V_indet(:,i),obj.V_power{i},V_coeff);
+        V_res_coeff = obj.nlcon{cnstr_idx}.eval(args{:})';
+        V_res(i) = recomp(obj.V_res_indet(:,i),obj.V_res_power{i},V_res_coeff);
       end
+    end
+    
+    function V_res = computeSOSconditionFromSolution(obj,q,v,dt,momentum_dot,cws_margin,friction_cones,grasp_pos,l0,l1,l2,l3,l4,V)
+      x = obj.getInitialVars(q,v,dt);
+      x(obj.world_momentum_dot_inds) = momentum_dot(:);
+      x(obj.cws_margin_ind) = cws_margin;
+      for i = 1:obj.N
+        for j = 1:obj.num_fc_pts(i)
+          x(obj.fc_contact_pos_inds{i}(:,j)) = friction_cones{i}(j).contact_pos;
+        end
+        x(obj.grasp_contact_pos_inds{i}) = grasp_pos{i}(:);
+      end
+      x = obj.setL0GramVarVal(x,l0);
+      x = obj.setL1GramVarVal(x,l1);
+      x = obj.setL2GramVarVal(x,l2);
+      x = obj.setL3GramVarVal(x,l3);
+      x = obj.setL4GramVarVal(x,l4);
+      x = obj.setVGramVarVal(x,V);
+      V_res = obj.computeSOSconditionFromVar(x);
     end
   end
   
@@ -195,9 +220,16 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       obj.grasp_contact_pos_inds = cell(obj.N,1);
       obj.fc_cw_pos_inds = {};
       obj.grasp_cw_pos_inds = {};
-      obj.fc_axis = cell(obj.N,1);
-      obj.fc_mu = cell(obj.N,1);
+      obj.friction_cones = cell(obj.N,1);
+      for i = 1:obj.N
+        if(obj.use_lin_fc)
+          obj.friction_cones{i} = LinearizedFrictionCone.empty(0,0);
+        else
+          obj.friction_cones{i} = FrictionCone.empty(0,0);
+        end
+      end
       obj.grasp_wrench_vert = cell(obj.N,1);
+      
       for i = 1:num_cw
         if(~isstruct(contact_wrench_struct) || ~isfield(contact_wrench_struct(i),'active_knot')...
             || ~isfield(contact_wrench_struct(i),'cw'))
@@ -211,15 +243,20 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
           x_names = repmat({sprintf('%s contact pos',contact_wrench_struct(i).cw.body_name)},3*num_pts,1);
           [obj,tmp_idx] = obj.addDecisionVariable(3*num_pts,x_names);
           obj.fc_cw_pos_inds{end+1} = reshape(tmp_idx,3,num_pts);
+          if(obj.use_lin_fc)
+            if(~isa(contact_wrench_struct(i).cw,'LinearFrictionConeWrench') || size(contact_wrench_struct(i).cw.FC_edge,2)~=obj.num_fc_edges)
+              error('The contact wrench is not a linearized friction cone wrench of %d edges',obj.num_fc_edges);
+            end
+            friction_cone_i = LinearizedFrictionCone.empty(0,num_pts);
+            for j = 1:num_pts
+              friction_cone_i(j) = LinearizedFrictionCone(nan(3,1),obj.fc_cw{end}.normal_dir(:,j),obj.fc_cw{end}.mu_face(j),obj.fc_cw{end}.FC_edge);
+            end
+          else
+            error('Not implemented yet');
+          end
           for j = reshape(contact_wrench_struct(i).active_knot,1,[])
             obj.fc_contact_pos_inds{j} = [obj.fc_contact_pos_inds{j} obj.fc_cw_pos_inds{end}];
-            if(isa(obj.fc_cw{end},'FrictionConeWrench'))
-              obj.fc_axis{j} = [obj.fc_axis{j} obj.fc_cw{end}.FC_axis];
-              obj.fc_mu{j} = [obj.fc_mu{j} obj.fc_cw{end}.FC_mu];
-            else
-              obj.fc_axis{j} = [obj.fc_axis{j} obj.fc_cw{end}.normal_dir];
-              obj.fc_mu{j} = [obj.fc_mu{j} obj.fc_cw{end}.mu_face];
-            end
+            obj.friction_cones{j}(end+(1:num_pts)) = friction_cone_i;
           end
           % check if the body points are colinear. If yes, fix the body
           % pose, otherwise fix the body point positions
@@ -292,55 +329,55 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       obj.l2_gram_var = cell(obj.N,1);
       obj.l4_gram_var = cell(obj.N,1);
       if(obj.use_lin_fc)
-        cws_sos = CWSMarginSOSconditionLinFC(obj.num_fc_edges,obj.robot_mass,obj.N,obj.Qw,obj.num_fc_pts,obj.num_grasp_pts,obj.num_grasp_wrench_vert);
+        obj.cws_margin_sos = CWSMarginSOSconditionLinFC(obj.num_fc_edges,obj.robot_mass,obj.N,obj.Qw,obj.num_fc_pts,obj.num_grasp_pts,obj.num_grasp_wrench_vert);
       else
-        cws_sos = CWSMarginSOSconditionNonlinearFC(obj.robot_mass,obj.N,obj.Qw,obj.num_fc_pts,obj.num_grasp_pts,obj.num_grasp_wrench_vert);
+        obj.cws_margin_sos = CWSMarginSOSconditionNonlinearFC(obj.robot_mass,obj.N,obj.Qw,obj.num_fc_pts,obj.num_grasp_pts,obj.num_grasp_wrench_vert);
       end
-      obj.a_indet = cws_sos.a_indet;
-      obj.b_indet = cws_sos.b_indet;
-      ab_monomials1 = [cws_sos.a_indet;cws_sos.b_indet;1];
+      obj.a_indet = obj.cws_margin_sos.a_indet;
+      obj.b_indet = obj.cws_margin_sos.b_indet;
+      ab_monomials1 = [obj.cws_margin_sos.a_indet;obj.cws_margin_sos.b_indet;1];
       l0_gram = cell(obj.N,1);
       l3_gram = cell(obj.N,1);
       triu_mask = triu(ones(8))~=0;
 
-      l0 = msspoly.zeros(obj.N,1);
-      l1 = msspoly.zeros(obj.N,1);
-      l2 = cell(obj.N,1);
-      l3 = msspoly.zeros(obj.N,1);
-      l4 = cell(obj.N,1);
+      obj.l0 = msspoly.zeros(obj.N,1);
+      obj.l1 = msspoly.zeros(obj.N,1);
+      obj.l2 = cell(obj.N,1);
+      obj.l3 = msspoly.zeros(obj.N,1);
+      obj.l4 = cell(obj.N,1);
       l_gram_var_count = 80*obj.N;
       for i = 1:obj.N
         l0_gram{i} = msspoly.zeros(8,8);
         l0_gram{i}(triu_mask) = obj.l0_gram_var(:,i);
-        l0_gram{i} = l0_gram{i}*l0_gram{i}';
-        l0(i) = ab_monomials1'*l0_gram{i}*ab_monomials1+1;
+        l0_gram{i} = l0_gram{i}'*l0_gram{i};
+        obj.l0(i) = ab_monomials1'*l0_gram{i}*ab_monomials1+1;
 
-        l1(i) = ab_monomials1'*obj.l1_gram_var(:,i);
+        obj.l1(i) = ab_monomials1'*obj.l1_gram_var(:,i);
 
         l3_gram{i} = msspoly.zeros(8,8);
         l3_gram{i}(triu_mask) = obj.l3_gram_var(:,i);
-        l3_gram{i} = l3_gram{i}*l3_gram{i}';
-        l3(i) = ab_monomials1'*l3_gram{i}*ab_monomials1;
+        l3_gram{i} = l3_gram{i}'*l3_gram{i};
+        obj.l3(i) = ab_monomials1'*l3_gram{i}*ab_monomials1;
 
         if(obj.use_lin_fc)
-          l2{i} = msspoly.zeros(obj.num_fc_pts(i),obj.num_fc_edges);
+          obj.l2{i} = msspoly.zeros(obj.num_fc_pts(i),obj.num_fc_edges);
           x_name2 = repmat({sprintf('l2_gram_var[%d]',i)},36*obj.num_fc_pts(i)*obj.num_fc_edges,1);
           [obj,tmp_idx] = obj.addDecisionVariable(36*obj.num_fc_pts(i)*obj.num_fc_edges,x_name2);
-          obj.l2_gram_var_inds{i} = reshape(tmp_idx,36,obj.num_fc_pts(i),obj.num_fc_edges);
+          obj.l2_gram_var_inds{i} = reshape(tmp_idx,36,obj.num_fc_pts(i)*obj.num_fc_edges);
           obj.l2_gram_var{i} = reshape(l_gram_var(l_gram_var_count+(1:36*obj.num_fc_pts(i)*obj.num_fc_edges)),36,obj.num_fc_pts(i)*obj.num_fc_edges);
           l_gram_var_count = l_gram_var_count+36*obj.num_fc_pts(i)*obj.num_fc_edges;
           for j = 1:obj.num_fc_pts(i)
             for k = 1:obj.num_fc_edges
               l2_gram = msspoly.zeros(8,8);
               l2_gram(triu_mask) = obj.l2_gram_var{i}(:,(j-1)*obj.num_fc_edges+k);
-              l2_gram = l2_gram*l2_gram';
-              l2{i}(j,k) = ab_monomials1'*l2_gram*ab_monomials1;
+              l2_gram = l2_gram'*l2_gram;
+              obj.l2{i}(j,k) = ab_monomials1'*l2_gram*ab_monomials1;
             end
           end
         else
         end
         num_grasp_wrench_vert_i = prod(obj.num_grasp_wrench_vert{i});
-        l4{i} = msspoly.zeros(num_grasp_wrench_vert_i,1);
+        obj.l4{i} = msspoly.zeros(num_grasp_wrench_vert_i,1);
         x_name4 = repmat({sprintf('l4_gram_var[%d]',i)},36*num_grasp_wrench_vert_i,1);
         [obj,tmp_idx] = obj.addDecisionVariable(36*num_grasp_wrench_vert_i,x_name4);
         obj.l4_gram_var_inds{i} = reshape(tmp_idx,36,num_grasp_wrench_vert_i);
@@ -349,38 +386,28 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
         for j = 1:num_grasp_wrench_vert_i
           l4_gram = msspoly.zeros(8,8);
           l4_gram(triu_mask) = obj.l4_gram_var{i}(:,j);
-          l4_gram = l4_gram*l4_gram';
-          l4{i}(j) = ab_monomials1'*l4_gram*ab_monomials1;
+          l4_gram = l4_gram'*l4_gram;
+          obj.l4{i}(j) = ab_monomials1'*l4_gram*ab_monomials1;
         end
       end
 
-      friction_cones = cell(obj.N,1);
       contact_pos = msspoly('p',3*sum(obj.num_fc_pts)+3*sum(obj.num_grasp_pts));
       contact_pos_count = 0;
       obj.fc_pos_var = cell(obj.N,1);
       obj.grasp_pos_var = cell(obj.N,1);
-      if(obj.use_lin_fc)
-        fc_theta = linspace(0,2*pi,obj.num_fc_edges+1);
-        fc_theta = fc_theta(1:end-1);
-        fc_edges0 = obj.fc_edge_scaling_factor*[cos(fc_theta);sin(fc_theta);ones(1,obj.num_fc_edges)];
-      end
       for i = 1:obj.N
         obj.fc_pos_var{i} = reshape(contact_pos(contact_pos_count+(1:3*obj.num_fc_pts(i))),3,obj.num_fc_pts(i));
         contact_pos_count = contact_pos_count+3*obj.num_fc_pts(i);
         obj.grasp_pos_var{i} = reshape(contact_pos(contact_pos_count+(1:3*obj.num_grasp_pts(i))),3,obj.num_grasp_pts(i));
         contact_pos_count = contact_pos_count+3*obj.num_grasp_pts(i);
         if(obj.use_lin_fc)
-          friction_cones{i} = LinearizedFrictionCone.empty(0,obj.num_fc_pts(i));
           for j = 1:obj.num_fc_pts(i)
-            fc_edges = fc_edges0;
-            fc_edges(1:2,:) = fc_edges(1:2,:)*obj.fc_mu{i}(j);
-            fc_edges = rotateVectorToAlign([0;0;1],obj.fc_axis{i}(:,j))*fc_edges;
-            friction_cones{i}(j) = LinearizedFrictionCone(obj.fc_pos_var{i}(:,j),obj.fc_axis{i}(:,j),obj.fc_mu{i}(j),fc_edges);
+            obj.friction_cones{i}(j) = obj.friction_cones{i}(j).setContactPos(obj.fc_pos_var{i}(:,j));
           end
         end
       end
 
-      V = cws_sos.CWSMarginSOScondition(l0,l1,l2,l3,l4,obj.cws_margin_var,friction_cones,obj.grasp_pos_var,obj.grasp_wrench_vert,obj.disturbance_pos,obj.momentum_dot_var,obj.com_var,zeros(3,obj.N));
+      V = obj.cws_margin_sos.CWSMarginSOScondition(obj.l0,obj.l1,obj.l2,obj.l3,obj.l4,obj.cws_margin_var,obj.friction_cones,obj.grasp_pos_var,obj.grasp_wrench_vert,obj.disturbance_pos,obj.momentum_dot_var,obj.com_var,zeros(3,obj.N));
 
       x_name = cell(36*obj.N,1);
       for i = 1:obj.N
@@ -389,30 +416,37 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       [obj,tmp_idx] = obj.addDecisionVariable(36*obj.N,x_name);
       obj.V_gram_var_inds = reshape(tmp_idx,36,obj.N);
       obj.V_gram_var = reshape(msspoly('v',36*obj.N),36,obj.N);
-      ab_monomials2 = [cws_sos.a_indet;cws_sos.b_indet;1];
-      obj.V_indet = msspoly.zeros(7,obj.N);
-      obj.V_power = cell(obj.N,1);
+      ab_monomials2 = [obj.cws_margin_sos.a_indet;obj.cws_margin_sos.b_indet;1];
+      obj.V_res_indet = msspoly.zeros(7,obj.N);
+      obj.V_res_power = cell(obj.N,1);
 
       obj.sos_con_id = zeros(obj.N,1);
+      V_res = msspoly.zeros(obj.N,1);
       for i = 1:obj.N
         V_gram = msspoly.zeros(8,8);
         triu_mask = triu(ones(8))~=0;
         V_gram(triu_mask) = obj.V_gram_var(:,i);
-        V_gram = V_gram*V_gram';
-        V(i) = V(i)-ab_monomials2'*V_gram*ab_monomials2;
+        V_gram = V_gram'*V_gram;
+        V_res(i) = V(i)-ab_monomials2'*V_gram*ab_monomials2;
         decision_var = [obj.l0_gram_var(:,i);obj.l1_gram_var(:,i);obj.l2_gram_var{i}(:);obj.l3_gram_var(:,i);obj.l4_gram_var{i}(:);obj.V_gram_var(:,i);obj.momentum_dot_var(:,i);obj.com_var(:,i);obj.fc_pos_var{i}(:);obj.grasp_pos_var{i}(:);obj.cws_margin_var];
         decision_var_inds = [obj.l0_gram_var_inds(:,i);obj.l1_gram_var_inds(:,i);obj.l2_gram_var_inds{i}(:);obj.l3_gram_var_inds(:,i);obj.l4_gram_var_inds{i}(:);obj.V_gram_var_inds(:,i);obj.world_momentum_dot_inds(:,i);obj.com_inds(:,i);obj.fc_contact_pos_inds{i}(:);obj.grasp_contact_pos_inds{i}(:);obj.cws_margin_ind];
-        [obj.V_indet(:,i),obj.V_power{i},V_coeff] = decomp(V(i),decision_var);
-        mtch = match([cws_sos.a_indet;cws_sos.b_indet],obj.V_indet(:,i));
+        [obj.V_res_indet(:,i),obj.V_res_power{i},V_res_coeff] = decomp(V_res(i),decision_var);
+        mtch = match([obj.cws_margin_sos.a_indet;obj.cws_margin_sos.b_indet],obj.V_res_indet(:,i));
         valuecheck(numel(unique(mtch)),7);
-        sparse_pattern = zeros(length(V_coeff),length(decision_var));
-        dV_coeff = diff(V_coeff',decision_var);
-        for j = 1:length(V_coeff)
-          coeff_var_j = decomp(V_coeff(j));
+        sparse_pattern = zeros(length(V_res_coeff),length(decision_var));
+        dV_coeff = diff(V_res_coeff',decision_var);
+        for j = 1:length(V_res_coeff)
+          coeff_var_j = decomp(V_res_coeff(j));
           match_ij = match(decision_var,coeff_var_j);
           sparse_pattern(j,match_ij) = 1;
         end
-        cnstr = FunctionHandleConstraint(zeros(length(V_coeff),1),zeros(length(V_coeff),1),length(decision_var_inds),@(x) obj.recompV(x,V_coeff,dV_coeff,decision_var));
+        [coeff_var,coeff_power,coeff_M] = decomp(V_res_coeff);
+        [dcoeff_var,dcoeff_power,dcoeff_M] = decomp(dV_coeff);
+        coeff_M = sparse(coeff_M);
+        dcoeff_M = sparse(dcoeff_M);
+        coeff_match = match(decision_var,coeff_var);
+        dcoeff_match = match(decision_var,dcoeff_var);
+        cnstr = FunctionHandleConstraint(zeros(length(V_res_coeff),1),zeros(length(V_res_coeff),1),length(decision_var_inds),@(x) obj.recompV(x,coeff_match,coeff_power,coeff_M,dcoeff_match,dcoeff_power,dcoeff_M));
         [iCfun,jCvar] = find(sparse_pattern);
         cnstr = cnstr.setSparseStructure(iCfun,jCvar);
         name = repmat({sprintf('sos[%d]',i)},cnstr.num_cnstr,1);
@@ -421,19 +455,27 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       end
     end
     
-    function [c,dc] = recompV(obj,x,V_coeff,dV_coeff,decision_var)
-      c = double(subs(V_coeff,decision_var,x))';
-      dc = double(subs(dV_coeff,decision_var,x));
+    function [c,dc] = recompV(obj,x,coeff_match,coeff_power,coeff_M,dcoeff_match,dcoeff_power,dcoeff_M)
+      x_coeff = bsxfun(@times,x(coeff_match)',ones(size(coeff_power,1),1));
+      nonzero_coeff_power = coeff_power~=0;
+      x_coeff_power = ones(size(x_coeff));
+      x_coeff_power(nonzero_coeff_power) = x_coeff(nonzero_coeff_power).^coeff_power(nonzero_coeff_power);
+      c = coeff_M*prod(x_coeff_power,2);
+      
+      x_dcoeff = bsxfun(@times,x(dcoeff_match)',ones(size(dcoeff_power,1),1));
+      nonzero_dcoeff_power = dcoeff_power~=0;
+      x_dcoeff_power = ones(size(x_dcoeff));
+      x_dcoeff_power(nonzero_dcoeff_power) = x_dcoeff(nonzero_dcoeff_power).^dcoeff_power(nonzero_dcoeff_power);
+      dc = reshape(dcoeff_M*prod(x_dcoeff_power,2),length(c),length(x));
     end
     
     function l0_gram_var_val = getL0GramVarVal(obj,l0)
       triu_mask = triu(ones(8))~=0;
       l0_gram_var_val = zeros(36,obj.N);
       for i = 1:obj.N
-        Q = double(decompQuadraticPoly(l0(i),[obj.a_indet;obj.b_indet]));
-        Q(end,end) = Q(end,end)-1;
-        L = chol(Q+1e-8*eye(8));
-        l0_gram_var_val(:,i) = L(triu_mask);
+        Q = double(decompQuadraticPoly(l0(i)-1,[obj.a_indet;obj.b_indet]));
+        R = chol(Q+eps*eye(8));
+        l0_gram_var_val(:,i) = R(triu_mask);
       end
     end
     
@@ -447,14 +489,14 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       l2_gram_var_val = cell(obj.N,1);
       for i = 1:obj.N
         if(obj.use_lin_fc)
-          l2_gram_var_val{i} = zeros(36,obj.num_fc_pts(i),obj.num_fc_edges);
+          l2_gram_var_val{i} = zeros(36,obj.num_fc_pts(i)*obj.num_fc_edges);
         end
         for j = 1:obj.num_fc_pts(i)
           if(obj.use_lin_fc)
             for k = 1:obj.num_fc_edges
               Q = double(decompQuadraticPoly(l2{i}(j,k),[obj.a_indet;obj.b_indet]));
-              L = chol(Q+1e-8*eye(8));
-              l2_gram_var_val{i}(:,j,k) = L(triu_mask);
+              R = chol(Q+eps*eye(8));
+              l2_gram_var_val{i}(:,(j-1)*obj.num_fc_edges+k) = R(triu_mask);
             end
           end
         end
@@ -466,8 +508,8 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       l3_gram_var_val = zeros(36,obj.N);
       for i = 1:obj.N
         Q = double(decompQuadraticPoly(l3(i),[obj.a_indet;obj.b_indet]));
-        L = chol(Q+1e-8*eye(8));
-        l3_gram_var_val(:,i) = L(triu_mask);
+        R = chol(Q+eps*eye(8));
+        l3_gram_var_val(:,i) = R(triu_mask);
       end
     end
     
@@ -477,8 +519,8 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       for i = 1:obj.N
         for j = 1:prod(obj.num_grasp_wrench_vert{i})
           Q = double(decompQuadraticPoly(l4{i}(j),[obj.a_indet;obj.b_indet]));
-          L = chol(Q+1e-8*eye(8));
-          l4_gram_var_val{i}(:,j) = L(triu_mask);
+          R = chol(Q+eps*eye(8));
+          l4_gram_var_val{i}(:,j) = R(triu_mask);
         end
       end
     end
@@ -491,8 +533,8 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       triu_mask = triu(ones(8))~=0;
       for i = 1:obj.N
         Q = double(decompQuadraticPoly(V(i),[obj.a_indet;obj.b_indet]));
-        L = chol(Q+1e-8*eye(8));
-        V_gram_var_val(:,i) = L(triu_mask);
+        R = chol(Q+eps*eye(8));
+        V_gram_var_val(:,i) = R(triu_mask);
       end
     end
   end
