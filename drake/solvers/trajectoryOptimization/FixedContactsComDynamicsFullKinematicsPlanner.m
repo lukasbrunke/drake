@@ -162,17 +162,17 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
           valuecheck(contact_wrench_struct(i).cw.num_pts,1);
           % compute the vertices in the contact wrench set
           wrench_vert = contact_wrench_struct(i).cw.wrench_vert;
-          wrench_vert(4:6,:) = cross(repmat(contact_wrench_struct(i).contact_pos,1,contact_wrench_struct(i).cw.num_wrench_vert),wrench_vert(1:3,:),1)+wrench_vert(4:6,:);
+          wrench_vert_world(4:6,:) = cross(repmat(contact_wrench_struct(i).contact_pos,1,contact_wrench_struct(i).cw.num_wrench_vert),wrench_vert(1:3,:),1)+wrench_vert(4:6,:);
           for j = 1:length(contact_wrench_struct(i).active_knot)
-            obj.cws_vert{contact_wrench_struct(i).active_knot(j)} = [obj.cws_ray{contact_wrench_struct(i).active_knot(j)} wrench_vert];
+            obj.cws_vert{contact_wrench_struct(i).active_knot(j)} = [obj.cws_ray{contact_wrench_struct(i).active_knot(j)} wrench_vert_world];
           end
           cnstr = WorldPositionConstraint(obj.robot,contact_wrench_struct(i).cw.body,contact_wrench_struct(i).cw.body_pts,contact_wrench_struct(i).contact_pos,contact_wrench_struct(i).contact_pos);
           obj = obj.addRigidBodyConstraint(cnstr,num2cell(contact_wrench_struct(i).active_knot));
           obj.num_grasp_pts(contact_wrench_struct(i).active_knot) = obj.num_grasp_pts(contact_wrench_struct(i).active_knot)+1;
           for j = reshape(contact_wrench_struct(i).active_knot,1,[])
             obj.grasp_pos{j} = [obj.grasp_pos{j} contact_wrench_struct(i).contact_pos];
-            obj.num_grasp_wrench_vert{j} = [obj.num_grasp_wrench_vert{j} size(wrench_vert,2)];
-            obj.grasp_wrench_vert{j} = [obj.grasp_wrench_vert{j} {wrench_vert}];
+            obj.num_grasp_wrench_vert{j} = [obj.num_grasp_wrench_vert{j} size(contact_wrench_struct(i).cw.wrench_vert,2)];
+            obj.grasp_wrench_vert{j} = [obj.grasp_wrench_vert{j} {contact_wrench_struct(i).cw.wrench_vert}];
           end
         else
           error('Not supported');

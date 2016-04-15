@@ -27,6 +27,8 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
     grasp_cw_pos_inds % A length(grasp_cw) x 1 cell, grasp_cw_pos_inds{i} is a 3 x grasp_cw.num_pts matrix
     
     cws_margin_sos % A CWSMarginSOSconditionBase object
+    
+    grasp_wrench_vert % A nT x 1 cell, grasp_wrench_vert{i} is a num_grasp_pts(i) x 1 cell
   end
   
   properties(Access = protected)
@@ -45,7 +47,7 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
     cws_margin_var
     
     friction_cones % A nT x 1 cell, friction_cones{i} is a num_fc_pts(i) x 1 FrictionCone array
-    grasp_wrench_vert
+    
     
     fc_edge_scaling_factor
     
