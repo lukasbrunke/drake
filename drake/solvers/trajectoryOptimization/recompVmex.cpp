@@ -7,14 +7,16 @@ using namespace Eigen;
 
 
 void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
-  if(nrhs!=7 || nlhs > 2) {
-    mexErrMsgIdAndTxt("Drake:recompVmex:BadInputs","Usage: [c,dc] = recompV(x,coeff_match,coeff_power,coeff_M,dcoeff_match,dcoeff_power,dcoeff_M)");
+  if(nrhs!=8 || nlhs > 2) {
+    mexErrMsgIdAndTxt("Drake:recompVmex:BadInputs","Usage: [c,dc] = recompV(x,coeff_match,coeff_power,coeff_M,dcoeff_match,dcoeff_power,dcoeff_M,cnstr_normalizer)");
   }
   int nx = static_cast<int>(mxGetNumberOfElements(prhs[0]));
   Map<VectorXd> x(mxGetPr(prhs[0]),nx);
  
   assert(mxGetM(prhs[1]) == nx);
   assert(mxGetM(prhs[4]) == nx);
+
+  double cnstr_normalizer = *mxGetPr(prhs[7]);
 
   Map<VectorXd> coeff_match(mxGetPr(prhs[1]),nx);
   Map<VectorXd> dcoeff_match(mxGetPr(prhs[4]),nx);
@@ -97,13 +99,13 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
   for(int i=0;i<coeff_power_nnz;i++) {
     coeff_prod(coeff_power_row[i]) *= pow(x_coeff(coeff_power_col[i]),coeff_power_val(i));
   }
-  VectorXd c = coeff_M*coeff_prod;
+  VectorXd c = coeff_M*coeff_prod/cnstr_normalizer;
 
   VectorXd dcoeff_prod = VectorXd::Ones(dcoeff_M_cols);
   for(int i = 0;i<dcoeff_power_nnz;i++) {
     dcoeff_prod(dcoeff_power_row[i]) *= pow(x_dcoeff(dcoeff_power_col[i]),dcoeff_power_val(i));
   }
-  MatrixXd dc = dcoeff_M*dcoeff_prod;
+  MatrixXd dc = dcoeff_M*dcoeff_prod/cnstr_normalizer;
 
   plhs[0] = mxCreateDoubleMatrix(nc,1,mxREAL);
   memcpy(mxGetPr(plhs[0]),c.data(),sizeof(double)*nc);

@@ -15,8 +15,9 @@ coeff_match = match([p;q],coeff_var);
 [dcoeff_var,dcoeff_power,dcoeff_M] = decomp(dexpr_coeff);
 dcoeff_match = match([p;q],dcoeff_var);
 pq_val = randn(length(p)+length(q),1);
-[c,dc] = recompVmex(pq_val,coeff_match,coeff_power,coeff_M,dcoeff_match,dcoeff_power,dcoeff_M);
-[~,dc_num] = geval(@(pq) recompVmex(pq,coeff_match,coeff_power,coeff_M,dcoeff_match,dcoeff_power,dcoeff_M),pq_val,struct('grad_method','numerical'));
+cnstr_normalizer = 100;
+[c,dc] = recompVmex(pq_val,coeff_match,coeff_power,coeff_M,dcoeff_match,dcoeff_power,dcoeff_M,cnstr_normalizer);
+[~,dc_num] = geval(@(pq) recompVmex(pq,coeff_match,coeff_power,coeff_M,dcoeff_match,dcoeff_power,dcoeff_M,cnstr_normalizer),pq_val,struct('grad_method','numerical'));
 valuecheck(dc,dc_num,1e-4);
-valuecheck(double(clean(recomp(indet,expr_power,c')-subs(expr,[p;q],pq_val),1e-5)),0);
+valuecheck(double(clean(recomp(indet,expr_power,c'*cnstr_normalizer)-subs(expr,[p;q],pq_val),1e-5)),0);
 end

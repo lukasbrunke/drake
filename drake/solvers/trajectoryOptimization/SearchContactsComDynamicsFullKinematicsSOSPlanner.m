@@ -48,11 +48,10 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
     
     friction_cones % A nT x 1 cell, friction_cones{i} is a num_fc_pts(i) x 1 FrictionCone array
     
-    
-    fc_edge_scaling_factor
-    
     a_indet
     b_indet
+    
+    sos_cnstr_normalizer;
   end
   
   properties(Access = private)
@@ -78,12 +77,13 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       if(~isfield(options,'use_lin_fc'))
         options.use_lin_fc = true;
       end
-      if(~isfield(options,'fc_edge_scaling_factor'))
-        options.fc_edge_scaling_factor = robot.getMass()*norm(robot.gravity);
+      if(~isfield(options,'sos_cnstr_normalizer'))
+        options.sos_cnstr_normalizer = robot.getMass()*9.81;
       end
       obj = obj@ContactWrenchSetDynamicsFullKineamticsPlanner(robot,N,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,options);
       obj.use_lin_fc = options.use_lin_fc;
       obj.num_fc_edges = 4;
+      obj.sos_cnstr_normalizer = options.sos_cnstr_normalizer;
       
       obj = obj.parseContactWrenchStruct(contact_wrench_struct);
       sizecheck(Qw,[6,6]);
@@ -448,7 +448,7 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
         dcoeff_M = sparse(dcoeff_M);
         coeff_match = match(decision_var,coeff_var);
         dcoeff_match = match(decision_var,dcoeff_var);
-        cnstr = FunctionHandleConstraint(zeros(length(V_res_coeff),1),zeros(length(V_res_coeff),1),length(decision_var_inds),@(x) obj.recompV(x,coeff_match,coeff_power,coeff_M,dcoeff_match,dcoeff_power,dcoeff_M));
+        cnstr = FunctionHandleConstraint(zeros(length(V_res_coeff),1),zeros(length(V_res_coeff),1),length(decision_var_inds),@(x) recompVmex(x,coeff_match,coeff_power,coeff_M,dcoeff_match,dcoeff_power,dcoeff_M,obj.sos_cnstr_normalizer));
         [iCfun,jCvar] = find(sparse_pattern);
         cnstr = cnstr.setSparseStructure(iCfun,jCvar);
         name = repmat({sprintf('sos[%d]',i)},cnstr.num_cnstr,1);

@@ -149,6 +149,7 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
   methods(Access = protected)
     function obj = addState(obj)
       [obj,obj.cws_margin_ind] = obj.addDecisionVariable(1,{'cws_margin'});
+      obj = obj.addConstraint(BoundingBoxConstraint(0,inf),obj.cws_margin_ind);
       
       x_name = cell(3*obj.N,1);
       for i = 1:obj.N
