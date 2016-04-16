@@ -24,11 +24,13 @@ Unreleased: changes on master, not yet released
  - [#1992][] Matlab tests must now be explicitly listed in CMakeLists.
  - [#1970][] The `drake` pod Makefile now includes the `install` action.
  - [#1953][] Replace `valuecheckMatrix()` with `CompareMatrices()`.
- 
+ - [#2018][] Fix capitalization of `Constraint` and `OptimizationProblem` APIs to match style guide.
+
 [//]: # "Lost functionality or APIs."
 ### Removed / Deprecated
 
- - None
+ - [#2067][] `core/Core.h` is removed.
+ - [#2039][] Ubuntu 12.04 Trusty is no longer supported.
 
 [//]: # "Smaller bug fixes.  No API changes."
 ### Fixes
@@ -49,6 +51,8 @@ Changes in version v0.9.11 and before are not provided.
 
 [//]: # "You can use PimpMyChangelog to auto-update this list."
 [//]: # "https://github.com/pcreux/pimpmychangelog"
+[#2067]: https://github.com/RobotLocomotion/drake/issues/2067
+[#2039]: https://github.com/RobotLocomotion/drake/issues/2039
 [#2027]: https://github.com/RobotLocomotion/drake/issues/2027
 [#1953]: https://github.com/RobotLocomotion/drake/issues/1953
 [#1970]: https://github.com/RobotLocomotion/drake/issues/1970
@@ -56,3 +60,4 @@ Changes in version v0.9.11 and before are not provided.
 [#1990]: https://github.com/RobotLocomotion/drake/issues/1990
 [#1992]: https://github.com/RobotLocomotion/drake/issues/1992
 [#2008]: https://github.com/RobotLocomotion/drake/issues/2008
+[#2018]: https://github.com/RobotLocomotion/drake/issues/2018

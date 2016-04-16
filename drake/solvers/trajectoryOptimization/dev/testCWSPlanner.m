@@ -1,10 +1,10 @@
-function testCWSPlanner
+function testCWSPlanner(mode)
 warning('off','Drake:RigidBody:SimplifiedCollisionGeometry');
 warning('off','Drake:RigidBody:NonPositiveInertiaMatrix');
 warning('off','Drake:RigidBodyManipulator:UnsupportedContactPoints');
 warning('off','Drake:RigidBodyManipulator:UnsupportedVelocityLimits');
 warning('off','Drake:RigidBodyManipulator:ReplacedCylinder');
-robot = RigidBodyManipulator([getDrakePath,'/examples/Atlas/urdf/atlas_minimal_contact.urdf'],struct('floating','quat'));
+robot = RigidBodyManipulator([getDrakePath,'/examples/Atlas/urdf/atlas_minimal_contact.urdf'],struct('floating',true));
 nq = robot.getNumPositions();
 nv = robot.getNumVelocities();
 
@@ -88,18 +88,77 @@ Q = eye(nq);
 Q(1,1) = 0;
 Q(2,2) = 0;
 Q(6,6) = 0;
-T_lb = 0.5;
-T_ub = 1;
+T_lb = 0.4;
+T_ub = 0.7;
 tf_range = [T_lb,T_ub];
 q_nom = repmat(q0,1,nT);
 contact_wrench_struct = [lfoot_contact_wrench rfoot_contact_wrench1 rfoot_contact_wrench2 rhand_contact_wrench];
 cws_margin_cost = 100;
-fccdfkp = FixedContactsComDynamicsFullKinematicsPlanner(robot,nT,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct);
+disturbance_pos = repmat(com0,1,nT)+[linspace(0,0.1,nT);zeros(2,nT)];
+Qw = eye(6);
+fccdfkp = FixedContactsFixedDisturbanceComDynamicsFullKinematicsPlanner(robot,nT,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,Qw,disturbance_pos);
 
 fccdfkp = fccdfkp.setSolverOptions('snopt','print','test_fccdfkp.out');
-x_init = fccdfkp.setInitialVar(repmat(q0,1,nT),zeros(nv,nT),0.1*ones(nT-1,1));
-tic
-[x_sol,info] = fccdfkp.solve(x_init);
-toc
+
+% dt bound
+fccdfkp = fccdfkp.addConstraint(BoundingBoxConstraint(0.05*ones(nT-1,1),0.15*ones(nT-1,1)),fccdfkp.h_inds);
+
+% right foot off ground
+cnstr = WorldPositionConstraint(robot,r_foot,r_foot_contact_pts,[nan(2,4);0.03*ones(1,4)],nan(3,4));
+fccdfkp = fccdfkp.addConstraint(cnstr,num2cell(rfoot_takeoff_idx+1:rfoot_land_idx-1));
+
+if(mode == 1)
+  x_init = fccdfkp.getInitialVars(repmat(q0,1,nT),zeros(nv,nT),0.1*ones(nT-1,1));
+  tic
+  [x_sol,cost,info] = fccdfkp.solve(x_init);
+  toc
+  if(info < 10)
+    sol = fccdfkp.retrieveSolution(x_sol);
+    fccdfkp.checkSolution(sol);
+    save('test_fccdfkp.mat','sol');
+  end
+elseif(mode == 2)
+  load('test_fccdfkp.mat');
+else
+  error('mode is not given');
+end
+keyboard;
+friction_cones = sol.friction_cones;
+prog_lagrangian = FixedMotionSearchCWSmarginLinFC(4,robot_mass,nT,Qw,sol.num_fc_pts,sol.num_grasp_pts,sol.num_grasp_wrench_vert);
+[cws_margin_sol,l0,l1,l2,l3,l4,V,solver_sol,info] = prog_lagrangian.findCWSmargin(0,friction_cones,sol.grasp_pos,sol.grasp_wrench_vert,disturbance_pos,sol.momentum_dot,sol.com);
+keyboard;
+
+options = struct('use_lin_fc',true);
+fccdfkp_sos_planner = SearchContactsFixedDisturbanceFullKinematicsSOSPlanner(robot,nT,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,Qw,disturbance_pos,options);
+
+% fix initial state
+fccdfkp_sos_planner = fccdfkp_sos_planner.addConstraint(ConstantConstraint(sol.q(:,1)),fccdfkp_sos_planner.q_inds(:,1));
+
+% dt bound
+fccdfkp_sos_planner = fccdfkp_sos_planner.addConstraint(BoundingBoxConstraint(0.05*ones(nT-1,1),0.15*ones(nT-1,1)),fccdfkp_sos_planner.h_inds);
+
+% feet land on the ground
+cnstr = WorldPositionConstraint(robot,r_foot,r_foot_contact_pts,rfoot_contact_pos_star+repmat([0.1;0;0],1,4),[nan(2,4);rfoot_contact_pos_star(3,:)]);
+fccdfkp_sos_planner = fccdfkp_sos_planner.addConstraint(cnstr,num2cell(rfoot_land_idx:nT));
+
+% feet above ground
+cnstr = WorldPositionConstraint(robot,r_foot,r_foot_contact_pts,[nan(2,4);0.03*ones(1,4)],nan(3,4));
+fccdfkp_sos_planner = fccdfkp_sos_planner.addConstraint(cnstr,num2cell(rfoot_takeoff_idx+1:rfoot_land_idx-1));
+
+x_init = fccdfkp_sos_planner.getInitialVars(sol.q,sol.v,sol.dt);
+x_init(fccdfkp_sos_planner.world_momentum_dot_inds) = sol.momentum_dot(:);
+x_init(fccdfkp_sos_planner.cws_margin_ind) = cws_margin_sol;
+x_init = fccdfkp_sos_planner.setL0GramVarVal(x_init,l0);
+x_init = fccdfkp_sos_planner.setL1GramVarVal(x_init,l1);
+x_init = fccdfkp_sos_planner.setL2GramVarVal(x_init,l2);
+x_init = fccdfkp_sos_planner.setL3GramVarVal(x_init,l3);
+x_init = fccdfkp_sos_planner.setL4GramVarVal(x_init,l4);
+x_init = fccdfkp_sos_planner.setVGramVarVal(x_init,clean(V));
+
+fccdfkp_sos_planner = fccdfkp_sos_planner.setSolverOptions('snopt','print','test_fccdfkp_sos.out');
+
+tic;
+x = fccdfkp_sos_planner.solve(x_init);
+toc;
 keyboard;
 end

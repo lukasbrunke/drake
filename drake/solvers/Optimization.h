@@ -6,7 +6,10 @@
 #include <memory>
 #include <initializer_list>
 #include <Eigen/Core>
-#include "drake/core/Core.h"
+
+#include "drake/core/Function.h"
+#include "drake/core/Gradient.h"
+#include "drake/core/Vector.h"
 #include "drake/drakeOptimization_export.h"
 #include "drake/solvers/Constraint.h"
 #include "drake/solvers/MathematicalProgram.h"
@@ -19,7 +22,7 @@ namespace Drake {
  * @brief Provides storage for a decision variable inside an OptimizationProblem.
  */
 class DecisionVariable {
-public:
+ public:
   enum class VarType { CONTINUOUS, INTEGER, BINARY };
 
   DecisionVariable(VarType type, const std::string& name,
@@ -136,7 +139,6 @@ class DecisionVariableView {  // enables users to access pieces of the decision
 typedef std::list<DecisionVariableView> VariableList;
 
 class DRAKEOPTIMIZATION_EXPORT OptimizationProblem {
-
   /** Binding
    * @brief A binding on constraint type C is a mapping of the decision
    * variables onto the inputs of C.  This allows the constraint to operate
@@ -438,7 +440,6 @@ class DRAKEOPTIMIZATION_EXPORT OptimizationProblem {
   std::shared_ptr<LinearEqualityConstraint> AddLinearEqualityConstraint(
       const Eigen::MatrixBase<DerivedA>& Aeq,
       const Eigen::MatrixBase<DerivedB>& beq, const VariableList& vars) {
-
     auto constraint = std::make_shared<LinearEqualityConstraint>(Aeq, beq);
     AddLinearEqualityConstraint(constraint, vars);
     return constraint;

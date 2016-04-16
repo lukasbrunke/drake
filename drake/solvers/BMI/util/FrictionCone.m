@@ -23,6 +23,11 @@ classdef FrictionCone
       obj.mu_face = mu_face;
     end
     
+    function obj = setContactPos(obj,contact_pos)
+      sizecheck(contact_pos,[3,1]);
+      obj.contact_pos = contact_pos;
+    end
+    
     function h = plot(obj,use_lcmgl,cone_length,cone_name)
       % @param use_lcmgl  A boolean, true if visualize in lcmgl, false if
       % visualize in MATLAB viewer
