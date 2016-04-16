@@ -98,6 +98,21 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
     function obj = addRunningCost(obj,running_cost_fun)
     end
     
+    function sol = retrieveSolution(obj,x)
+      sol = retrieveSolution@ContactWrenchSetDynamicsFullKineamticsPlanner(obj,x);
+      sol.friction_cones = obj.friction_cones;
+      sol.num_fc_pts = obj.num_fc_pts;
+      sol.num_grasp_pts = obj.num_grasp_pts;
+      sol.num_grasp_wrench_vert = obj.num_grasp_wrench_vert;
+      sol.grasp_pos = cell(obj.N,1);
+      sol.grasp_wrench_vert = obj.grasp_wrench_vert;
+      for i = 1:obj.N
+        for j = 1:obj.num_fc_pts(i)
+          sol.friction_cones{i}(j) = sol.friction_cones{i}(j).setContactPos(x(obj.fc_contact_pos_inds{i}(:,j)));
+        end
+        sol.grasp_pos{i} = reshape(x(obj.grasp_contact_pos_inds{i}),3,obj.num_grasp_pts(i));
+      end
+    end
     function x_guess = getInitialVars(obj,q,v,dt)
       x_guess = getInitialVars@ContactWrenchSetDynamicsFullKineamticsPlanner(obj,q,v,dt);
       kinsol = cell(obj.N,1);

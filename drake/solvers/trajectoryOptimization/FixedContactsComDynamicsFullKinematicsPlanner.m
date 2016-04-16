@@ -71,7 +71,6 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
       sol.num_grasp_pts = obj.num_grasp_pts;
       sol.num_grasp_wrench_vert = obj.num_grasp_wrench_vert;
       sol.grasp_pos = cell(obj.N,1);
-      sol.gresp_wrench_vert = cell(obj.N,1);
       for i = 1:obj.N
         sol.friction_cones{i} = LinearizedFrictionCone.empty(obj.num_fc_pts(i),0);
         for j = 1:obj.num_fc_pts(i)
