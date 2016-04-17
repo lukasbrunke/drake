@@ -78,9 +78,9 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
   }
 
   if (lenrw == 0) {  // then initialize (sninit needs some default allocation)
-    lenrw = 500000;
+    lenrw = 3000000;
     rw.reset(new snopt::doublereal[lenrw]);
-    leniw = 500000;
+    leniw = 1300000;
     iw.reset(new snopt::integer[leniw]);
     lencw = 500;
     cw.reset(new char[8 * lencw]);
