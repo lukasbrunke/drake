@@ -145,6 +145,10 @@ fccdfkp_sos_planner = fccdfkp_sos_planner.addConstraint(cnstr,num2cell(rfoot_lan
 cnstr = WorldPositionConstraint(robot,r_foot,r_foot_contact_pts,[nan(2,4);0.03*ones(1,4)],nan(3,4));
 fccdfkp_sos_planner = fccdfkp_sos_planner.addConstraint(cnstr,num2cell(rfoot_takeoff_idx+1:rfoot_land_idx-1));
 
+% add a cost on centroidal momentum
+Q_centroidal_momentum = 10*eye(6);
+fccdfkp_sos_planner = fccdfkp_sos_planner.addCentroidalMomentumCost(Q_centroidal_momentum);
+
 x_init = fccdfkp_sos_planner.getInitialVars(sol.q,sol.v,sol.dt);
 x_init(fccdfkp_sos_planner.world_momentum_dot_inds) = sol.momentum_dot(:);
 x_init(fccdfkp_sos_planner.cws_margin_ind) = cws_margin_sol;

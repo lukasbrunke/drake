@@ -49,44 +49,15 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
     function obj = addDynamicConstraints(obj)
     end
     
-    function obj = setCWSMarginCost(obj,cws_margin_cost)
-      sizecheck(cws_margin_cost,[1,1]);
-      if(cws_margin_cost<0)
-        error('cws_margin_cost should be non-negative');
+    function obj = addCentroidalMomentumCost(obj,Q_centroidal_momentum)
+      sizecheck(Q_centroidal_momentum,[6,6]);
+      Q_centroidal_momentum = Q_centroidal_momentum+Q_centroidal_momentum';
+      if(any(eig(Q_centroidal_momentum)<0))
+        error('Q_centroidal_momentum should be a psd matrix');
       end
-      obj.cws_margin_cost = cws_margin_cost;
-      obj = obj.addCost(LinearConstraint(-inf,inf,-obj.cws_margin_cost),obj.cws_margin_ind);
-    end
-    
-    function obj = setPostureErrCost(obj,Q,q_nom)
-      sizecheck(Q,[obj.nq,obj.nq]);
-      Q = (Q+Q')/2;
-      if(any(eig(Q)<0))
-        error('Q should be psd');
-      end
-      sizecheck(q_nom,[obj.nq,obj.N]);
-      cost = QuadraticSumConstraint(-inf,inf,Q,q_nom);
-      obj = obj.addCost(cost,obj.q_inds(:));
-    end
-    
-    function obj = setCOMddotCost(obj,Q_comddot)
-      sizecheck(Q_comddot,[3,3]);
-      Q_comddot = ((Q_comddot+Q_comddot')/2)/obj.robot_mass;
-      if(any(eig(Q_comddot)<0))
-        error('Q_comddot should be psd');
-      end
-      cost = QuadraticSumConstraint(-inf,inf,Q_comddot,zeros(3,obj.N));
-      obj = obj.addCost(cost,obj.world_momentum_dot_inds(1:3,:));
-    end
-    
-    function obj = setVelocityCost(obj,Qv)
-      sizecheck(Qv,[obj.nv,obj.nv]);
-      Qv = (Qv+Qv')/2;
-      if(any(eig(Qv)<0))
-        error('Qv should be psd');
-      end
-      cost = QuadraticSumConstraint(-inf,inf,Qv,zeros(obj.nv,obj.N));
-      obj = obj.addCost(cost,obj.v_inds(:));
+      
+      cost = QuadraticSumConstraint(-inf,inf,Q_centroidal_momentum,zeros(6,obj.N));
+      obj = obj.addCost(cost,obj.centroidal_momentum_inds);
     end
     
     function x_guess = getInitialVars(obj,q,v,dt)
@@ -342,6 +313,46 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
         -0.5*sparse(reshape(bsxfun(@plus,[2;3;1;3;1;2],6*(0:(obj.N-2))),[],1),reshape(bsxfun(@plus,3+[1;1;2;2;3;3;],3*(0:(obj.N-2))),[],1),reshape(f_cross(:,2:end).*bsxfun(@times,ones(6,1),dt),[],1),6*(obj.N-1),3*obj.N);
       dc_ddt = sparse((1:6*(obj.N-1))',reshape(bsxfun(@times,ones(6,1),(1:obj.N-1)),[],1),-0.5*(hdot(:,1:end-1)+hdot(:,2:end)),6*(obj.N-1),obj.N-1);
       dc = [dc_dcentroidal_momentum dc_dmomentum_dot dc_dcom dc_ddt];
+    end
+    
+    function obj = setCWSMarginCost(obj,cws_margin_cost)
+      sizecheck(cws_margin_cost,[1,1]);
+      if(cws_margin_cost<0)
+        error('cws_margin_cost should be non-negative');
+      end
+      obj.cws_margin_cost = cws_margin_cost;
+      obj = obj.addCost(LinearConstraint(-inf,inf,-obj.cws_margin_cost),obj.cws_margin_ind);
+    end
+    
+    function obj = setPostureErrCost(obj,Q,q_nom)
+      sizecheck(Q,[obj.nq,obj.nq]);
+      Q = (Q+Q')/2;
+      if(any(eig(Q)<0))
+        error('Q should be psd');
+      end
+      sizecheck(q_nom,[obj.nq,obj.N]);
+      cost = QuadraticSumConstraint(-inf,inf,Q,q_nom);
+      obj = obj.addCost(cost,obj.q_inds(:));
+    end
+    
+    function obj = setCOMddotCost(obj,Q_comddot)
+      sizecheck(Q_comddot,[3,3]);
+      Q_comddot = ((Q_comddot+Q_comddot')/2)/obj.robot_mass;
+      if(any(eig(Q_comddot)<0))
+        error('Q_comddot should be psd');
+      end
+      cost = QuadraticSumConstraint(-inf,inf,Q_comddot,zeros(3,obj.N));
+      obj = obj.addCost(cost,obj.world_momentum_dot_inds(1:3,:));
+    end
+    
+    function obj = setVelocityCost(obj,Qv)
+      sizecheck(Qv,[obj.nv,obj.nv]);
+      Qv = (Qv+Qv')/2;
+      if(any(eig(Qv)<0))
+        error('Qv should be psd');
+      end
+      cost = QuadraticSumConstraint(-inf,inf,Qv,zeros(obj.nv,obj.N));
+      obj = obj.addCost(cost,obj.v_inds(:));
     end
   end
 end

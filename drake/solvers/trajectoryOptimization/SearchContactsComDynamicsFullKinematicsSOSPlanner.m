@@ -118,7 +118,25 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
         end
         sol.grasp_pos{i} = reshape(x(obj.grasp_contact_pos_inds{i}),3,obj.num_grasp_pts(i));
       end
+      sol.l2 = cell(obj.N,1);
+      sol.l4 = cell(obj.N,1);
+      sol.l0 = subs(obj.l0,obj.l0_gram_var(:),reshape(x(obj.l0_gram_var_inds),[],1));
+      sol.l1 = subs(obj.l1,obj.l1_gram_var(:),reshape(x(obj.l1_gram_var_inds),[],1));
+      sol.l3 = subs(obj.l3,obj.l3_gram_var(:),reshape(x(obj.l3_gram_var_inds),[],1));
+      sol.V = msspoly.zeros(obj.N,1);
+      ab_monomials2 = [obj.a_indet;obj.b_indet;1];
+      triu_mask = triu(ones(8))~=0;
+      for i = 1:obj.N
+        sol.l2{i} = subs(obj.l2{i},obj.l2_gram_var{i}(:),reshape(x(obj.l2_gram_var_inds{i}),[],1));
+        sol.l4{i} = subs(obj.l4{i},obj.l4_gram_var{i}(:),reshape(x(obj.l4_gram_var_inds{i}),[],1));
+        V_gram_var_val = x(obj.V_gram_var_inds(:,i));
+        V_gram = zeros(8);
+        V_gram(triu_mask) = V_gram_var_val;
+        V_gram = V_gram'*V_gram;
+        sol.V(i) = ab_monomials2'*V_gram*ab_monomials2;
+      end
     end
+    
     function x_guess = getInitialVars(obj,q,v,dt)
       x_guess = getInitialVars@ContactWrenchSetDynamicsFullKineamticsPlanner(obj,q,v,dt);
       kinsol = cell(obj.N,1);
