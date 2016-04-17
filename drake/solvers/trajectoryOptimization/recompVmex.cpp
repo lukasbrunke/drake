@@ -18,7 +18,6 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
 
   double cnstr_normalizer = *mxGetPr(prhs[7]);
 
-  mexPrintf("nx:%d\n",nx);
 
   Map<VectorXd> coeff_match(mxGetPr(prhs[1]),nx);
   Map<VectorXd> dcoeff_match(mxGetPr(prhs[4]),nx);
@@ -29,7 +28,6 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
     x_dcoeff(i) = x(static_cast<int>(dcoeff_match(i))-1);
   }
 
-  mexPrintf("resort x\n");
 
   int nc = mxGetM(prhs[3]);
   int coeff_power_nnz = mxGetNzmax(prhs[2]);
@@ -37,7 +35,6 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
   int dcoeff_power_nnz = mxGetNzmax(prhs[5]);
   int dcoeff_M_nnz = mxGetNzmax(prhs[6]);
   
-  mexPrintf("get nnz\n");
 
   mwIndex* coeff_power_ir = mxGetIr(prhs[2]);
   mwIndex* coeff_power_jc = mxGetJc(prhs[2]);
@@ -53,7 +50,6 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
       coeff_power_col.push_back(i);
     }
   }
-  mexPrintf("get coeff_power\n");
 
   mwIndex* coeff_M_ir = mxGetIr(prhs[3]);
   mwIndex* coeff_M_jc = mxGetJc(prhs[3]);
@@ -69,7 +65,6 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
     }
   }
   coeff_M.setFromTriplets(coeff_M_triplet.begin(),coeff_M_triplet.end());
-  mexPrintf("get codff_M\n");
 
   mwIndex* dcoeff_power_ir = mxGetIr(prhs[5]);
   mwIndex* dcoeff_power_jc = mxGetJc(prhs[5]);
@@ -85,7 +80,6 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
       dcoeff_power_col.push_back(i);
     }
   }
-  mexPrintf("get dcoeff_power\n");
 
  
   
@@ -103,21 +97,18 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
     }
   }
   dcoeff_M.setFromTriplets(dcoeff_M_triplet.begin(),dcoeff_M_triplet.end());
-  mexPrintf("get dcoeff_M\n");
 
   VectorXd coeff_prod = VectorXd::Ones(coeff_M_cols);
   for(int i=0;i<coeff_power_nnz;i++) {
     coeff_prod(coeff_power_row[i]) *= pow(x_coeff(coeff_power_col[i]),coeff_power_val(i));
   }
   VectorXd c = coeff_M*coeff_prod/cnstr_normalizer;
-  mexPrintf("get c\n");
 
   VectorXd dcoeff_prod = VectorXd::Ones(dcoeff_M_cols);
   for(int i = 0;i<dcoeff_power_nnz;i++) {
     dcoeff_prod(dcoeff_power_row[i]) *= pow(x_dcoeff(dcoeff_power_col[i]),dcoeff_power_val(i));
   }
   MatrixXd dc = dcoeff_M*dcoeff_prod/cnstr_normalizer;
-  mexPrintf("get dc\n");
 
   plhs[0] = mxCreateDoubleMatrix(nc,1,mxREAL);
   memcpy(mxGetPr(plhs[0]),c.data(),sizeof(double)*nc);
