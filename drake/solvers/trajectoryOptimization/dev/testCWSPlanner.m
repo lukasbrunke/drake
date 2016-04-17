@@ -158,7 +158,7 @@ x_init = fccdfkp_sos_planner.setVGramVarVal(x_init,clean(V));
 fccdfkp_sos_planner = fccdfkp_sos_planner.setSolverOptions('snopt','print','test_fccdfkp_sos.out');
 
 tic;
-x = fccdfkp_sos_planner.solve(x_init);
+[x,objective,info] = fccdfkp_sos_planner.solve(x_init);
 toc;
 keyboard;
 end
