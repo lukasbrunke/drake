@@ -186,7 +186,7 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
           obj.Aeq_cws{i} = P.He(:,1:6);
           obj.beq_cws{i} = P.He(:,7);
         catch
-          [obj.Ain_cws{i},obj.bin_cws{i},obj.Aeq_cws{i},obj.beq_cws{i}] = vert2lcon([obj.cws_vert{i}.*bsxfun(@times,ones(6,1),(obj.robot_mass*obj.gravity*50./sqrt(sum(obj.cws_vert{i}.^2,1)))) obj.cws_vert{i}]');
+          [obj.Ain_cws{i},obj.bin_cws{i},obj.Aeq_cws{i},obj.beq_cws{i}] = vert2lcon([zeros(6,1) obj.cws_ray{i}.*bsxfun(@times,ones(6,1),(obj.robot_mass*obj.gravity*50./sqrt(sum(obj.cws_ray{i}.^2,1)))) obj.cws_vert{i}]');
         end
         normalizer = sqrt(sum(obj.Ain_cws{i}.^2,2));
         obj.Ain_cws{i} = obj.Ain_cws{i}./bsxfun(@times,normalizer,ones(1,6));
