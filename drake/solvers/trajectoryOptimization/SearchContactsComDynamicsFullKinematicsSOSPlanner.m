@@ -67,6 +67,8 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
     l2
     l3
     l4
+    
+    l_gram_var_count
   end
   
   methods
@@ -338,20 +340,13 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       obj.com_var = reshape(msspoly('r',3*obj.N),3,obj.N);
       obj.momentum_dot_var = reshape(msspoly('h',6*obj.N),6,obj.N);
       obj.cws_margin_var = msspoly('s',1);
-      x_name0 = cell(36*obj.N,1);
-      x_name1 = cell(8*obj.N,1);
-      x_name3 = cell(36*obj.N,1);
-      for i = 1:obj.N
-        x_name0((i-1)*36+(1:36)) = repmat({sprintf('l0_gram_var[%d]',i)},36,1);
-        x_name1((i-1)*8+(1:8)) = repmat({sprintf('l1_gram_var[%d]',i)},8,1);
-        x_name3((i-1)*36+(1:36)) = repmat({sprintf('l3_gram_var[%d]',i)},36,1);
+      
+      if(obj.use_lin_fc)
+        obj.cws_margin_sos = CWSMarginSOSconditionLinFC(obj.num_fc_edges,obj.robot_mass,obj.N,obj.Qw,obj.num_fc_pts,obj.num_grasp_pts,obj.num_grasp_wrench_vert);
+      else
+        obj.cws_margin_sos = CWSMarginSOSconditionNonlinearFC(obj.robot_mass,obj.N,obj.Qw,obj.num_fc_pts,obj.num_grasp_pts,obj.num_grasp_wrench_vert);
       end
-      [obj,tmp_idx] = obj.addDecisionVariable(36*obj.N,x_name0);
-      obj.l0_gram_var_inds = reshape(tmp_idx,36,obj.N);
-      [obj,tmp_idx] = obj.addDecisionVariable(8*obj.N,x_name1);
-      obj.l1_gram_var_inds = reshape(tmp_idx,8,obj.N);
-      [obj,tmp_idx] = obj.addDecisionVariable(36*obj.N,x_name3);
-      obj.l3_gram_var_inds = reshape(tmp_idx,36,obj.N);
+      
       total_num_grasp_wrench = 0;
       for i = 1:obj.N
         total_num_grasp_wrench = total_num_grasp_wrench + prod(obj.num_grasp_wrench_vert{i});
@@ -361,76 +356,22 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       else
         l_gram_var = msspoly('l',80*obj.N+36*sum(obj.num_fc_pts)*2+36*total_num_grasp_wrench);
       end
-      obj.l0_gram_var = reshape(l_gram_var(1:36*obj.N),36,obj.N);
-      obj.l1_gram_var = reshape(l_gram_var(36*obj.N+(1:8*obj.N)),8,obj.N);
-      obj.l3_gram_var = reshape(l_gram_var(44*obj.N+(1:36*obj.N)),36,obj.N);
-
-      obj.l2_gram_var_inds = cell(obj.N,1);
-      obj.l4_gram_var_inds = cell(obj.N,1);
-      obj.l2_gram_var = cell(obj.N,1);
-      obj.l4_gram_var = cell(obj.N,1);
-      if(obj.use_lin_fc)
-        obj.cws_margin_sos = CWSMarginSOSconditionLinFC(obj.num_fc_edges,obj.robot_mass,obj.N,obj.Qw,obj.num_fc_pts,obj.num_grasp_pts,obj.num_grasp_wrench_vert);
-      else
-        obj.cws_margin_sos = CWSMarginSOSconditionNonlinearFC(obj.robot_mass,obj.N,obj.Qw,obj.num_fc_pts,obj.num_grasp_pts,obj.num_grasp_wrench_vert);
-      end
       obj.a_indet = obj.cws_margin_sos.a_indet;
       obj.b_indet = obj.cws_margin_sos.b_indet;
       ab_monomials1 = [obj.cws_margin_sos.a_indet;obj.cws_margin_sos.b_indet;1];
-      l0_gram = cell(obj.N,1);
-      l3_gram = cell(obj.N,1);
       triu_mask = triu(ones(8))~=0;
 
-      obj.l0 = msspoly.zeros(obj.N,1);
-      obj.l1 = msspoly.zeros(obj.N,1);
-      obj.l2 = cell(obj.N,1);
-      obj.l3 = msspoly.zeros(obj.N,1);
-      obj.l4 = cell(obj.N,1);
-      l_gram_var_count = 80*obj.N;
-      for i = 1:obj.N
-        l0_gram{i} = msspoly.zeros(8,8);
-        l0_gram{i}(triu_mask) = obj.l0_gram_var(:,i);
-        l0_gram{i} = l0_gram{i}'*l0_gram{i};
-        obj.l0(i) = ab_monomials1'*l0_gram{i}*ab_monomials1+1;
-
-        obj.l1(i) = ab_monomials1'*obj.l1_gram_var(:,i);
-
-        l3_gram{i} = msspoly.zeros(8,8);
-        l3_gram{i}(triu_mask) = obj.l3_gram_var(:,i);
-        l3_gram{i} = l3_gram{i}'*l3_gram{i};
-        obj.l3(i) = ab_monomials1'*l3_gram{i}*ab_monomials1;
-
-        if(obj.use_lin_fc)
-          obj.l2{i} = msspoly.zeros(obj.num_fc_pts(i),obj.num_fc_edges);
-          x_name2 = repmat({sprintf('l2_gram_var[%d]',i)},36*obj.num_fc_pts(i)*obj.num_fc_edges,1);
-          [obj,tmp_idx] = obj.addDecisionVariable(36*obj.num_fc_pts(i)*obj.num_fc_edges,x_name2);
-          obj.l2_gram_var_inds{i} = reshape(tmp_idx,36,obj.num_fc_pts(i)*obj.num_fc_edges);
-          obj.l2_gram_var{i} = reshape(l_gram_var(l_gram_var_count+(1:36*obj.num_fc_pts(i)*obj.num_fc_edges)),36,obj.num_fc_pts(i)*obj.num_fc_edges);
-          l_gram_var_count = l_gram_var_count+36*obj.num_fc_pts(i)*obj.num_fc_edges;
-          for j = 1:obj.num_fc_pts(i)
-            for k = 1:obj.num_fc_edges
-              l2_gram = msspoly.zeros(8,8);
-              l2_gram(triu_mask) = obj.l2_gram_var{i}(:,(j-1)*obj.num_fc_edges+k);
-              l2_gram = l2_gram'*l2_gram;
-              obj.l2{i}(j,k) = ab_monomials1'*l2_gram*ab_monomials1;
-            end
-          end
-        else
-        end
-        num_grasp_wrench_vert_i = prod(obj.num_grasp_wrench_vert{i});
-        obj.l4{i} = msspoly.zeros(num_grasp_wrench_vert_i,1);
-        x_name4 = repmat({sprintf('l4_gram_var[%d]',i)},36*num_grasp_wrench_vert_i,1);
-        [obj,tmp_idx] = obj.addDecisionVariable(36*num_grasp_wrench_vert_i,x_name4);
-        obj.l4_gram_var_inds{i} = reshape(tmp_idx,36,num_grasp_wrench_vert_i);
-        obj.l4_gram_var{i} = reshape(l_gram_var(l_gram_var_count+(1:36*num_grasp_wrench_vert_i)),36,num_grasp_wrench_vert_i);
-        l_gram_var_count = l_gram_var_count+36*num_grasp_wrench_vert_i;
-        for j = 1:num_grasp_wrench_vert_i
-          l4_gram = msspoly.zeros(8,8);
-          l4_gram(triu_mask) = obj.l4_gram_var{i}(:,j);
-          l4_gram = l4_gram'*l4_gram;
-          obj.l4{i}(j) = ab_monomials1'*l4_gram*ab_monomials1;
-        end
-      end
+      obj.l_gram_var_count = 0;
+      
+      obj = obj.addL0(l_gram_var,ab_monomials1,triu_mask);
+      
+      obj = obj.addL1(l_gram_var,ab_monomials1);
+      
+      obj = obj.addL2(l_gram_var,ab_monomials1,triu_mask);
+      
+      obj = obj.addL3(l_gram_var,ab_monomials1,triu_mask);
+      
+      obj = obj.addL4(l_gram_var,ab_monomials1,triu_mask);
 
       contact_pos = msspoly('p',3*sum(obj.num_fc_pts)+3*sum(obj.num_grasp_pts));
       contact_pos_count = 0;
@@ -576,6 +517,106 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
         Q = double(decompQuadraticPoly(V(i),[obj.a_indet;obj.b_indet]));
         R = chol(Q+eps*eye(8));
         V_gram_var_val(:,i) = R(triu_mask);
+      end
+    end
+    
+    function obj = addL0(obj,l_gram_var,ab_monomials1,triu_mask)
+      x_name0 = cell(36*obj.N,1);
+      for i = 1:obj.N
+        x_name0((i-1)*36+(1:36)) = repmat({sprintf('l0_gram_var[%d]',i)},36,1);
+      end
+      [obj,tmp_idx] = obj.addDecisionVariable(36*obj.N,x_name0);
+      obj.l0_gram_var_inds = reshape(tmp_idx,36,obj.N);
+      obj.l0_gram_var = reshape(l_gram_var(obj.l_gram_var_count+(1:36*obj.N)),36,obj.N);
+      l0_gram = cell(obj.N,1);
+      obj.l0 = msspoly.zeros(obj.N,1);
+      for i = 1:obj.N
+        l0_gram{i} = msspoly.zeros(8,8);
+        l0_gram{i}(triu_mask) = obj.l0_gram_var(:,i);
+        l0_gram{i} = l0_gram{i}'*l0_gram{i};
+        obj.l0(i) = ab_monomials1'*l0_gram{i}*ab_monomials1+1;
+      end
+      obj.l_gram_var_count = obj.l_gram_var_count+36*obj.N;
+    end
+    
+    function obj = addL1(obj,l_gram_var,ab_monomials1)
+      x_name1 = cell(8*obj.N,1);
+      for i = 1:obj.N
+        x_name1((i-1)*8+(1:8)) = repmat({sprintf('l1_gram_var[%d]',i)},8,1);
+      end
+      [obj,tmp_idx] = obj.addDecisionVariable(8*obj.N,x_name1);
+      obj.l1_gram_var_inds = reshape(tmp_idx,8,obj.N);
+      obj.l1_gram_var = reshape(l_gram_var(obj.l_gram_var_count+(1:8*obj.N)),8,obj.N);
+      obj.l1 = msspoly.zeros(obj.N,1);
+      for i = 1:obj.N
+        obj.l1(i) = ab_monomials1'*obj.l1_gram_var(:,i);
+      end
+      obj.l_gram_var_count = obj.l_gram_var_count+8*obj.N;
+    end
+    
+    function obj = addL2(obj,l_gram_var,ab_monomials1,triu_mask)
+      obj.l2_gram_var_inds = cell(obj.N,1);
+      obj.l2_gram_var = cell(obj.N,1);
+      obj.l2 = cell(obj.N,1);
+      for i = 1:obj.N
+        if(obj.use_lin_fc)
+          obj.l2{i} = msspoly.zeros(obj.num_fc_pts(i),obj.num_fc_edges);
+          x_name2 = repmat({sprintf('l2_gram_var[%d]',i)},36*obj.num_fc_pts(i)*obj.num_fc_edges,1);
+          [obj,tmp_idx] = obj.addDecisionVariable(36*obj.num_fc_pts(i)*obj.num_fc_edges,x_name2);
+          obj.l2_gram_var_inds{i} = reshape(tmp_idx,36,obj.num_fc_pts(i)*obj.num_fc_edges);
+          obj.l2_gram_var{i} = reshape(l_gram_var(obj.l_gram_var_count+(1:36*obj.num_fc_pts(i)*obj.num_fc_edges)),36,obj.num_fc_pts(i)*obj.num_fc_edges);
+          obj.l_gram_var_count = obj.l_gram_var_count+36*obj.num_fc_pts(i)*obj.num_fc_edges;
+          for j = 1:obj.num_fc_pts(i)
+            for k = 1:obj.num_fc_edges
+              l2_gram = msspoly.zeros(8,8);
+              l2_gram(triu_mask) = obj.l2_gram_var{i}(:,(j-1)*obj.num_fc_edges+k);
+              l2_gram = l2_gram'*l2_gram;
+              obj.l2{i}(j,k) = ab_monomials1'*l2_gram*ab_monomials1;
+            end
+          end
+        else
+          error('Not implemented yet');
+        end
+      end
+    end
+    
+    function obj = addL3(obj,l_gram_var,ab_monomials1,triu_mask)
+      x_name3 = cell(36*obj.N,1);
+      for i = 1:obj.N
+        x_name3((i-1)*36+(1:36)) = repmat({sprintf('l3_gram_var[%d]',i)},36,1);
+      end
+      
+      [obj,tmp_idx] = obj.addDecisionVariable(36*obj.N,x_name3);
+      obj.l3_gram_var_inds = reshape(tmp_idx,36,obj.N);
+      obj.l3_gram_var = reshape(l_gram_var(obj.l_gram_var_count+(1:36*obj.N)),36,obj.N);
+      obj.l3 = msspoly.zeros(obj.N,1);
+      for i = 1:obj.N
+        l3_gram = msspoly.zeros(8,8);
+        l3_gram(triu_mask) = obj.l3_gram_var(:,i);
+        l3_gram = l3_gram'*l3_gram;
+        obj.l3(i) = ab_monomials1'*l3_gram*ab_monomials1;
+      end
+      obj.l_gram_var_count = obj.l_gram_var_count+36*obj.N;
+    end
+    
+    function obj = addL4(obj,l_gram_var,ab_monomials1,triu_mask)
+      obj.l4_gram_var_inds = cell(obj.N,1);
+      obj.l4_gram_var = cell(obj.N,1);
+      obj.l4 = cell(obj.N,1);
+      for i = 1:obj.N
+        num_grasp_wrench_vert_i = prod(obj.num_grasp_wrench_vert{i});
+        obj.l4{i} = msspoly.zeros(num_grasp_wrench_vert_i,1);
+        x_name4 = repmat({sprintf('l4_gram_var[%d]',i)},36*num_grasp_wrench_vert_i,1);
+        [obj,tmp_idx] = obj.addDecisionVariable(36*num_grasp_wrench_vert_i,x_name4);
+        obj.l4_gram_var_inds{i} = reshape(tmp_idx,36,num_grasp_wrench_vert_i);
+        obj.l4_gram_var{i} = reshape(l_gram_var(obj.l_gram_var_count+(1:36*num_grasp_wrench_vert_i)),36,num_grasp_wrench_vert_i);
+        obj.l_gram_var_count = obj.l_gram_var_count+36*num_grasp_wrench_vert_i;
+        for j = 1:num_grasp_wrench_vert_i
+          l4_gram = msspoly.zeros(8,8);
+          l4_gram(triu_mask) = obj.l4_gram_var{i}(:,j);
+          l4_gram = l4_gram'*l4_gram;
+          obj.l4{i}(j) = ab_monomials1'*l4_gram*ab_monomials1;
+        end
       end
     end
   end
