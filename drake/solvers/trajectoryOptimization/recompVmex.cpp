@@ -10,30 +10,33 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
   if(nrhs!=8 || nlhs > 2) {
     mexErrMsgIdAndTxt("Drake:recompVmex:BadInputs","Usage: [c,dc] = recompV(x,coeff_match,coeff_power,coeff_M,dcoeff_match,dcoeff_power,dcoeff_M,cnstr_normalizer)");
   }
-  int nx = static_cast<int>(mxGetNumberOfElements(prhs[0]));
+  mwSize nx = mxGetNumberOfElements(prhs[0]);
   Map<VectorXd> x(mxGetPr(prhs[0]),nx);
- 
-  assert(mxGetM(prhs[1]) == nx);
-  assert(mxGetM(prhs[4]) == nx);
+  mwSize nx_coeff = mxGetM(prhs[1]);
+  mwSize nx_dcoeff = mxGetM(prhs[4]);
+  assert(nx_coeff <= nx);
+  assert(nx_dcoeff <= nx);
 
   double cnstr_normalizer = *mxGetPr(prhs[7]);
 
 
   Map<VectorXd> coeff_match(mxGetPr(prhs[1]),nx);
   Map<VectorXd> dcoeff_match(mxGetPr(prhs[4]),nx);
-  VectorXd x_coeff(nx);
-  VectorXd x_dcoeff(nx);
-  for(int i = 0;i<nx;i++) {
+  VectorXd x_coeff(nx_coeff);
+  VectorXd x_dcoeff(nx_dcoeff);
+  for(int i = 0;i<nx_coeff;i++) {
     x_coeff(i) = x(static_cast<int>(coeff_match(i))-1);
+  }
+  for(int i = 0;i<nx_dcoeff;i++) {
     x_dcoeff(i) = x(static_cast<int>(dcoeff_match(i))-1);
   }
 
 
-  int nc = mxGetM(prhs[3]);
-  int coeff_power_nnz = mxGetNzmax(prhs[2]);
-  int coeff_M_nnz = mxGetNzmax(prhs[3]);
-  int dcoeff_power_nnz = mxGetNzmax(prhs[5]);
-  int dcoeff_M_nnz = mxGetNzmax(prhs[6]);
+  mwSize nc = mxGetM(prhs[3]);
+  mwSize coeff_power_nnz = mxGetNzmax(prhs[2]);
+  mwSize coeff_M_nnz = mxGetNzmax(prhs[3]);
+  mwSize dcoeff_power_nnz = mxGetNzmax(prhs[5]);
+  mwSize dcoeff_M_nnz = mxGetNzmax(prhs[6]);
   
 
   mwIndex* coeff_power_ir = mxGetIr(prhs[2]);
