@@ -52,6 +52,7 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
     b_indet
     
     sos_cnstr_normalizer;
+    l1_normalizer;
   end
   
   properties(Access = private)
@@ -87,10 +88,14 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       if(~isfield(options,'num_fc_edges'))
         options.num_fc_edges = 4;
       end
+      if(~isfield(options,'l1_normalizer'))
+        options.l1_normalizer = 100;
+      end
       obj = obj@ContactWrenchSetDynamicsFullKineamticsPlanner(robot,N,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,options);
       obj.use_lin_fc = options.use_lin_fc;
       obj.num_fc_edges = options.num_fc_edges;
       obj.sos_cnstr_normalizer = options.sos_cnstr_normalizer;
+      obj.l1_normalizer = options.l1_normalizer;
       
       obj = obj.parseContactWrenchStruct(contact_wrench_struct);
       sizecheck(Qw,[6,6]);
@@ -104,10 +109,11 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       obj.l2_bbcon_id = nan(obj.N,1);
       
       obj = obj.setSolverOptions('snopt','majorfeasibilitytolerance',1e-6);
-      obj = obj.setSolverOptions('snopt','superbasicslimit',1e4);
+      obj = obj.setSolverOptions('snopt','superbasicslimit',obj.num_vars+1);
       obj = obj.setSolverOptions('snopt','majoroptimalitytolerance',3e-4);
       obj = obj.setSolverOptions('snopt','iterationslimit',1e6);
       obj = obj.setSolverOptions('snopt','majoriterationslimit',500);
+      obj = obj.setSolverOptions('snopt','scaleoption',2);
     end
     
     function obj = addRunningCost(obj,running_cost_fun)
@@ -172,13 +178,21 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       obj = obj.addConstraint(ConstantConstraint(l1_gram_var_val(:)),obj.l1_gram_var_inds(:));
     end
     
-    function obj = fixL2(obj,l2)
+    function obj = fixL2(obj,l2,knot_idx)
       l2_gram_var_val = obj.getL2GramVarVal(l2);        
+      i_in_knot = ismember((1:obj.N)',reshape(knot_idx,[],1));
       for i = 1:obj.N
-        if(isnan(obj.l2_bbcon_id(i)))
-          [obj,obj.l2_bbcon_id(i)] = obj.addConstraint(ConstantConstraint(l2_gram_var_val{i}(:)),obj.l2_gram_var_inds{i}(:));
+        if(i_in_knot(i))
+          if(isnan(obj.l2_bbcon_id(i)))
+            [obj,obj.l2_bbcon_id(i)] = obj.addConstraint(ConstantConstraint(l2_gram_var_val{i}(:)),obj.l2_gram_var_inds{i}(:));
+          else
+            [obj,obj.l2_bbcon_id(i)] = obj.updateBoundingBoxConstraint(obj.l2_bbcon_id(i),ConstantConstraint(l2_gram_var_val{i}(:)),obj.l2_gram_var_inds{i}(:));
+          end
         else
-          [obj,obj.l2_bbcon_id(i)] = obj.updateBoundingBoxConstraint(obj.l2_bbcon_id(i),ConstantConstraint(l2_gram_var_val{i}(:)),obj.l2_gram_var_inds{i}(:));
+          if(~isnan(obj.l2_bbcon_id(i)))
+            obj = obj.deleteBoundingBoxConstraint(obj.l2_bbcon_id(i));
+            obj.l2_bbcon_id(i) = nan;
+          end
         end
       end
     end
@@ -484,7 +498,7 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
     
     function l1_gram_var_val = getL1GramVarVal(obj,l1)
       [~,q] = linear(l1,[obj.a_indet;obj.b_indet]);
-      l1_gram_var_val = [double(q(:,2:end)) double(q(:,1))]';
+      l1_gram_var_val = [double(q(:,2:end)) double(q(:,1))]'/obj.l1_normalizer;
     end
     
     function l2_gram_var_val = getL2GramVarVal(obj,l2)
@@ -588,7 +602,7 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       obj.l1_gram_var = reshape(l_gram_var(obj.l_gram_var_count+(1:8*obj.N)),8,obj.N);
       obj.l1 = msspoly.zeros(obj.N,1);
       for i = 1:obj.N
-        obj.l1(i) = ab_monomials1'*obj.l1_gram_var(:,i);
+        obj.l1(i) = ab_monomials1'*obj.l1_gram_var(:,i)*obj.l1_normalizer;
       end
       obj.l_gram_var_count = obj.l_gram_var_count+8*obj.N;
     end

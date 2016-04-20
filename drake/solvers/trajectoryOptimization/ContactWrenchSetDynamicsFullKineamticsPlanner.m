@@ -16,6 +16,7 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
   
   properties(Access = private)
     centroidal_momentum_cost_idx
+    cws_margin_cnstr_id
   end
   
   methods
@@ -124,12 +125,16 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
       centroidal_momentum_dot(1:3,:) = centroidal_momentum_dot(1:3,:)-cross(sol.com,centroidal_momentum_dot(4:6,:));
       valuecheck(diff(sol.centroidal_momentum,[],2),0.5*(centroidal_momentum_dot(:,1:end-1)+centroidal_momentum_dot(:,2:end)).*bsxfun(@times,ones(6,1),sol.dt'),1e-3);
     end
+    
+    function obj = setCWSMarginBound(obj,lb,ub)
+      obj = obj.updateBoundingBoxConstraint(obj.cws_margin_cnstr_id,BoundingBoxConstraint(lb,ub),obj.cws_margin_ind);
+    end
   end
   
   methods(Access = protected)
     function obj = addState(obj)
       [obj,obj.cws_margin_ind] = obj.addDecisionVariable(1,{'cws_margin'});
-      obj = obj.addConstraint(BoundingBoxConstraint(0,inf),obj.cws_margin_ind);
+      [obj,obj.cws_margin_cnstr_id] = obj.addConstraint(BoundingBoxConstraint(0,inf),obj.cws_margin_ind);
       
       x_name = cell(3*obj.N,1);
       for i = 1:obj.N

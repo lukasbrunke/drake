@@ -142,14 +142,10 @@ options.num_fc_edges = num_fc_edges;
 options.sos_cnstr_normalizer = robot_mass*gravity*2;
 sccdfkp_sos = SearchContactsFixedDisturbanceFullKinematicsSOSPlanner(robot,nT,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,Qw,disturbance_pos,options);
 % add kinematic constraints on contact locations
-lfoot_cnstr0 = {WorldPositionConstraint(robot,l_foot,[0;0;0],lfoot_pos0(1:3),lfoot_pos0(1:3));...
-  WorldQuatConstraint(robot,l_foot,lfoot_pos0(4:7),0)};
-sccdfkp_sos = sccdfkp_sos.addConstraint(lfoot_cnstr0{1},{1});
-sccdfkp_sos = sccdfkp_sos.addConstraint(lfoot_cnstr0{2},{1});
-rfoot_cnstr0 = {WorldPositionConstraint(robot,r_foot,[0;0;0],rfoot_pos0(1:3),rfoot_pos0(1:3));...
-  WorldQuatConstraint(robot,r_foot,rfoot_pos0(4:7),0)};
-sccdfkp_sos = sccdfkp_sos.addConstraint(rfoot_cnstr0{1},{1});
-sccdfkp_sos = sccdfkp_sos.addConstraint(rfoot_cnstr0{2},{1});
+lfoot_cnstr0 = WorldPositionConstraint(robot,l_foot,l_foot_contact_pts0,repmat([box_tops(1,1)-box_size(1)/2-0.1;0;box_tops(3,1)],1,4),repmat([box_tops(1,1)+box_size(1)/2-0.05;box_size(2)/2;box_tops(3,1)],1,4));
+sccdfkp_sos = sccdfkp_sos.addConstraint(lfoot_cnstr0,{1});
+rfoot_cnstr0 = WorldPositionConstraint(robot,r_foot,r_foot_contact_pts0,repmat([box_tops(1,1)-box_size(1)/2-0.1;-box_size(2)/2;box_tops(3,1)],1,4),repmat([box_tops(1,1)+box_size(1)/2-0.05;0;box_tops(3,1)],1,4));
+sccdfkp_sos = sccdfkp_sos.addConstraint(rfoot_cnstr0,{1});
 
 lfoot_cnstr1 = WorldPositionConstraint(robot,l_foot,l_foot_contact_pts1,repmat([box_tops(1,2)-box_size(1)/2+0.02;0;box_tops(3,2)],1,4),repmat([box_tops(1,2)+box_size(1)/2-0.05;box_size(2)/2;box_tops(3,2)],1,4));
 sccdfkp_sos = sccdfkp_sos.addConstraint(lfoot_cnstr1,{lfoot_land_idx});
@@ -157,15 +153,14 @@ rfoot_cnstr1 = WorldPositionConstraint(robot,r_foot,r_foot_contact_pts1,repmat([
 sccdfkp_sos = sccdfkp_sos.addConstraint(rfoot_cnstr1,{rfoot_land_idx});
 
 % add centroidal momentum cost
-% Q_centroidal_momentum = eye(6);
-% sccdfkp_sos = sccdfkp_sos.setCentroidalMomentumCost(Q_centroidal_momentum);
+Q_centroidal_momentum = 1e-2*eye(6);
+sccdfkp_sos = sccdfkp_sos.setCentroidalMomentumCost(Q_centroidal_momentum);
 
 fccdfkp = fccdfkp.setSolverOptions('snopt','print','test_fccdfkp_stairs.out');
 fccdfkp = fccdfkp.setSolverOptions('snopt','majoroptimalitytolerance',2e-5);
 
 sccdfkp_sos = sccdfkp_sos.setSolverOptions('snopt','print','test_sccdfkp_sos_stairs.out');
 sccdfkp_sos = sccdfkp_sos.setSolverOptions('snopt','majoroptimalitytolerance',3e-5);
-sccdfkp_sos = sccdfkp_sos.setSolverOptions('snopt','iterationslimit',1e5);
 
 % lfoot_off_ground
 lfoot_offground_cnstr1 = WorldPositionConstraint(robot,l_foot,l_foot_contact_pts1,[nan(2,4);0.1*ones(1,4)],repmat([box_tops(1,2)-box_size(1)/2-0.03;box_size(2)/2;nan(1,1)],1,4));
@@ -240,7 +235,8 @@ x_init = sccdfkp_sos.setL3GramVarVal(x_init,l3);
 x_init = sccdfkp_sos.setL4GramVarVal(x_init,l4);
 x_init = sccdfkp_sos.setVGramVarVal(x_init,clean(V));
 
-sccdfkp_sos = sccdfkp_sos.fixL2(l2);
+sccdfkp_sos = sccdfkp_sos.fixL2(l2,(1:nT));
+sccdfkp_sos = sccdfkp_sos.setCWSMarginBound(cws_margin_sol*1.05,inf);
 tic
 [x_sol,cost,info] = sccdfkp_sos.solve(x_init);
 toc
