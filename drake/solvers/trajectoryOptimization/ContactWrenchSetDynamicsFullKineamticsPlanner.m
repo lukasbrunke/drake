@@ -14,6 +14,10 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
     q_quat_inds % A 4 x m matrix, q(q_quat_inds(:,i)) is a quaternion
   end
   
+  properties(Access = private)
+    centroidal_momentum_cost_idx
+  end
+  
   methods
     function obj = ContactWrenchSetDynamicsFullKineamticsPlanner(robot,N,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,Qw,options)
       if(nargin<11)
@@ -49,7 +53,7 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
     function obj = addDynamicConstraints(obj)
     end
     
-    function obj = addCentroidalMomentumCost(obj,Q_centroidal_momentum)
+    function obj = setCentroidalMomentumCost(obj,Q_centroidal_momentum)
       sizecheck(Q_centroidal_momentum,[6,6]);
       Q_centroidal_momentum = Q_centroidal_momentum+Q_centroidal_momentum';
       if(any(eig(Q_centroidal_momentum)<0))
@@ -57,7 +61,12 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
       end
       
       cost = QuadraticSumConstraint(-inf,inf,Q_centroidal_momentum,zeros(6,obj.N));
-      obj = obj.addCost(cost,obj.centroidal_momentum_inds);
+      if(isempty(obj.centroidal_momentum_cost_idx))
+        obj = obj.addCost(cost,obj.centroidal_momentum_inds);
+        obj.centroidal_momentum_cost_idx = length(obj.cost);
+      else
+        obj = obj.replaceCost(cost,obj.centroidal_momentum_cost_idx,obj.centroidal_momentum_inds);
+      end
     end
     
     function x_guess = getInitialVars(obj,q,v,dt)

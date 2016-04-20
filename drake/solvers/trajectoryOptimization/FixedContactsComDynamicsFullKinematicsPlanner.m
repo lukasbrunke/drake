@@ -186,7 +186,25 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
           obj.Aeq_cws{i} = P.He(:,1:6);
           obj.beq_cws{i} = P.He(:,7);
         catch
-          [obj.Ain_cws{i},obj.bin_cws{i},obj.Aeq_cws{i},obj.beq_cws{i}] = vert2lcon([zeros(6,1) obj.cws_ray{i}.*bsxfun(@times,ones(6,1),(obj.robot_mass*obj.gravity*50./sqrt(sum(obj.cws_ray{i}.^2,1)))) obj.cws_vert{i}]');
+          warning('cdd fails at knot %d',i);
+          if(isempty(obj.cws_vert{i}))
+            vert = [zeros(6,1) obj.cws_ray{i}];
+            K = convhulln(vert');
+            K = K(any(K==1,2),:);
+            obj.Ain_cws{i} = [];
+            for j = 1:size(K,1)
+              vert_j = vert(:,K(j,:));
+              null_vec = null(vert_j')';
+              null_vec = null_vec.*bsxfun(@times,-sign(sum(null_vec*vert,2)),ones(1,6));
+              null_vec = null_vec(max(null_vec*obj.cws_ray{i},[],2)<1e-5,:);
+              obj.Ain_cws{i} = [obj.Ain_cws{i};null_vec];
+            end
+            obj.bin_cws{i} = zeros(size(obj.Ain_cws{i},1),1);
+            obj.Aeq_cws{i} = [];
+            obj.beq_cws{i} = [];
+          else
+            [obj.Ain_cws{i},obj.bin_cws{i},obj.Aeq_cws{i},obj.beq_cws{i}] = vert2lcon([zeros(6,1) obj.cws_ray{i}.*bsxfun(@times,ones(6,1),(obj.robot_mass*obj.gravity*100./sqrt(sum(obj.cws_ray{i}.^2,1)))) obj.cws_vert{i}]',eps);
+          end
         end
         normalizer = sqrt(sum(obj.Ain_cws{i}.^2,2));
         obj.Ain_cws{i} = obj.Ain_cws{i}./bsxfun(@times,normalizer,ones(1,6));

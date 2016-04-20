@@ -101,11 +101,13 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       obj.Qw = Qw;
       obj.Qw_inv = inv(obj.Qw);
       
+      obj.l2_bbcon_id = nan(obj.N,1);
+      
       obj = obj.setSolverOptions('snopt','majorfeasibilitytolerance',1e-6);
       obj = obj.setSolverOptions('snopt','superbasicslimit',1e4);
       obj = obj.setSolverOptions('snopt','majoroptimalitytolerance',3e-4);
       obj = obj.setSolverOptions('snopt','iterationslimit',1e6);
-      obj = obj.setSolverOptions('snopt','majoriterationslimit',1e3);
+      obj = obj.setSolverOptions('snopt','majoriterationslimit',500);
     end
     
     function obj = addRunningCost(obj,running_cost_fun)
@@ -171,14 +173,11 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
     end
     
     function obj = fixL2(obj,l2)
-      l2_gram_var_val = obj.getL2GramVarVal(l2);
-      if(isempty(obj.l2_bbcon_id))
-        obj.l2_bbcon_id = zeros(obj.N,1);
-        for i = 1:obj.N
+      l2_gram_var_val = obj.getL2GramVarVal(l2);        
+      for i = 1:obj.N
+        if(isnan(obj.l2_bbcon_id(i)))
           [obj,obj.l2_bbcon_id(i)] = obj.addConstraint(ConstantConstraint(l2_gram_var_val{i}(:)),obj.l2_gram_var_inds{i}(:));
-        end
-      else
-        for i = 1:obj.N
+        else
           [obj,obj.l2_bbcon_id(i)] = obj.updateBoundingBoxConstraint(obj.l2_bbcon_id(i),ConstantConstraint(l2_gram_var_val{i}(:)),obj.l2_gram_var_inds{i}(:));
         end
       end
@@ -474,7 +473,11 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       l0_gram_var_val = zeros(36,obj.N);
       for i = 1:obj.N
         Q = double(decompQuadraticPoly(l0(i)-1,[obj.a_indet;obj.b_indet]));
-        R = chol(Q+eps*eye(8));
+        try
+          R = chol(Q);
+        catch
+          R = chol(Q+eps*eye(8));
+        end
         l0_gram_var_val(:,i) = R(triu_mask);
       end
     end
@@ -495,7 +498,11 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
           if(obj.use_lin_fc)
             for k = 1:obj.num_fc_edges
               Q = double(decompQuadraticPoly(l2{i}(j,k),[obj.a_indet;obj.b_indet]));
-              R = chol(Q+eps*eye(8));
+              try
+                R = chol(Q);
+              catch
+                R = chol(Q+eps*eye(8));
+              end
               l2_gram_var_val{i}(:,(j-1)*obj.num_fc_edges+k) = R(triu_mask);
             end
           end
@@ -508,7 +515,11 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       l3_gram_var_val = zeros(36,obj.N);
       for i = 1:obj.N
         Q = double(decompQuadraticPoly(l3(i),[obj.a_indet;obj.b_indet]));
-        R = chol(Q+eps*eye(8));
+        try
+          R = chol(Q);
+        catch
+          R = chol(Q+eps*eye(8));
+        end
         l3_gram_var_val(:,i) = R(triu_mask);
       end
     end
@@ -520,7 +531,11 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
         if(~isempty(obj.num_grasp_wrench_vert{i}))
           for j = 1:prod(obj.num_grasp_wrench_vert{i})
             Q = double(decompQuadraticPoly(l4{i}(j),[obj.a_indet;obj.b_indet]));
-            R = chol(Q+eps*eye(8));
+            try
+              R = chol(Q);
+            catch
+              R = chol(Q+eps*eye(8));
+            end
             l4_gram_var_val{i}(:,j) = R(triu_mask);
           end
         end
@@ -535,7 +550,11 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       triu_mask = triu(ones(8))~=0;
       for i = 1:obj.N
         Q = double(decompQuadraticPoly(V(i),[obj.a_indet;obj.b_indet]));
-        R = chol(Q+eps*eye(8));
+        try
+          R = chol(Q);
+        catch
+          R = chol(Q+eps*eye(8));
+        end
         V_gram_var_val(:,i) = R(triu_mask);
       end
     end

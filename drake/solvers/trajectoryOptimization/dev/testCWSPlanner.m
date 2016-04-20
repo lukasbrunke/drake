@@ -124,45 +124,46 @@ else
 end
 keyboard;
 friction_cones = sol.friction_cones;
-prog_lagrangian = FixedMotionSearchCWSmarginLinFC(4,robot_mass,nT,Qw,sol.num_fc_pts,sol.num_grasp_pts,sol.num_grasp_wrench_vert);
-[cws_margin_sol,l0,l1,l2,l3,l4,V,solver_sol,info] = prog_lagrangian.findCWSmargin(0,friction_cones,sol.grasp_pos,sol.grasp_wrench_vert,disturbance_pos,sol.momentum_dot,sol.com);
+prog_lagrangian = FixedMotionSearchCWSmarginLinFC(num_fc_edges,robot_mass,nT,Qw,sol.num_fc_pts,sol.num_grasp_pts,sol.num_grasp_wrench_vert);
+[cws_margin_sol,l0,l1,l2,l3,l4,V,solver_sol,info] = prog_lagrangian.findCWSmargin(50,friction_cones,sol.grasp_pos,sol.grasp_wrench_vert,disturbance_pos,sol.momentum_dot,sol.com);
 keyboard;
 
 options = struct('use_lin_fc',true);
-fccdfkp_sos_planner = SearchContactsFixedDisturbanceFullKinematicsSOSPlanner(robot,nT,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,Qw,disturbance_pos,options);
+sccdfkp_sos_planner = SearchContactsFixedDisturbanceFullKinematicsSOSPlanner(robot,nT,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,Qw,disturbance_pos,options);
 
 % fix initial state
-fccdfkp_sos_planner = fccdfkp_sos_planner.addConstraint(ConstantConstraint(sol.q(:,1)),fccdfkp_sos_planner.q_inds(:,1));
+sccdfkp_sos_planner = sccdfkp_sos_planner.addConstraint(ConstantConstraint(sol.q(:,1)),sccdfkp_sos_planner.q_inds(:,1));
 
 % dt bound
-fccdfkp_sos_planner = fccdfkp_sos_planner.addConstraint(BoundingBoxConstraint(0.05*ones(nT-1,1),0.15*ones(nT-1,1)),fccdfkp_sos_planner.h_inds);
+sccdfkp_sos_planner = sccdfkp_sos_planner.addConstraint(BoundingBoxConstraint(0.05*ones(nT-1,1),0.15*ones(nT-1,1)),sccdfkp_sos_planner.h_inds);
 
 % feet land on the ground
 cnstr = WorldPositionConstraint(robot,r_foot,r_foot_contact_pts,rfoot_contact_pos_star+repmat([0.1;0;0],1,4),[nan(2,4);rfoot_contact_pos_star(3,:)]);
-fccdfkp_sos_planner = fccdfkp_sos_planner.addConstraint(cnstr,num2cell(rfoot_land_idx:nT));
+sccdfkp_sos_planner = sccdfkp_sos_planner.addConstraint(cnstr,num2cell(rfoot_land_idx:nT));
 
 % feet above ground
 cnstr = WorldPositionConstraint(robot,r_foot,r_foot_contact_pts,[nan(2,4);0.03*ones(1,4)],nan(3,4));
-fccdfkp_sos_planner = fccdfkp_sos_planner.addConstraint(cnstr,num2cell(rfoot_takeoff_idx+1:rfoot_land_idx-1));
+sccdfkp_sos_planner = sccdfkp_sos_planner.addConstraint(cnstr,num2cell(rfoot_takeoff_idx+1:rfoot_land_idx-1));
 
 % add a cost on centroidal momentum
 Q_centroidal_momentum = 10*eye(6);
-fccdfkp_sos_planner = fccdfkp_sos_planner.addCentroidalMomentumCost(Q_centroidal_momentum);
+sccdfkp_sos_planner = sccdfkp_sos_planner.addCentroidalMomentumCost(Q_centroidal_momentum);
 
-x_init = fccdfkp_sos_planner.getInitialVars(sol.q,sol.v,sol.dt);
-x_init(fccdfkp_sos_planner.world_momentum_dot_inds) = sol.momentum_dot(:);
-x_init(fccdfkp_sos_planner.cws_margin_ind) = cws_margin_sol;
-x_init = fccdfkp_sos_planner.setL0GramVarVal(x_init,l0);
-x_init = fccdfkp_sos_planner.setL1GramVarVal(x_init,l1);
-x_init = fccdfkp_sos_planner.setL2GramVarVal(x_init,l2);
-x_init = fccdfkp_sos_planner.setL3GramVarVal(x_init,l3);
-x_init = fccdfkp_sos_planner.setL4GramVarVal(x_init,l4);
-x_init = fccdfkp_sos_planner.setVGramVarVal(x_init,clean(V));
+x_init = sccdfkp_sos_planner.getInitialVars(sol.q,sol.v,sol.dt);
+x_init(sccdfkp_sos_planner.world_momentum_dot_inds) = sol.momentum_dot(:);
+x_init(sccdfkp_sos_planner.cws_margin_ind) = cws_margin_sol;
+x_init = sccdfkp_sos_planner.setL0GramVarVal(x_init,l0);
+x_init = sccdfkp_sos_planner.setL1GramVarVal(x_init,l1);
+x_init = sccdfkp_sos_planner.setL2GramVarVal(x_init,l2);
+x_init = sccdfkp_sos_planner.setL3GramVarVal(x_init,l3);
+x_init = sccdfkp_sos_planner.setL4GramVarVal(x_init,l4);
+x_init = sccdfkp_sos_planner.setVGramVarVal(x_init,clean(V));
 
-fccdfkp_sos_planner = fccdfkp_sos_planner.setSolverOptions('snopt','print','test_fccdfkp_sos.out');
+sccdfkp_sos_planner = sccdfkp_sos_planner.setSolverOptions('snopt','print','test_fccdfkp_sos.out');
 
+sccdfkp_sos_planner = sccdfkp_sos_planner.fixL2(l2);
 tic;
-[x,objective,info] = fccdfkp_sos_planner.solve(x_init);
+[x,objective,info] = sccdfkp_sos_planner.solve(x_init);
 toc;
 keyboard;
 end
