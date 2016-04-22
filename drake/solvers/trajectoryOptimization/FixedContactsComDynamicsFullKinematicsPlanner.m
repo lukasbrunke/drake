@@ -59,6 +59,7 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
       obj = obj.setSolverOptions('snopt','majorfeasibilitytolerance',1e-6);
       obj = obj.setSolverOptions('snopt','iterationslimit',1e6);
       obj = obj.setSolverOptions('snopt','majoriterationslimit',500);
+      obj = obj.setSolverOptions('snopt','scaleoption',0);
     end
     
     function obj = addRunningCost(obj,running_cost_function)
@@ -135,8 +136,10 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
           % add the kinematic constraint that the body should reach those
           % contact positions
           co_linear_flag = false;
-          body_pts_diff = diff(contact_wrench_struct(i).cw.body_pts,2);
-          if(size(body_pts_diff,2)<=1 || all(sum(cross(body_pts_diff(:,1:end-1),body_pts_diff(:,2:end)).^2,1)<1e-4))
+          body_pts_diff = diff(contact_wrench_struct(i).cw.body_pts,1,2);
+          if(size(body_pts_diff,2)<=1)
+            co_linear_flag = true;
+          elseif(all(sum(cross(body_pts_diff(:,1:end-1),body_pts_diff(:,2:end)).^2,1)<1e-4))
             co_linear_flag = true;
           end
           if(co_linear_flag)
@@ -219,13 +222,13 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
       for i = 1:obj.N
         if(~isempty(obj.Aeq_cws{i}))
           beq = obj.beq_cws{i}-obj.Aeq_cws{i}*[0;0;obj.robot_mass*obj.gravity;zeros(3,1)];
-          cnstr = LinearConstraint(beq,beq,[obj.Aeq_cws{i} -obj.Aeq_cws{i}*[zeros(3);crossSkewSymMat([0;0;obj.robot_mass*obj.gravity])]]);
+          cnstr = LinearConstraint(beq,beq,[obj.Aeq_cws{i}*obj.momentum_dot_normalizer -obj.Aeq_cws{i}*[zeros(3);crossSkewSymMat([0;0;obj.robot_mass*obj.gravity])]]);
           cnstr = cnstr.setName(repmat({sprintf('CWS constraint[%d]',i)},size(obj.beq_cws{i},1),1));
           obj = obj.addLinearConstraint(cnstr,[obj.world_momentum_dot_inds(:,i);obj.com_inds(:,i)]);
         end
         if(~isempty(obj.Ain_cws{i}))
           bin = obj.bin_cws{i}-obj.Ain_cws{i}*[0;0;obj.robot_mass*obj.gravity;zeros(3,1)];
-          cnstr = LinearConstraint(-inf(size(obj.Ain_cws{i},1),1),bin,[obj.Ain_cws{i} -obj.Ain_cws{i}*[zeros(3);crossSkewSymMat([0;0;obj.robot_mass*obj.gravity])]]);
+          cnstr = LinearConstraint(-inf(size(obj.Ain_cws{i},1),1),bin,[obj.Ain_cws{i}*obj.momentum_dot_normalizer -obj.Ain_cws{i}*[zeros(3);crossSkewSymMat([0;0;obj.robot_mass*obj.gravity])]]);
           cnstr = cnstr.setName(repmat({sprintf('CWS constraint[%d]',i)},size(obj.Ain_cws{i},1),1));
           obj = obj.addLinearConstraint(cnstr,[obj.world_momentum_dot_inds(:,i);obj.com_inds(:,i)]);
         end

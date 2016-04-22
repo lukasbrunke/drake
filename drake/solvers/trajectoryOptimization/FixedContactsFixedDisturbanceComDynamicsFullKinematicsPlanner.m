@@ -41,7 +41,7 @@ classdef FixedContactsFixedDisturbanceComDynamicsFullKinematicsPlanner< FixedCon
         if(~isempty(obj.Ain_cws{i}))
           bin = obj.bin_cws{i}-obj.Ain_cws{i}*[0;0;obj.robot_mass*obj.gravity;zeros(3,1)];
           T_pw = [eye(3) zeros(3);crossSkewSymMat(obj.disturbance_pos(:,i)) eye(3)];
-          cnstr = LinearConstraint(-inf(size(obj.Ain_cws{i},1),1),bin,[obj.Ain_cws{i} -obj.Ain_cws{i}*[zeros(3);crossSkewSymMat([0;0;obj.robot_mass*obj.gravity])] sqrt(sum((obj.Ain_cws{i}*T_pw*obj.Qw_inv).*(obj.Ain_cws{i}*T_pw),2))]);
+          cnstr = LinearConstraint(-inf(size(obj.Ain_cws{i},1),1),bin,[obj.Ain_cws{i}*obj.momentum_dot_normalizer -obj.Ain_cws{i}*[zeros(3);crossSkewSymMat([0;0;obj.robot_mass*obj.gravity])] sqrt(sum((obj.Ain_cws{i}*T_pw*obj.Qw_inv).*(obj.Ain_cws{i}*T_pw),2))]);
           cnstr = cnstr.setName(repmat({sprintf('CWS margin constraint[%d]',i)},size(obj.Ain_cws{i},1),1));
           obj = obj.addLinearConstraint(cnstr,[obj.world_momentum_dot_inds(:,i);obj.com_inds(:,i);obj.cws_margin_ind]);
         end

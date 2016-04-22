@@ -12,6 +12,9 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
   
   properties(Access = protected)
     q_quat_inds % A 4 x m matrix, q(q_quat_inds(:,i)) is a quaternion
+    
+    momentum_dot_normalizer
+    momentum_normalizer
   end
   
   properties(Access = private)
@@ -24,8 +27,16 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
       if(nargin<11)
         options = struct();
       end
+      if(~isfield(options,'momentum_dot_normalizer'))
+        options.momentum_dot_normalizer = robot.getMass();
+      end
+      if(~isfield(options,'momentum_normalizer'))
+        options.momentum_normalizer = robot.getMass()*0.1;
+      end
       plant = SimpleDynamicsDummyPlant(robot.getNumPositions());
       obj = obj@RigidBodyKinematicsPlanner(plant,robot,N,tf_range,options);
+      obj.momentum_dot_normalizer = options.momentum_dot_normalizer;
+      obj.momentum_normalizer = options.momentum_normalizer;
       
       obj.q_quat_inds = [];
       for i = 1:obj.robot.getNumBodies()
@@ -61,7 +72,7 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
         error('Q_centroidal_momentum should be a psd matrix');
       end
       
-      cost = QuadraticSumConstraint(-inf,inf,Q_centroidal_momentum,zeros(6,obj.N));
+      cost = QuadraticSumConstraint(-inf,inf,Q_centroidal_momentum*obj.momentum_normalizer^2,zeros(6,obj.N));
       if(isempty(obj.centroidal_momentum_cost_idx))
         obj = obj.addCost(cost,obj.centroidal_momentum_inds);
         obj.centroidal_momentum_cost_idx = length(obj.cost);
@@ -86,18 +97,22 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
         x_guess(obj.com_inds(:,i)) = com(:,i);
         A = obj.robot.centroidalMomentumMatrix(kinsol);
         centroidal_momentum(:,i) = A*v(:,i);
-        x_guess(obj.centroidal_momentum_inds(:,i)) = centroidal_momentum(:,i);
+        x_guess(obj.centroidal_momentum_inds(:,i)) = centroidal_momentum(:,i)/obj.momentum_normalizer;
       end
       world_momentum_dot = diff([centroidal_momentum(4:6,:);centroidal_momentum(1:3,:)-cross(centroidal_momentum(4:6,:),com)],[],2)./bsxfun(@times,ones(6,1),dt');
       world_momentum_dot = 0.5*([zeros(6,1) world_momentum_dot]+[world_momentum_dot zeros(6,1)]);
-      x_guess(obj.world_momentum_dot_inds(:)) = reshape(world_momentum_dot,[],1);
+      x_guess(obj.world_momentum_dot_inds(:)) = reshape(world_momentum_dot/obj.momentum_dot_normalizer,[],1);
+    end
+    
+    function x = setMomentumDot(obj,x,momentum_dot)
+      x(obj.world_momentum_dot_inds) = reshape(momentum_dot,[],1)/obj.momentum_dot_normalizer;
     end
     
     function sol = retrieveSolution(obj,x_sol)
       sol.q = reshape(x_sol(obj.q_inds),obj.nq,obj.N);
       sol.v = reshape(x_sol(obj.v_inds),obj.nv,obj.N);
-      sol.centroidal_momentum = reshape(x_sol(obj.centroidal_momentum_inds),6,obj.N);
-      sol.momentum_dot = reshape(x_sol(obj.world_momentum_dot_inds),6,obj.N);
+      sol.centroidal_momentum = reshape(x_sol(obj.centroidal_momentum_inds),6,obj.N)*obj.momentum_normalizer;
+      sol.momentum_dot = reshape(x_sol(obj.world_momentum_dot_inds),6,obj.N)*obj.momentum_dot_normalizer;
       sol.dt = x_sol(obj.h_inds);
       sol.cws_margin = x_sol(obj.cws_margin_ind);
       sol.com = reshape(x_sol(obj.com_inds),3,obj.N);
@@ -127,7 +142,7 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
     end
     
     function obj = setCWSMarginBound(obj,lb,ub)
-      obj = obj.updateBoundingBoxConstraint(obj.cws_margin_cnstr_id,BoundingBoxConstraint(lb,ub),obj.cws_margin_ind);
+      [obj,obj.cws_margin_cnstr_id] = obj.updateBoundingBoxConstraint(obj.cws_margin_cnstr_id,BoundingBoxConstraint(lb,ub),obj.cws_margin_ind);
     end
   end
   
@@ -277,10 +292,10 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
       dc(1:3,obj.nq+obj.nv+(1:3)) = eye(3);
       [A,dA] = obj.robot.centroidalMomentumMatrix(kinsol);
       h = A*v;
-      c(4:9) = centroidal_momentum-h;
+      c(4:9) = centroidal_momentum*obj.momentum_normalizer-h;
       dc(4:9,1:obj.nq) = -matGradMult(dA,v);
       dc(4:9,obj.nq+(1:obj.nv)) = -A;
-      dc(4:9,obj.nq+obj.nv+3+(1:6)) = eye(6);
+      dc(4:9,obj.nq+obj.nv+3+(1:6)) = eye(6)*obj.momentum_normalizer;
     end
     
     function obj = addMomentumInterpolationConstraint(obj)
@@ -309,19 +324,20 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
     function [c,dc] = momentumInterpolationFun(obj,centroidal_momentum,momentum_dot,com,dt)
       % Use mid-point interpolation for momentum
       % first compute the centroidal momentum dot
-      centroidal_momentum = reshape(centroidal_momentum,6,obj.N);
-      momentum_dot = reshape(momentum_dot,6,obj.N);
+      centroidal_momentum = reshape(centroidal_momentum,6,obj.N)*obj.momentum_normalizer;
+      momentum_dot = reshape(momentum_dot,6,obj.N)*obj.momentum_dot_normalizer;
       com = reshape(com,3,obj.N);
       dt = reshape(dt,1,obj.N-1);
       hdot = [momentum_dot(4:6,:);momentum_dot(1:3,:)];
       hdot(1:3,:) = hdot(1:3,:)+cross(hdot(4:6,:),com);
       c = reshape(diff(centroidal_momentum,[],2)-0.5*(hdot(:,1:end-1)+hdot(:,2:end)).*bsxfun(@times,dt,ones(6,1)),[],1);
-      dc_dcentroidal_momentum = -speye(6*(obj.N-1),6*obj.N)+[sparse(6*(obj.N-1),6) speye(6*(obj.N-1))];
+      dc_dcentroidal_momentum = (-speye(6*(obj.N-1),6*obj.N)+[sparse(6*(obj.N-1),6) speye(6*(obj.N-1))])*obj.momentum_normalizer;
       com_cross = [0 0 1;0 -1 0;0 0 -1;1 0 0;0 1 0;-1 0 0]*com;
       dc_dmomentum_dot = -0.5*sparse((1:6*(obj.N-1))',reshape(bsxfun(@plus,[4;5;6;1;2;3],6*(0:(obj.N-2))),[],1),reshape(bsxfun(@times,dt,ones(6,1)),[],1),6*(obj.N-1),6*obj.N)...
         -0.5*sparse((1:6*(obj.N-1))',reshape(bsxfun(@plus,[4;5;6;1;2;3],6*(1:(obj.N-1))),[],1),reshape(bsxfun(@times,dt,ones(6,1)),[],1),6*(obj.N-1),6*obj.N)...
         -0.5*sparse(reshape(bsxfun(@plus,[2;3;1;3;1;2],6*(0:(obj.N-2))),[],1),reshape(bsxfun(@plus,[1;1;2;2;3;3;],6*(0:(obj.N-2))),[],1),reshape(-com_cross(:,1:end-1).*bsxfun(@times,dt,ones(6,1)),[],1),6*(obj.N-1),6*obj.N)...
         -0.5*sparse(reshape(bsxfun(@plus,[2;3;1;3;1;2],6*(0:(obj.N-2))),[],1),reshape(bsxfun(@plus,6+[1;1;2;2;3;3;],6*(0:(obj.N-2))),[],1),reshape(-com_cross(:,2:end).*bsxfun(@times,dt,ones(6,1)),[],1),6*(obj.N-1),6*obj.N);
+      dc_dmomentum_dot = dc_dmomentum_dot*obj.momentum_dot_normalizer;
       f_cross = [0 0 1;0 -1 0;0 0 -1;1 0 0;0 1 0;-1 0 0]*momentum_dot(1:3,:);
       dc_dcom = -0.5*sparse(reshape(bsxfun(@plus,[2;3;1;3;1;2],6*(0:(obj.N-2))),[],1),reshape(bsxfun(@plus,[1;1;2;2;3;3;],3*(0:(obj.N-2))),[],1),reshape(f_cross(:,1:end-1).*bsxfun(@times,ones(6,1),dt),[],1),6*(obj.N-1),3*obj.N)...
         -0.5*sparse(reshape(bsxfun(@plus,[2;3;1;3;1;2],6*(0:(obj.N-2))),[],1),reshape(bsxfun(@plus,3+[1;1;2;2;3;3;],3*(0:(obj.N-2))),[],1),reshape(f_cross(:,2:end).*bsxfun(@times,ones(6,1),dt),[],1),6*(obj.N-1),3*obj.N);
@@ -351,7 +367,7 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
     
     function obj = setCOMddotCost(obj,Q_comddot)
       sizecheck(Q_comddot,[3,3]);
-      Q_comddot = ((Q_comddot+Q_comddot')/2)/obj.robot_mass;
+      Q_comddot = ((Q_comddot+Q_comddot')/2)*(obj.momentum_dot_normalizer/obj.robot_mass)^2;
       if(any(eig(Q_comddot)<0))
         error('Q_comddot should be psd');
       end

@@ -333,16 +333,20 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
           % check if the body points are colinear. If yes, fix the body
           % pose, otherwise fix the body point positions
           co_linear_flag = false;
-          body_pts_diff = diff(contact_wrench_struct(i).cw.body_pts,2);
-          if(size(body_pts_diff,2)<=1 || all(sum(cross(body_pts_diff(:,1:end-1),body_pts_diff(:,2:end)).^2,1)<1e-4))
+          body_pts_diff = diff(contact_wrench_struct(i).cw.body_pts,[],2);
+          if(size(body_pts_diff,2)<=1)
+            co_linear_flag = true;
+          elseif(all(sum(cross(body_pts_diff(:,1:end-1),body_pts_diff(:,2:end)).^2,1)<1e-4))
             co_linear_flag = true;
           end
-          if(co_linear_flag)
-            cnstr = WorldFixedPositionConstraint(obj.robot,contact_wrench_struct(i).cw.body,contact_wrench_struct(i).cw.body_pts);
-            obj = obj.addRigidBodyConstraint(cnstr,{contact_wrench_struct(i).active_knot});
-          else
-            cnstr = WorldFixedBodyPoseConstraint(obj.robot,contact_wrench_struct(i).cw.body);
-            obj = obj.addRigidBodyConstraint(cnstr,{contact_wrench_struct(i).active_knot});
+          if(length(contact_wrench_struct(i).active_knot)>1)
+            if(co_linear_flag)
+              cnstr = WorldFixedPositionConstraint(obj.robot,contact_wrench_struct(i).cw.body,contact_wrench_struct(i).cw.body_pts);
+              obj = obj.addRigidBodyConstraint(cnstr,{contact_wrench_struct(i).active_knot});
+            else
+              cnstr = WorldFixedBodyPoseConstraint(obj.robot,contact_wrench_struct(i).cw.body);
+              obj = obj.addRigidBodyConstraint(cnstr,{contact_wrench_struct(i).active_knot});
+            end
           end
         elseif(isa(contact_wrench_struct(i).cw,'GraspWrenchPolytope'))
           obj.grasp_cw{end+1} = contact_wrench_struct(i).cw;
@@ -420,7 +424,7 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
         end
       end
 
-      V = obj.cws_margin_sos.CWSMarginSOScondition(obj.l0,obj.l1,obj.l2,obj.l3,obj.l4,obj.cws_margin_var,obj.friction_cones,obj.grasp_pos_var,obj.grasp_wrench_vert,obj.disturbance_pos,obj.momentum_dot_var,obj.com_var,zeros(3,obj.N));
+      V = obj.cws_margin_sos.CWSMarginSOScondition(obj.l0,obj.l1,obj.l2,obj.l3,obj.l4,obj.cws_margin_var,obj.friction_cones,obj.grasp_pos_var,obj.grasp_wrench_vert,obj.disturbance_pos,obj.momentum_dot_var*obj.momentum_dot_normalizer,obj.com_var,zeros(3,obj.N));
 
       x_name = cell(36*obj.N,1);
       for i = 1:obj.N
