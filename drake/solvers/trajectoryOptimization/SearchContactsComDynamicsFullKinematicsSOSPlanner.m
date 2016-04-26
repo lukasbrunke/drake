@@ -121,7 +121,7 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       obj = obj.setSolverOptions('snopt','majoroptimalitytolerance',3e-4);
       obj = obj.setSolverOptions('snopt','iterationslimit',1e6);
       obj = obj.setSolverOptions('snopt','majoriterationslimit',500);
-      obj = obj.setSolverOptions('snopt','scaleoption',2);
+      obj = obj.setSolverOptions('snopt','scaleoption',0);
     end
     
     function obj = addRunningCost(obj,running_cost_fun)

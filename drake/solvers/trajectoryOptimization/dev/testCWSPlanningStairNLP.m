@@ -147,7 +147,8 @@ options = struct();
 options.use_lin_fc = true;
 options.num_fc_edges = num_fc_edges;
 options.sos_cnstr_normalizer = robot_mass*gravity;
-options.l1_normalizer = 1000;
+options.l1_normalizer = 100;
+options.V_normalizer = 50;
 sccdfkp_sos = SearchContactsFixedDisturbanceFullKinematicsSOSPlanner(robot,nT,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,Qw,disturbance_pos,options);
 % add kinematic constraints on contact locations
 lfoot_cnstr0 = WorldPositionConstraint(robot,l_foot,l_foot_contact_pts0,repmat([box_tops(1,1)-box_size(1)/2-0.1;0;box_tops(3,1)],1,4),repmat([box_tops(1,1)+box_size(1)/2-0.05;box_size(2)/2;box_tops(3,1)],1,4));
@@ -292,7 +293,7 @@ for i = 1:nT
 end
 
 sccdfkp_sos = sccdfkp_sos.fixL2(l2,(1:nT));
-sccdfkp_sos = sccdfkp_sos.setCWSMarginBound(cws_margin_sol*1.1,inf);
+sccdfkp_sos = sccdfkp_sos.setCWSMarginBound(cws_margin_sol*1.05,inf);
 tic
 [x_sol,cost,info] = sccdfkp_sos.solve(x_init);
 toc
