@@ -53,6 +53,10 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
     
     sos_cnstr_normalizer;
     l1_normalizer;
+    V_normalizer;
+    
+    ab_len
+    quadratic_gram_var_len
   end
   
   properties(Access = private)
@@ -91,11 +95,15 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       if(~isfield(options,'l1_normalizer'))
         options.l1_normalizer = 100;
       end
+      if(~isfield(options,'V_normalizer'))
+        options.V_normalizer = 100;
+      end
       obj = obj@ContactWrenchSetDynamicsFullKineamticsPlanner(robot,N,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,options);
       obj.use_lin_fc = options.use_lin_fc;
       obj.num_fc_edges = options.num_fc_edges;
       obj.sos_cnstr_normalizer = options.sos_cnstr_normalizer;
       obj.l1_normalizer = options.l1_normalizer;
+      obj.V_normalizer = options.V_normalizer;
       
       obj = obj.parseContactWrenchStruct(contact_wrench_struct);
       sizecheck(Qw,[6,6]);
@@ -140,13 +148,13 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       sol.l3 = subs(obj.l3,obj.l3_gram_var(:),reshape(x(obj.l3_gram_var_inds),[],1));
       sol.V = msspoly.zeros(obj.N,1);
       ab_monomials2 = [obj.a_indet;obj.b_indet;1];
-      triu_mask = triu(ones(8))~=0;
+      triu_mask = triu(ones(obj.ab_len+1))~=0;
       for i = 1:obj.N
         sol.l2{i} = subs(obj.l2{i},obj.l2_gram_var{i}(:),reshape(x(obj.l2_gram_var_inds{i}),[],1));
         sol.l4{i} = subs(obj.l4{i},obj.l4_gram_var{i}(:),reshape(x(obj.l4_gram_var_inds{i}),[],1));
         V_gram_var_val = x(obj.V_gram_var_inds(:,i));
-        V_gram = zeros(8);
-        V_gram(triu_mask) = V_gram_var_val;
+        V_gram = zeros(obj.ab_len+1);
+        V_gram(triu_mask) = V_gram_var_val*obj.V_normalizer;
         V_gram = V_gram'*V_gram;
         sol.V(i) = ab_monomials2'*V_gram*ab_monomials2;
       end
@@ -379,6 +387,15 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       else
         obj.cws_margin_sos = CWSMarginSOSconditionNonlinearFC(obj.robot_mass,obj.N,obj.Qw,obj.num_fc_pts,obj.num_grasp_pts,obj.num_grasp_wrench_vert);
       end
+      if(all(obj.num_grasp_pts==0))
+        obj.ab_len = 6;
+        obj.quadratic_gram_var_len = 28;
+        with_b_indet = false;
+      else
+        obj.ab_len = 7;
+        obj.quadratic_gram_var_len = 36;
+        with_b_indet = true;
+      end
       
       total_num_grasp_wrench = 0;
       for i = 1:obj.N
@@ -386,15 +403,20 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
           total_num_grasp_wrench = total_num_grasp_wrench + prod(obj.num_grasp_wrench_vert{i});
         end
       end
-      if(obj.use_lin_fc)
-        l_gram_var = msspoly('l',80*obj.N+36*sum(obj.num_fc_pts)*obj.num_fc_edges+36*total_num_grasp_wrench);
+      if(with_b_indet)
+        num_l_gram_var = 80*obj.N;
       else
-        l_gram_var = msspoly('l',80*obj.N+36*sum(obj.num_fc_pts)*2+36*total_num_grasp_wrench);
+        num_l_gram_var = (obj.quadratic_gram_var_len+obj.ab_len+1)*obj.N;
+      end
+      if(obj.use_lin_fc)
+        l_gram_var = msspoly('l',num_l_gram_var+obj.quadratic_gram_var_len*sum(obj.num_fc_pts)*obj.num_fc_edges+obj.quadratic_gram_var_len*total_num_grasp_wrench);
+      else
+        l_gram_var = msspoly('l',num_l_gram_var+obj.quadratic_gram_var_len*sum(obj.num_fc_pts)*2+obj.quadratic_gram_var_len*total_num_grasp_wrench);
       end
       obj.a_indet = obj.cws_margin_sos.a_indet;
       obj.b_indet = obj.cws_margin_sos.b_indet;
       ab_monomials1 = [obj.cws_margin_sos.a_indet;obj.cws_margin_sos.b_indet;1];
-      triu_mask = triu(ones(8))~=0;
+      triu_mask = triu(ones(obj.ab_len+1))~=0;
 
       obj.l_gram_var_count = 0;
       
@@ -426,30 +448,30 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
 
       V = obj.cws_margin_sos.CWSMarginSOScondition(obj.l0,obj.l1,obj.l2,obj.l3,obj.l4,obj.cws_margin_var,obj.friction_cones,obj.grasp_pos_var,obj.grasp_wrench_vert,obj.disturbance_pos,obj.momentum_dot_var*obj.momentum_dot_normalizer,obj.com_var,zeros(3,obj.N));
 
-      x_name = cell(36*obj.N,1);
+      x_name = cell(obj.quadratic_gram_var_len*obj.N,1);
       for i = 1:obj.N
-        x_name((i-1)*36+(1:36)) = repmat({sprintf('V_gram_var[%d]',i)},36,1);
+        x_name((i-1)*obj.quadratic_gram_var_len+(1:obj.quadratic_gram_var_len)) = repmat({sprintf('V_gram_var[%d]',i)},obj.quadratic_gram_var_len,1);
       end
-      [obj,tmp_idx] = obj.addDecisionVariable(36*obj.N,x_name);
-      obj.V_gram_var_inds = reshape(tmp_idx,36,obj.N);
-      obj.V_gram_var = reshape(msspoly('v',36*obj.N),36,obj.N);
+      [obj,tmp_idx] = obj.addDecisionVariable(obj.quadratic_gram_var_len*obj.N,x_name);
+      obj.V_gram_var_inds = reshape(tmp_idx,obj.quadratic_gram_var_len,obj.N);
+      obj.V_gram_var = reshape(msspoly('v',obj.quadratic_gram_var_len*obj.N),obj.quadratic_gram_var_len,obj.N);
       ab_monomials2 = [obj.cws_margin_sos.a_indet;obj.cws_margin_sos.b_indet;1];
-      obj.V_res_indet = msspoly.zeros(7,obj.N);
+      obj.V_res_indet = msspoly.zeros(obj.ab_len,obj.N);
       obj.V_res_power = cell(obj.N,1);
 
       obj.sos_con_id = zeros(obj.N,1);
       V_res = msspoly.zeros(obj.N,1);
       for i = 1:obj.N
-        V_gram = msspoly.zeros(8,8);
-        triu_mask = triu(ones(8))~=0;
-        V_gram(triu_mask) = obj.V_gram_var(:,i);
+        V_gram = msspoly.zeros(obj.ab_len+1,obj.ab_len+1);
+        triu_mask = triu(ones(obj.ab_len+1))~=0;
+        V_gram(triu_mask) = obj.V_gram_var(:,i)*obj.V_normalizer;
         V_gram = V_gram'*V_gram;
         V_res(i) = V(i)-ab_monomials2'*V_gram*ab_monomials2;
         decision_var = [obj.l0_gram_var(:,i);obj.l1_gram_var(:,i);obj.l2_gram_var{i}(:);obj.l3_gram_var(:,i);obj.l4_gram_var{i}(:);obj.V_gram_var(:,i);obj.momentum_dot_var(:,i);obj.com_var(:,i);obj.fc_pos_var{i}(:);obj.grasp_pos_var{i}(:);obj.cws_margin_var];
         decision_var_inds = [obj.l0_gram_var_inds(:,i);obj.l1_gram_var_inds(:,i);obj.l2_gram_var_inds{i}(:);obj.l3_gram_var_inds(:,i);obj.l4_gram_var_inds{i}(:);obj.V_gram_var_inds(:,i);obj.world_momentum_dot_inds(:,i);obj.com_inds(:,i);obj.fc_contact_pos_inds{i}(:);obj.grasp_contact_pos_inds{i}(:);obj.cws_margin_ind];
         [obj.V_res_indet(:,i),obj.V_res_power{i},V_res_coeff] = decomp(V_res(i),decision_var);
         mtch = match([obj.cws_margin_sos.a_indet;obj.cws_margin_sos.b_indet],obj.V_res_indet(:,i));
-        valuecheck(numel(unique(mtch)),7);
+        valuecheck(numel(unique(mtch)),obj.ab_len);
         sparse_pattern = zeros(length(V_res_coeff),length(decision_var));
         dV_coeff = diff(V_res_coeff',decision_var);
         for j = 1:length(V_res_coeff)
@@ -487,14 +509,14 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
     end
     
     function l0_gram_var_val = getL0GramVarVal(obj,l0)
-      triu_mask = triu(ones(8))~=0;
-      l0_gram_var_val = zeros(36,obj.N);
+      triu_mask = triu(ones(obj.ab_len+1))~=0;
+      l0_gram_var_val = zeros(obj.quadratic_gram_var_len,obj.N);
       for i = 1:obj.N
         Q = double(decompQuadraticPoly(l0(i)-1,[obj.a_indet;obj.b_indet]));
         try
           R = chol(Q);
         catch
-          R = chol(Q+eps*eye(8));
+          R = chol(Q+eps*eye(obj.ab_len+1));
         end
         l0_gram_var_val(:,i) = R(triu_mask);
       end
@@ -506,11 +528,11 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
     end
     
     function l2_gram_var_val = getL2GramVarVal(obj,l2)
-      triu_mask = triu(ones(8))~=0;
+      triu_mask = triu(ones(obj.ab_len+1))~=0;
       l2_gram_var_val = cell(obj.N,1);
       for i = 1:obj.N
         if(obj.use_lin_fc)
-          l2_gram_var_val{i} = zeros(36,obj.num_fc_pts(i)*obj.num_fc_edges);
+          l2_gram_var_val{i} = zeros(obj.quadratic_gram_var_len,obj.num_fc_pts(i)*obj.num_fc_edges);
         end
         for j = 1:obj.num_fc_pts(i)
           if(obj.use_lin_fc)
@@ -519,7 +541,7 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
               try
                 R = chol(Q);
               catch
-                R = chol(Q+eps*eye(8));
+                R = chol(Q+eps*eye(obj.ab_len+1));
               end
               l2_gram_var_val{i}(:,(j-1)*obj.num_fc_edges+k) = R(triu_mask);
             end
@@ -529,30 +551,35 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
     end
     
     function l3_gram_var_val = getL3GramVarVal(obj,l3)
-      triu_mask = triu(ones(8))~=0;
-      l3_gram_var_val = zeros(36,obj.N);
-      for i = 1:obj.N
-        Q = double(decompQuadraticPoly(l3(i),[obj.a_indet;obj.b_indet]));
-        try
-          R = chol(Q);
-        catch
-          R = chol(Q+eps*eye(8));
+      if(~all(obj.num_grasp_pts==0))
+        triu_mask = triu(ones(obj.ab_len+1))~=0;
+        l3_gram_var_val = zeros(obj.quadratic_gram_var_len,obj.N);
+        for i = 1:obj.N
+          Q = double(decompQuadraticPoly(l3(i),[obj.a_indet;obj.b_indet]));
+          try
+            R = chol(Q);
+          catch
+            R = chol(Q+eps*eye(obj.ab_len+1));
+          end
+          l3_gram_var_val(:,i) = R(triu_mask);
         end
-        l3_gram_var_val(:,i) = R(triu_mask);
+      else
+        l3_gram_var_val = zeros(0,obj.N);
       end
     end
     
     function l4_gram_var_val = getL4GramVarVal(obj,l4)
-      triu_mask = triu(ones(8))~=0;
+      triu_mask = triu(ones(obj.ab_len+1))~=0;
       l4_gram_var_val = cell(obj.N,1);
       for i = 1:obj.N
         if(~isempty(obj.num_grasp_wrench_vert{i}))
+          l4_gram_var_val{i} = zeros(obj.quadratic_gram_var_len,prod(obj.num_grasp_wrench_vert{i}));
           for j = 1:prod(obj.num_grasp_wrench_vert{i})
             Q = double(decompQuadraticPoly(l4{i}(j),[obj.a_indet;obj.b_indet]));
             try
               R = chol(Q);
             catch
-              R = chol(Q+eps*eye(8));
+              R = chol(Q+eps*eye(obj.ab_len+1));
             end
             l4_gram_var_val{i}(:,j) = R(triu_mask);
           end
@@ -564,51 +591,51 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       if(deg(V)>2)
         error('V should be quadratic');
       end
-      V_gram_var_val = zeros(36,obj.N);
-      triu_mask = triu(ones(8))~=0;
+      V_gram_var_val = zeros(obj.quadratic_gram_var_len,obj.N);
+      triu_mask = triu(ones(obj.ab_len+1))~=0;
       for i = 1:obj.N
         Q = double(decompQuadraticPoly(V(i),[obj.a_indet;obj.b_indet]));
         try
           R = chol(Q);
         catch
-          R = chol(Q+eps*eye(8));
+          R = chol(Q+eps*eye(obj.ab_len+1));
         end
-        V_gram_var_val(:,i) = R(triu_mask);
+        V_gram_var_val(:,i) = R(triu_mask)/obj.V_normalizer;
       end
     end
     
     function obj = addL0(obj,l_gram_var,ab_monomials1,triu_mask)
-      x_name0 = cell(36*obj.N,1);
+      x_name0 = cell(obj.quadratic_gram_var_len*obj.N,1);
       for i = 1:obj.N
-        x_name0((i-1)*36+(1:36)) = repmat({sprintf('l0_gram_var[%d]',i)},36,1);
+        x_name0((i-1)*obj.quadratic_gram_var_len+(1:obj.quadratic_gram_var_len)) = repmat({sprintf('l0_gram_var[%d]',i)},obj.quadratic_gram_var_len,1);
       end
-      [obj,tmp_idx] = obj.addDecisionVariable(36*obj.N,x_name0);
-      obj.l0_gram_var_inds = reshape(tmp_idx,36,obj.N);
-      obj.l0_gram_var = reshape(l_gram_var(obj.l_gram_var_count+(1:36*obj.N)),36,obj.N);
+      [obj,tmp_idx] = obj.addDecisionVariable(obj.quadratic_gram_var_len*obj.N,x_name0);
+      obj.l0_gram_var_inds = reshape(tmp_idx,obj.quadratic_gram_var_len,obj.N);
+      obj.l0_gram_var = reshape(l_gram_var(obj.l_gram_var_count+(1:obj.quadratic_gram_var_len*obj.N)),obj.quadratic_gram_var_len,obj.N);
       l0_gram = cell(obj.N,1);
       obj.l0 = msspoly.zeros(obj.N,1);
       for i = 1:obj.N
-        l0_gram{i} = msspoly.zeros(8,8);
+        l0_gram{i} = msspoly.zeros(obj.ab_len+1,obj.ab_len+1);
         l0_gram{i}(triu_mask) = obj.l0_gram_var(:,i);
         l0_gram{i} = l0_gram{i}'*l0_gram{i};
         obj.l0(i) = ab_monomials1'*l0_gram{i}*ab_monomials1+1;
       end
-      obj.l_gram_var_count = obj.l_gram_var_count+36*obj.N;
+      obj.l_gram_var_count = obj.l_gram_var_count+obj.quadratic_gram_var_len*obj.N;
     end
     
     function obj = addL1(obj,l_gram_var,ab_monomials1)
-      x_name1 = cell(8*obj.N,1);
+      x_name1 = cell((obj.ab_len+1)*obj.N,1);
       for i = 1:obj.N
-        x_name1((i-1)*8+(1:8)) = repmat({sprintf('l1_gram_var[%d]',i)},8,1);
+        x_name1((i-1)*(obj.ab_len+1)+(1:(obj.ab_len+1))) = repmat({sprintf('l1_gram_var[%d]',i)},obj.ab_len+1,1);
       end
-      [obj,tmp_idx] = obj.addDecisionVariable(8*obj.N,x_name1);
-      obj.l1_gram_var_inds = reshape(tmp_idx,8,obj.N);
-      obj.l1_gram_var = reshape(l_gram_var(obj.l_gram_var_count+(1:8*obj.N)),8,obj.N);
+      [obj,tmp_idx] = obj.addDecisionVariable((obj.ab_len+1)*obj.N,x_name1);
+      obj.l1_gram_var_inds = reshape(tmp_idx,obj.ab_len+1,obj.N);
+      obj.l1_gram_var = reshape(l_gram_var(obj.l_gram_var_count+(1:(obj.ab_len+1)*obj.N)),obj.ab_len+1,obj.N);
       obj.l1 = msspoly.zeros(obj.N,1);
       for i = 1:obj.N
         obj.l1(i) = ab_monomials1'*obj.l1_gram_var(:,i)*obj.l1_normalizer;
       end
-      obj.l_gram_var_count = obj.l_gram_var_count+8*obj.N;
+      obj.l_gram_var_count = obj.l_gram_var_count+(obj.ab_len+1)*obj.N;
     end
     
     function obj = addL2(obj,l_gram_var,ab_monomials1,triu_mask)
@@ -618,14 +645,14 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       for i = 1:obj.N
         if(obj.use_lin_fc)
           obj.l2{i} = msspoly.zeros(obj.num_fc_pts(i),obj.num_fc_edges);
-          x_name2 = repmat({sprintf('l2_gram_var[%d]',i)},36*obj.num_fc_pts(i)*obj.num_fc_edges,1);
-          [obj,tmp_idx] = obj.addDecisionVariable(36*obj.num_fc_pts(i)*obj.num_fc_edges,x_name2);
-          obj.l2_gram_var_inds{i} = reshape(tmp_idx,36,obj.num_fc_pts(i)*obj.num_fc_edges);
-          obj.l2_gram_var{i} = reshape(l_gram_var(obj.l_gram_var_count+(1:36*obj.num_fc_pts(i)*obj.num_fc_edges)),36,obj.num_fc_pts(i)*obj.num_fc_edges);
-          obj.l_gram_var_count = obj.l_gram_var_count+36*obj.num_fc_pts(i)*obj.num_fc_edges;
+          x_name2 = repmat({sprintf('l2_gram_var[%d]',i)},obj.quadratic_gram_var_len*obj.num_fc_pts(i)*obj.num_fc_edges,1);
+          [obj,tmp_idx] = obj.addDecisionVariable(obj.quadratic_gram_var_len*obj.num_fc_pts(i)*obj.num_fc_edges,x_name2);
+          obj.l2_gram_var_inds{i} = reshape(tmp_idx,obj.quadratic_gram_var_len,obj.num_fc_pts(i)*obj.num_fc_edges);
+          obj.l2_gram_var{i} = reshape(l_gram_var(obj.l_gram_var_count+(1:obj.quadratic_gram_var_len*obj.num_fc_pts(i)*obj.num_fc_edges)),obj.quadratic_gram_var_len,obj.num_fc_pts(i)*obj.num_fc_edges);
+          obj.l_gram_var_count = obj.l_gram_var_count+obj.quadratic_gram_var_len*obj.num_fc_pts(i)*obj.num_fc_edges;
           for j = 1:obj.num_fc_pts(i)
             for k = 1:obj.num_fc_edges
-              l2_gram = msspoly.zeros(8,8);
+              l2_gram = msspoly.zeros(obj.ab_len+1,obj.ab_len+1);
               l2_gram(triu_mask) = obj.l2_gram_var{i}(:,(j-1)*obj.num_fc_edges+k);
               l2_gram = l2_gram'*l2_gram;
               obj.l2{i}(j,k) = ab_monomials1'*l2_gram*ab_monomials1;
@@ -638,22 +665,28 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
     end
     
     function obj = addL3(obj,l_gram_var,ab_monomials1,triu_mask)
-      x_name3 = cell(36*obj.N,1);
-      for i = 1:obj.N
-        x_name3((i-1)*36+(1:36)) = repmat({sprintf('l3_gram_var[%d]',i)},36,1);
+      if(~all(obj.num_grasp_pts==0))
+        x_name3 = cell(obj.quadratic_gram_var_len*obj.N,1);
+        for i = 1:obj.N
+          x_name3((i-1)*obj.quadratic_gram_var_len+(1:obj.quadratic_gram_var_len)) = repmat({sprintf('l3_gram_var[%d]',i)},obj.quadratic_gram_var_len,1);
+        end
+
+        [obj,tmp_idx] = obj.addDecisionVariable(obj.quadratic_gram_var_len*obj.N,x_name3);
+        obj.l3_gram_var_inds = reshape(tmp_idx,obj.quadratic_gram_var_len,obj.N);
+        obj.l3_gram_var = reshape(l_gram_var(obj.l_gram_var_count+(1:obj.quadratic_gram_var_len*obj.N)),obj.quadratic_gram_var_len,obj.N);
+        obj.l3 = msspoly.zeros(obj.N,1);
+        for i = 1:obj.N
+          l3_gram = msspoly.zeros(obj.ab_len+1,obj.ab_len+1);
+          l3_gram(triu_mask) = obj.l3_gram_var(:,i);
+          l3_gram = l3_gram'*l3_gram;
+          obj.l3(i) = ab_monomials1'*l3_gram*ab_monomials1;
+        end
+        obj.l_gram_var_count = obj.l_gram_var_count+obj.quadratic_gram_var_len*obj.N;
+      else
+        obj.l3_gram_var_inds = zeros(0,obj.N);
+        obj.l3_gram_var = zeros(0,obj.N);
+        obj.l3 = zeros(0,obj.N);
       end
-      
-      [obj,tmp_idx] = obj.addDecisionVariable(36*obj.N,x_name3);
-      obj.l3_gram_var_inds = reshape(tmp_idx,36,obj.N);
-      obj.l3_gram_var = reshape(l_gram_var(obj.l_gram_var_count+(1:36*obj.N)),36,obj.N);
-      obj.l3 = msspoly.zeros(obj.N,1);
-      for i = 1:obj.N
-        l3_gram = msspoly.zeros(8,8);
-        l3_gram(triu_mask) = obj.l3_gram_var(:,i);
-        l3_gram = l3_gram'*l3_gram;
-        obj.l3(i) = ab_monomials1'*l3_gram*ab_monomials1;
-      end
-      obj.l_gram_var_count = obj.l_gram_var_count+36*obj.N;
     end
     
     function obj = addL4(obj,l_gram_var,ab_monomials1,triu_mask)
@@ -664,13 +697,13 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
         if(~isempty(obj.num_grasp_wrench_vert{i}))
           num_grasp_wrench_vert_i = prod(obj.num_grasp_wrench_vert{i});
           obj.l4{i} = msspoly.zeros(num_grasp_wrench_vert_i,1);
-          x_name4 = repmat({sprintf('l4_gram_var[%d]',i)},36*num_grasp_wrench_vert_i,1);
-          [obj,tmp_idx] = obj.addDecisionVariable(36*num_grasp_wrench_vert_i,x_name4);
-          obj.l4_gram_var_inds{i} = reshape(tmp_idx,36,num_grasp_wrench_vert_i);
-          obj.l4_gram_var{i} = reshape(l_gram_var(obj.l_gram_var_count+(1:36*num_grasp_wrench_vert_i)),36,num_grasp_wrench_vert_i);
-          obj.l_gram_var_count = obj.l_gram_var_count+36*num_grasp_wrench_vert_i;
+          x_name4 = repmat({sprintf('l4_gram_var[%d]',i)},obj.quadratic_gram_var_len*num_grasp_wrench_vert_i,1);
+          [obj,tmp_idx] = obj.addDecisionVariable(obj.quadratic_gram_var_len*num_grasp_wrench_vert_i,x_name4);
+          obj.l4_gram_var_inds{i} = reshape(tmp_idx,obj.quadratic_gram_var_len,num_grasp_wrench_vert_i);
+          obj.l4_gram_var{i} = reshape(l_gram_var(obj.l_gram_var_count+(1:obj.quadratic_gram_var_len*num_grasp_wrench_vert_i)),obj.quadratic_gram_var_len,num_grasp_wrench_vert_i);
+          obj.l_gram_var_count = obj.l_gram_var_count+obj.quadratic_gram_var_len*num_grasp_wrench_vert_i;
           for j = 1:num_grasp_wrench_vert_i
-            l4_gram = msspoly.zeros(8,8);
+            l4_gram = msspoly.zeros(obj.ab_len+1,obj.ab_len+1);
             l4_gram(triu_mask) = obj.l4_gram_var{i}(:,j);
             l4_gram = l4_gram'*l4_gram;
             obj.l4{i}(j) = ab_monomials1'*l4_gram*ab_monomials1;

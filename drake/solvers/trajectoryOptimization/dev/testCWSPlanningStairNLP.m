@@ -287,6 +287,9 @@ x_init = sccdfkp_sos.setL2GramVarVal(x_init,l2);
 x_init = sccdfkp_sos.setL3GramVarVal(x_init,l3);
 x_init = sccdfkp_sos.setL4GramVarVal(x_init,l4);
 x_init = sccdfkp_sos.setVGramVarVal(x_init,clean(V));
+for i = 1:nT
+  x_init(sccdfkp_sos.qsc_weight_inds{i}) = sol.qsc_weights{i};
+end
 
 sccdfkp_sos = sccdfkp_sos.fixL2(l2,(1:nT));
 sccdfkp_sos = sccdfkp_sos.setCWSMarginBound(cws_margin_sol*1.1,inf);

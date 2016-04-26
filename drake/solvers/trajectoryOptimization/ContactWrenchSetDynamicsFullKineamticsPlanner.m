@@ -117,6 +117,10 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
       sol.cws_margin = x_sol(obj.cws_margin_ind);
       sol.com = reshape(x_sol(obj.com_inds),3,obj.N);
       sol.quat_correction_slack = reshape(x_sol(obj.quat_correction_slack_inds),size(obj.q_quat_inds,2),obj.N-1);
+      sol.qsc_weights = cell(obj.N,1);
+      for i = 1:obj.N
+        sol.qsc_weights{i} = x_sol(obj.qsc_weight_inds{i});
+      end
     end
     
     function checkSolution(obj,sol)
