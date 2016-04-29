@@ -100,7 +100,8 @@ gravity = 9.81;
 
 mu_ground = 1;
 num_fc_edges = 4;
-theta = linspace(0,2*pi,num_fc_edges);
+theta = linspace(0,2*pi,num_fc_edges+1);
+theta = theta(1:end-1);
 ground_fc_edges = robot_mass*gravity*[mu_ground*cos(theta);mu_ground*sin(theta);ones(1,num_fc_edges)];
 lfoot_cw0 = LinearFrictionConeWrench(robot,l_foot,l_foot_contact_pts0,ground_fc_edges);
 rfoot_cw0 = LinearFrictionConeWrench(robot,r_foot,r_foot_contact_pts0,ground_fc_edges);

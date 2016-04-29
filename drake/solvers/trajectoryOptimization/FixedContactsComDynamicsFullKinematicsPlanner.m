@@ -181,15 +181,15 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
         end
       end
       for i = 1:obj.N
-        try
-          P = Polyhedron('V',obj.cws_vert{i}','R',obj.cws_ray{i}');
-          P = P.minHRep();
-          obj.Ain_cws{i} = P.H(:,1:6);
-          obj.bin_cws{i} = P.H(:,7);
-          obj.Aeq_cws{i} = P.He(:,1:6);
-          obj.beq_cws{i} = P.He(:,7);
-        catch
-          warning('cdd fails at knot %d',i);
+%         try
+%           P = Polyhedron('V',obj.cws_vert{i}','R',obj.cws_ray{i}');
+%           P = P.minHRep();
+%           obj.Ain_cws{i} = P.H(:,1:6);
+%           obj.bin_cws{i} = P.H(:,7);
+%           obj.Aeq_cws{i} = P.He(:,1:6);
+%           obj.beq_cws{i} = P.He(:,7);
+%         catch
+%           warning('cdd fails at knot %d',i);
           if(isempty(obj.cws_vert{i}))
             vert = [zeros(6,1) obj.cws_ray{i}];
             K = convhulln(vert');
@@ -208,7 +208,7 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
           else
             [obj.Ain_cws{i},obj.bin_cws{i},obj.Aeq_cws{i},obj.beq_cws{i}] = vert2lcon([zeros(6,1) obj.cws_ray{i}.*bsxfun(@times,ones(6,1),(obj.robot_mass*obj.gravity*100./sqrt(sum(obj.cws_ray{i}.^2,1)))) obj.cws_vert{i}]',eps);
           end
-        end
+%         end
         normalizer = sqrt(sum(obj.Ain_cws{i}.^2,2));
         obj.Ain_cws{i} = obj.Ain_cws{i}./bsxfun(@times,normalizer,ones(1,6));
         obj.bin_cws{i} = obj.bin_cws{i}./normalizer;
