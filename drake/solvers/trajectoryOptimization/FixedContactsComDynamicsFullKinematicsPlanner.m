@@ -191,18 +191,7 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
 %         catch
 %           warning('cdd fails at knot %d',i);
           if(isempty(obj.cws_vert{i}))
-            vert = [zeros(6,1) obj.cws_ray{i}];
-            K = convhulln(vert');
-            K = K(any(K==1,2),:);
-            obj.Ain_cws{i} = [];
-            for j = 1:size(K,1)
-              vert_j = vert(:,K(j,:));
-              null_vec = null(vert_j')';
-              null_vec = null_vec.*bsxfun(@times,-sign(sum(null_vec*vert,2)),ones(1,6));
-              null_vec = null_vec(max(null_vec*obj.cws_ray{i},[],2)<1e-5,:);
-              obj.Ain_cws{i} = [obj.Ain_cws{i};null_vec];
-            end
-            obj.bin_cws{i} = zeros(size(obj.Ain_cws{i},1),1);
+            [obj.Ain_cws{i},obj.bin_cws{i}] = raysToLincon(obj.cws_ray{i});
             obj.Aeq_cws{i} = [];
             obj.beq_cws{i} = [];
           else
