@@ -165,7 +165,7 @@ Q(6,6) = 10;
 T_lb = 0.3;
 T_ub = 0.5;
 
-cws_margin_cost = 1;
+cws_margin_cost = 10;
 q_nom = repmat(qstar,1,nT);
 contact_wrench_struct = [lfoot_contact_wrench0 rheel_contact_wrench0 rtoe_contact_wrench0 rfoot_contact_wrench1,lhand_contact_wrench0];
 disturbance_pos = repmat(com0,1,nT)+bsxfun(@times,[0.02;0;0],0:nT-1);
@@ -288,6 +288,7 @@ lhand_contact_wrench0 = struct('active_knot',l_hand_active+1:l_hand_inactive-1,'
 contact_wrench_struct = [lfoot_contact_wrench0 rheel_contact_wrench0 rtoe_contact_wrench0 rfoot_contact_wrench1 lhand_contact_wrench0];
 fccdfkp_options = struct();
 sccdfkp_sos_options = struct();
+sccdfkp_sos_options.num_fc_edges = num_fc_edges;
 fccdfkp = FixedContactsFixedDisturbanceComDynamicsFullKinematicsPlanner(robot,nT,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,Qw,disturbance_pos,fccdfkp_options);
 sccdfkp_sos = SearchContactsFixedDisturbanceFullKinematicsSOSPlanner(robot,nT,tf_range,Q_comddot,Qv,Q,cws_margin_cost,q_nom,contact_wrench_struct,Qw,disturbance_pos,sccdfkp_sos_options);
 % dt bound
@@ -357,7 +358,7 @@ if(options.mode == 2)
   [x_sol,F,info] = fccdfkp.solve(x_init);
   sol = fccdfkp.retrieveSolution(x_sol);
   if(info<10)
-    save('test_wall_fccdfkp.mat','x_sol');
+    save('test_wall_fccdfkp.mat','x_sol','sol');
   end
 else
   sol = load('test_wall_fccdfkp.mat');
