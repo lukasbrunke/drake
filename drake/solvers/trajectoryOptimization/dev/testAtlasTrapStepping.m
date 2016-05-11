@@ -252,8 +252,8 @@ fccdfkp = fccdfkp.addConstraint(dt_bnd,fccdfkp.h_inds);
 sccdfkp_sos = sccdfkp_sos.addConstraint(dt_bnd,sccdfkp_sos.h_inds);
 
 % foot above ground
-lfoot_above_ground = WorldPositionConstraint(robot,l_foot,l_foot_contact_pts,[nan(2,4);0.03*ones(1,4)],nan(3,4));
-rfoot_above_ground = WorldPositionConstraint(robot,r_foot,r_foot_contact_pts,[nan(2,4);0.03*ones(1,4)],nan(3,4));
+lfoot_above_ground = WorldPositionConstraint(robot,l_foot,l_foot_contact_pts,[nan(2,4);0.03*ones(1,4)],[nan(1,4);(l_wall_pos(2)-wall_size(2)/2-0.01)*ones(1,4);nan(1,4)]);
+rfoot_above_ground = WorldPositionConstraint(robot,r_foot,r_foot_contact_pts,[nan(1,4);(r_wall_pos(2)+wall_size(2)/2+0.01)*ones(1,4);0.03*ones(1,4)],nan(3,4));
 fccdfkp = fccdfkp.addConstraint(lfoot_above_ground,num2cell(lfoot_takeoff0:lfoot_land0-1));
 fccdfkp = fccdfkp.addConstraint(rfoot_above_ground,num2cell(rfoot_takeoff0:rfoot_land0-1));
 fccdfkp = fccdfkp.addConstraint(lfoot_above_ground,num2cell(lfoot_takeoff1:lfoot_land1-1));
@@ -316,4 +316,129 @@ sccdfkp_sos = sccdfkp_sos.setSolverOptions('snopt','majoroptimalitytolerance',3e
 [x_sol,F,info] = sccdfkp_sos.solve(x_init);
 sos_sol = sccdfkp_sos.retrieveSolution(x_sol);
 keyboard;
+
+% Trying to call ik to compute the sampled posture in between knot points
+kinsol = cell(nT,1);
+for i = 1:nT
+kinsol{i} = robot.doKinematics(sos_sol.q(:,i),sos_sol.v(:,i),struct('use_mex',false));
 end
+lfoot_pos0 = robot.forwardKin(kinsol{1},l_foot,[0;0;0],2);
+rfoot_pos0 = robot.forwardKin(kinsol{1},r_foot,[0;0;0],2);
+lfoot_pos1 = robot.forwardKin(kinsol{lfoot_land0},l_foot,[0;0;0],2);
+rfoot_pos1 = robot.forwardKin(kinsol{rfoot_land0},r_foot,[0;0;0],2);
+lfoot_pos2 = robot.forwardKin(kinsol{lfoot_land1},l_foot,[0;0;0],2);
+rfoot_pos2 = robot.forwardKin(kinsol{rfoot_land1},r_foot,[0;0;0],2);
+lhand_pos = robot.forwardKin(kinsol{1},l_hand,lhand_pt,0);
+rhand_pos = robot.forwardKin(kinsol{2},r_hand,rhand_pt,0);
+lfoot_cnstr0 = {WorldPositionConstraint(robot,l_foot,[0;0;0],lfoot_pos0(1:3),lfoot_pos0(1:3));WorldQuatConstraint(robot,l_foot,lfoot_pos0(4:7),0)};
+rfoot_cnstr0 = {WorldPositionConstraint(robot,r_foot,[0;0;0],rfoot_pos0(1:3),rfoot_pos0(1:3));WorldQuatConstraint(robot,r_foot,rfoot_pos0(4:7),0)};
+lfoot_cnstr1 = {WorldPositionConstraint(robot,l_foot,[0;0;0],lfoot_pos1(1:3),lfoot_pos1(1:3));WorldQuatConstraint(robot,l_foot,lfoot_pos1(4:7),0)};
+rfoot_cnstr1 = {WorldPositionConstraint(robot,r_foot,[0;0;0],rfoot_pos1(1:3),rfoot_pos1(1:3));WorldQuatConstraint(robot,r_foot,rfoot_pos1(4:7),0)};
+lfoot_cnstr2 = {WorldPositionConstraint(robot,l_foot,[0;0;0],lfoot_pos2(1:3),lfoot_pos2(1:3));WorldQuatConstraint(robot,l_foot,lfoot_pos2(4:7),0)};
+rfoot_cnstr2 = {WorldPositionConstraint(robot,r_foot,[0;0;0],rfoot_pos2(1:3),rfoot_pos2(1:3));WorldQuatConstraint(robot,r_foot,rfoot_pos2(4:7),0)};
+lhand_cnstr = WorldPositionConstraint(robot,l_hand,lhand_pt,lhand_pos,lhand_pos);
+rhand_cnstr = WorldPositionConstraint(robot,r_hand,rhand_pt,rhand_pos,rhand_pos);
+
+lhand_offwall_cnstr = WorldPositionConstraint(robot,l_hand,lhand_pt,nan(3,1),[nan;l_wall_pos(2)-wall_size(2)/2;nan]);
+rhand_offwall_cnstr = WorldPositionConstraint(robot,r_hand,rhand_pt,[nan;r_wall_pos(2)+wall_size(2)/2;nan],nan(3,1));
+
+lfoot_above_ground = WorldPositionConstraint(robot,l_foot,l_foot_contact_pts,[nan(2,4);0.005*ones(1,4)],[nan(1,4);(l_wall_pos(2)-wall_size(2)/2-0.01)*ones(1,4);nan(1,4)]);
+rfoot_above_ground = WorldPositionConstraint(robot,r_foot,r_foot_contact_pts,[nan(1,4);(r_wall_pos(2)+wall_size(2)/2+0.01)*ones(1,4);0.005*ones(1,4)],nan(3,4));
+t_knot = [0;cumsum(sos_sol.dt)];
+qtraj_knot = PPTrajectory(foh(t_knot,sos_sol.q));
+t1 = linspace(t_knot(1),t_knot(2),10);
+t1 = t1(2:end-1);
+q1 = zeros(nq,length(t1));
+for i = 1:length(t1)
+  q_nom = qtraj_knot.eval(t1(i));
+  ik = InverseKinematics(robot,q_nom,lfoot_cnstr0{:},lhand_cnstr,rhand_cnstr,rfoot_above_ground);
+  [q1(:,i),~,info] = ik.solve(q_nom);
+end
+v1 = [diff(q1,1,2)./repmat(diff(t1),nq,1) sos_sol.v(:,2)];
+
+t2 = linspace(t_knot(2),t_knot(3),10);
+t2 = t2(2:end-1);
+q2 = zeros(nq,length(t2));
+for i = 1:length(t2)
+  q_nom = qtraj_knot.eval(t2(i));
+  ik = InverseKinematics(robot,q_nom,lfoot_cnstr0{:},lhand_cnstr,rhand_cnstr,rfoot_above_ground);
+  [q2(:,i),~,info] = ik.solve(q_nom);
+end
+v2 = [diff(q2,1,2)./repmat(diff(t2),nq,1) sos_sol.v(:,3)];
+
+t3 = linspace(t_knot(3),t_knot(4),10);
+t3 = t3(2:end-1);
+q3 = zeros(nq,length(t3));
+for i = 1:length(t3)
+  q_nom = qtraj_knot.eval(t3(i));
+  ik = InverseKinematics(robot,q_nom,rfoot_cnstr1{:},lhand_cnstr,rhand_cnstr,lfoot_above_ground);
+  [q3(:,i),~,info] = ik.solve(q_nom);
+end
+v3 = [diff(q3,1,2)./repmat(diff(t3),nq,1) sos_sol.v(:,4)];
+
+t4 = linspace(t_knot(4),t_knot(5),10);
+t4 = t4(2:end-1);
+q4 = zeros(nq,length(t4));
+for i = 1:length(t4)
+  q_nom = qtraj_knot.eval(t4(i));
+  ik = InverseKinematics(robot,q_nom,rfoot_cnstr1{:},lhand_cnstr,rhand_cnstr,lfoot_above_ground);
+  [q4(:,i),~,info] = ik.solve(q_nom);
+end
+v4 = [diff(q4,1,2)./repmat(diff(t4),nq,1) sos_sol.v(:,5)];
+
+t5 = linspace(t_knot(5),t_knot(6),10);
+t5 = t5(2:end-1);
+q5 = zeros(nq,length(t5));
+for i = 1:length(t5)
+  q_nom = qtraj_knot.eval(t5(i));
+  ik = InverseKinematics(robot,q_nom,lfoot_cnstr1{:},lhand_cnstr,rhand_cnstr,rfoot_above_ground);
+  [q5(:,i),~,info] = ik.solve(q_nom);
+end
+v5 = [diff(q5,1,2)./repmat(diff(t5),nq,1) sos_sol.v(:,6)];
+
+t6 = linspace(t_knot(6),t_knot(7),10);
+t6 = t6(2:end-1);
+q6 = zeros(nq,length(t6));
+for i = 1:length(t6)
+  q_nom = qtraj_knot.eval(t6(i));
+  ik = InverseKinematics(robot,q_nom,lfoot_cnstr1{:},lhand_cnstr,rhand_cnstr,rfoot_above_ground);
+  [q6(:,i),~,info] = ik.solve(q_nom);
+end
+v6 = [diff(q6,1,2)./repmat(diff(t6),nq,1) sos_sol.v(:,7)];
+
+t7 = linspace(t_knot(7),t_knot(8),10);
+t7 = t7(2:end-1);
+q7 = zeros(nq,length(t7));
+for i = 1:length(t7)
+  q_nom = qtraj_knot.eval(t7(i));
+  ik = InverseKinematics(robot,q_nom,rfoot_cnstr2{:},lhand_cnstr,rhand_cnstr,lfoot_above_ground);
+  [q7(:,i),~,info] = ik.solve(q_nom);
+end
+v7 = [diff(q7,1,2)./repmat(diff(t7),nq,1) sos_sol.v(:,8)];
+
+t8 = linspace(t_knot(8),t_knot(9),10);
+t8 = t8(2:end-1);
+q8 = zeros(nq,length(t8));
+for i = 1:length(t8)
+  q_nom = qtraj_knot.eval(t8(i));
+  ik = InverseKinematics(robot,q_nom,rfoot_cnstr2{:},lhand_cnstr,rhand_cnstr,lfoot_above_ground);
+  [q8(:,i),~,info] = ik.solve(q_nom);
+end
+v8 = [diff(q8,1,2)./repmat(diff(t8),nq,1) sos_sol.v(:,9)];
+
+t9 = linspace(t_knot(9),t_knot(10),10);
+t9 = t9(2:end-1);
+q9 = zeros(nq,length(t9));
+for i = 1:length(t9)
+  q_nom = qtraj_knot.eval(t9(i));
+  ik = InverseKinematics(robot,q_nom,lfoot_cnstr2{:},rfoot_cnstr2{:},lhand_offwall_cnstr,rhand_offwall_cnstr);
+  [q9(:,i),~,info] = ik.solve(q_nom);
+end
+v9 = [diff(q9,1,2)./repmat(diff(t9),nq,1) sos_sol.v(:,9)];
+
+t_all = [t_knot(1) t1 t_knot(2) t2 t_knot(3) t3 t_knot(4) t4 t_knot(5) t5 t_knot(6) t6 t_knot(7) t7 t_knot(8) t8 t_knot(9) t9 t_knot(10)];
+q_all = [sos_sol.q(:,1) q1 sos_sol.q(:,2) q2 sos_sol.q(:,3) q3 sos_sol.q(:,4) q4 sos_sol.q(:,5) q5 sos_sol.q(:,6) q6 sos_sol.q(:,7) q7 sos_sol.q(:,8) q8 sos_sol.q(:,9) q9 sos_sol.q(:,10)];
+v_all = [sos_sol.v(:,1) v1 sos_sol.v(:,2) v2 sos_sol.v(:,3) v3 sos_sol.v(:,4) v4 sos_sol.v(:,5) v5 sos_sol.v(:,6) v6 sos_sol.v(:,7) v7 sos_sol.v(:,8) v8 sos_sol.v(:,9) v9 sos_sol.v(:,10)];
+
+xtraj = PPTrajectory(foh(t_all,[q_all;v_all]));
+xtraj = xtraj.setOutputFrame(robot.getStateFrame());
