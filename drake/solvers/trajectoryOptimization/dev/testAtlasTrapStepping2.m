@@ -198,12 +198,16 @@ rhand_contact_wrench = struct('active_knot',1:hand_off-1,'cw',rhand_cw,'contact_
 
 Q_comddot = eye(3);
 Qv = 0.1*ones(nv,1);
+Qv(4:6) = 10;
+Qv(l_arm) = 10;
+Qv(r_arm) = 10;
 Qv = diag(Qv);
-Q = eye(nq);
-Q(1,1) = 0;
-Q(2,2) = 0;
-Q(5,5) = 10;
-Q(6,6) = 10;
+Q = ones(nq,1);
+Q(1) = 0;
+Q(2) = 0;
+Q(5) = 10;
+Q(6) = 10;
+Q = diag(Q);
 T_lb = 2.5;
 T_ub = 4;
 tf_range = [T_lb T_ub];
@@ -330,6 +334,22 @@ fccdfkp = fccdfkp.addConstraint(lufarm_cnstr,num2cell(hand_off-1:nT));
 fccdfkp = fccdfkp.addConstraint(rufarm_cnstr,num2cell(hand_off-1:nT));
 sccdfkp_sos = sccdfkp_sos.addConstraint(lufarm_cnstr,num2cell(hand_off-1:nT));
 sccdfkp_sos = sccdfkp_sos.addConstraint(rufarm_cnstr,num2cell(hand_off-1:nT));
+
+% arm_lwy should have zero velocity
+fccdfkp = fccdfkp.addConstraint(ConstantConstraint(zeros(2*nT,1)),fccdfkp.v_inds([l_arm_lwy;r_arm_lwy],:));
+sccdfkp_sos = sccdfkp_sos.addConstraint(ConstantConstraint(zeros(2*nT,1)),sccdfkp_sos.v_inds([l_arm_lwy;r_arm_lwy],:));
+
+% knee not straight
+kny_lb = BoundingBoxConstraint(0.1*ones(2*nT,1),inf(2*nT,1));
+fccdfkp = fccdfkp.addConstraint(kny_lb,fccdfkp.q_inds([l_leg_kny;r_leg_kny],:));
+sccdfkp_sos = sccdfkp_sos.addConstraint(kny_lb,sccdfkp_sos.q_inds([l_leg_kny;r_leg_kny],:));
+fccdfkp = fccdfkp.addConstraint(BoundingBoxConstraint(0.3,inf),fccdfkp.q_inds(r_leg_kny,nT));
+sccdfkp_sos = sccdfkp_sos.addConstraint(BoundingBoxConstraint(0.3,inf),sccdfkp_sos.q_inds(r_leg_kny,nT));
+
+% % pelvis pass the trap
+% pelvis_pos_cnstr = BoundingBoxConstraint(trap_pos(1)+trap_size(1)/2,inf);
+% fccdfkp = fccdfkp.addConstraint(pelvis_pos_cnstr,fccdfkp.q_inds(1,nT));
+% sccdfkp_sos = sccdfkp_sos.addConstraint(pelvis_pos_cnstr,sccdfkp_sos.q_inds(1,nT));
 
 x_init = zeros(fccdfkp.num_vars,1);
 x_init(fccdfkp.q_inds) = reshape(repmat(q0,1,nT),1,[]);
