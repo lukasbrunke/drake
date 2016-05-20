@@ -1,6 +1,6 @@
 classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlanner
   properties(SetAccess = protected)
-    cws_margin_ind % A scalar.
+    cws_margin_ind % A obj.N x 1 vector
     com_inds % A 3 x obj.N matrix
     centroidal_momentum_inds % A 6 x obj.N matrix
     world_momentum_dot_inds % A 3 x obj.N matrix
@@ -15,11 +15,17 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
     
     momentum_dot_normalizer
     momentum_normalizer
+    interpolation_method
   end
   
   properties(Access = private)
     centroidal_momentum_cost_idx
     cws_margin_cnstr_id
+  end
+  
+  properties(Constant)
+    BACKWARD_EULER = 1;
+    MIDPOINT = 2;
   end
   
   methods
@@ -44,6 +50,8 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
           obj.q_quat_inds(:,end+1) = obj.robot.getBody(i).position_num(4:7);
         end
       end      
+      
+      obj.interpolation_method = ContactWrenchSetDynamicsFullKineamticsPlanner.MIDPOINT;
       
       obj = obj.addState();
       
@@ -152,8 +160,8 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
   
   methods(Access = protected)
     function obj = addState(obj)
-      [obj,obj.cws_margin_ind] = obj.addDecisionVariable(1,{'cws_margin'});
-      [obj,obj.cws_margin_cnstr_id] = obj.addConstraint(BoundingBoxConstraint(0,inf),obj.cws_margin_ind);
+      [obj,obj.cws_margin_ind] = obj.addDecisionVariable(obj.N,repmat({'cws_margin'},obj.N,1));
+      [obj,obj.cws_margin_cnstr_id] = obj.addConstraint(BoundingBoxConstraint(zeros(obj.N,1),inf(obj.N,1)),obj.cws_margin_ind);
       
       x_name = cell(3*obj.N,1);
       for i = 1:obj.N
@@ -203,7 +211,6 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
     
     
     function obj = addPostureInterpolation(obj)
-      % Use the mid-point interpolation for joint q and v
       m_num_quat = size(obj.q_quat_inds,2);
       if(m_num_quat ~= 0)
         cnstr = FunctionHandleConstraint(zeros(obj.nq,1),zeros(obj.nq,1),2*obj.nq+2*obj.nv+1+m_num_quat,@(~,~,v_l,v_r,dt,quat_correction_slack,kinsol_l,kinsol_r) postureInterpolationFun1(obj,kinsol_l,kinsol_r,v_l,v_r,dt,quat_correction_slack));
@@ -232,8 +239,13 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
         cnstr = cnstr.setName(name);
         iCfun = [(1:obj.nq*(obj.N-1))';(1:obj.nq*(obj.N-1))'];
         jCvar = [(1:obj.nq*(obj.N-1))';obj.nq+(1:obj.nv*(obj.N-1))'];
-        iCfun = [iCfun;(1:obj.nq*(obj.N-1))';(1:obj.nq*(obj.N-1))'];
-        jCvar = [jCvar;obj.nq*obj.N+(1:obj.nv*(obj.N-1))';obj.nq*obj.N+obj.nv+(1:obj.nv*(obj.N-1))'];
+        if(obj.interpolation_method == ContactWrenchSetDynamicsFullKineamticsPlanner.BACKWARD_EULER)
+          iCfun = [iCfun;(1:obj.nq*(obj.N-1))'];
+          jCvar = [jCvar;obj.nq*obj.N+obj.nv+(1:obj.nv*(obj.N-1))'];
+        elseif(obj.interpolation_method == ContactWrenchSetDynamicsFullKineamticsPlanner.MIDPOINT)
+          iCfun = [iCfun;(1:obj.nq*(obj.N-1))';(1:obj.nq*(obj.N-1))'];
+          jCvar = [jCvar;obj.nq*obj.N+(1:obj.nv*(obj.N-1))';obj.nq*obj.N+obj.nv+(1:obj.nv*(obj.N-1))'];
+        end
         iCfun = [iCfun;(1:obj.nq*(obj.N-1))'];
         jCvar = [jCvar;reshape(bsxfun(@times,obj.nq*obj.N+obj.nv*obj.N+(1:obj.N-1),ones(obj.nq,1)),[],1)];
         cnstr = cnstr.setSparseStructure(iCfun,jCvar);
@@ -265,12 +277,20 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
       q = reshape(q,obj.nq,obj.N);
       v = reshape(v,obj.nv,obj.N);
       dt = reshape(dt,1,obj.N-1);
-      c = reshape(diff(q,[],2)-0.5*(v(:,1:end-1)+v(:,2:end)).*bsxfun(@times,ones(obj.nq,1),dt),[],1);
-      dcdq = -speye(obj.nq*(obj.N-1),obj.nq*obj.N) + [sparse(obj.nq*(obj.N-1),obj.nq) speye(obj.nq*(obj.N-1))];
-      dcdv = -0.5*sparse((1:obj.nq*(obj.N-1))',(1:obj.nv*(obj.N-1))',reshape(bsxfun(@times,ones(obj.nq,1),dt),[],1),obj.nq*(obj.N-1),obj.nq*obj.N)...
-        -0.5*sparse((1:obj.nq*(obj.N-1))',obj.nv+(1:obj.nv*(obj.N-1))',reshape(bsxfun(@times,ones(obj.nq,1),dt),[],1),obj.nq*(obj.N-1),obj.nq*obj.N);
-      dcddt = sparse((1:obj.nq*(obj.N-1))',reshape(bsxfun(@times,ones(obj.nq,1),1:obj.N-1),[],1),reshape(-0.5*(v(:,1:end-1)+v(:,2:end)),[],1),obj.nq*(obj.N-1),obj.N-1);
-      dc = [dcdq dcdv dcddt];
+      if(obj.interpolation_method == ContactWrenchSetDynamicsFullKineamticsPlanner.BACKWARD_EULER)
+        c = reshape(diff(q,1,2)-v(:,2:end).*bsxfun(@times,dt,ones(obj.nq,1)),[],1);
+        dcdq = -speye(obj.nq*(obj.N-1),obj.nq*obj.N) + [sparse(obj.nq*(obj.N-1),obj.nq) speye(obj.nq*(obj.N-1))];
+        dcdv = -sparse((1:obj.nq*(obj.N-1))',obj.nv+(1:obj.nv*(obj.N-1))',reshape(bsxfun(@times,ones(obj.nq,1),dt),[],1),obj.nq*(obj.N-1),obj.nq*obj.N);
+        dcddt = sparse((1:obj.nq*(obj.N-1))',reshape(bsxfun(@times,ones(obj.nq,1),1:obj.N-1),[],1),reshape(-v(:,2:end),[],1),obj.nq*(obj.N-1),obj.N-1);
+        dc = [dcdq dcdv dcddt];
+      elseif(obj.interpolation_method == ContactWrenchSetDynamicsFullKineamticsPlanner.MIDPOINT)
+        c = reshape(diff(q,[],2)-0.5*(v(:,1:end-1)+v(:,2:end)).*bsxfun(@times,ones(obj.nq,1),dt),[],1);
+        dcdq = -speye(obj.nq*(obj.N-1),obj.nq*obj.N) + [sparse(obj.nq*(obj.N-1),obj.nq) speye(obj.nq*(obj.N-1))];
+        dcdv = -0.5*sparse((1:obj.nq*(obj.N-1))',(1:obj.nv*(obj.N-1))',reshape(bsxfun(@times,ones(obj.nq,1),dt),[],1),obj.nq*(obj.N-1),obj.nq*obj.N)...
+          -0.5*sparse((1:obj.nq*(obj.N-1))',obj.nv+(1:obj.nv*(obj.N-1))',reshape(bsxfun(@times,ones(obj.nq,1),dt),[],1),obj.nq*(obj.N-1),obj.nq*obj.N);
+        dcddt = sparse((1:obj.nq*(obj.N-1))',reshape(bsxfun(@times,ones(obj.nq,1),1:obj.N-1),[],1),reshape(-0.5*(v(:,1:end-1)+v(:,2:end)),[],1),obj.nq*(obj.N-1),obj.N-1);
+        dc = [dcdq dcdv dcddt];
+      end
     end
     
     function obj = addCentroidalConstraint(obj)
@@ -311,22 +331,30 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
       cnstr = cnstr.setName(name);
       iCfun = [(1:6*(obj.N-1))';(1:6*(obj.N-1))'];
       jCvar = [(1:6*(obj.N-1))';6+(1:6*(obj.N-1))'];
-      iCfun = [iCfun;reshape(bsxfun(@plus,[2;3;4;1;3;5;1;2;6;1;2;3],6*(0:(obj.N-2))),[],1)];
-      jCvar = [jCvar;reshape(bsxfun(@plus,6*obj.N+[1;1;1;2;2;2;3;3;3;4;5;6],6*(0:(obj.N-2))),[],1)];
-      iCfun = [iCfun;reshape(bsxfun(@plus,[2;3;4;1;3;5;1;2;6;1;2;3],6*(0:(obj.N-2))),[],1)];
-      jCvar = [jCvar;reshape(bsxfun(@plus,6*obj.N+6+[1;1;1;2;2;2;3;3;3;4;5;6],6*(0:(obj.N-2))),[],1)];
-      iCfun = [iCfun;reshape(bsxfun(@plus,[2;3;1;3;1;2],6*(0:(obj.N-2))),[],1)];
-      jCvar = [jCvar;reshape(bsxfun(@plus,12*obj.N+[1;1;2;2;3;3],3*(0:(obj.N-2))),[],1)];
-      iCfun = [iCfun;reshape(bsxfun(@plus,[2;3;1;3;1;2],6*(0:(obj.N-2))),[],1)];
-      jCvar = [jCvar;reshape(bsxfun(@plus,12*obj.N+3+[1;1;2;2;3;3],3*(0:(obj.N-2))),[],1)];
-      iCfun = [iCfun;(1:6*(obj.N-1))'];
-      jCvar = [jCvar;reshape(bsxfun(@times,15*obj.N+(1:obj.N-1),ones(6,1)),[],1)];
+      if(obj.interpolation_method == ContactWrenchSetDynamicsFullKineamticsPlanner.BACKWARD_EULER)
+        iCfun = [iCfun;reshape(bsxfun(@plus,[2;3;4;1;3;5;1;2;6;1;2;3],6*(0:(obj.N-2))),[],1)];
+        jCvar = [jCvar;reshape(bsxfun(@plus,6*obj.N+6+[1;1;1;2;2;2;3;3;3;4;5;6],6*(0:(obj.N-2))),[],1)];
+        iCfun = [iCfun;reshape(bsxfun(@plus,[2;3;1;3;1;2],6*(0:(obj.N-2))),[],1)];
+        jCvar = [jCvar;reshape(bsxfun(@plus,12*obj.N+3+[1;1;2;2;3;3],3*(0:(obj.N-2))),[],1)];
+        iCfun = [iCfun;(1:6*(obj.N-1))'];
+        jCvar = [jCvar;reshape(bsxfun(@times,15*obj.N+(1:obj.N-1),ones(6,1)),[],1)];
+      elseif(obj.interpolation_method == ContactWrenchSetDynamicsFullKineamticsPlanner.MIDPOINT)
+        iCfun = [iCfun;reshape(bsxfun(@plus,[2;3;4;1;3;5;1;2;6;1;2;3],6*(0:(obj.N-2))),[],1)];
+        jCvar = [jCvar;reshape(bsxfun(@plus,6*obj.N+[1;1;1;2;2;2;3;3;3;4;5;6],6*(0:(obj.N-2))),[],1)];
+        iCfun = [iCfun;reshape(bsxfun(@plus,[2;3;4;1;3;5;1;2;6;1;2;3],6*(0:(obj.N-2))),[],1)];
+        jCvar = [jCvar;reshape(bsxfun(@plus,6*obj.N+6+[1;1;1;2;2;2;3;3;3;4;5;6],6*(0:(obj.N-2))),[],1)];
+        iCfun = [iCfun;reshape(bsxfun(@plus,[2;3;1;3;1;2],6*(0:(obj.N-2))),[],1)];
+        jCvar = [jCvar;reshape(bsxfun(@plus,12*obj.N+[1;1;2;2;3;3],3*(0:(obj.N-2))),[],1)];
+        iCfun = [iCfun;reshape(bsxfun(@plus,[2;3;1;3;1;2],6*(0:(obj.N-2))),[],1)];
+        jCvar = [jCvar;reshape(bsxfun(@plus,12*obj.N+3+[1;1;2;2;3;3],3*(0:(obj.N-2))),[],1)];
+        iCfun = [iCfun;(1:6*(obj.N-1))'];
+        jCvar = [jCvar;reshape(bsxfun(@times,15*obj.N+(1:obj.N-1),ones(6,1)),[],1)];
+      end
       cnstr = cnstr.setSparseStructure(iCfun,jCvar);
       obj = obj.addConstraint(cnstr,[{obj.centroidal_momentum_inds(:)};{obj.world_momentum_dot_inds(:)};{obj.com_inds(:)};{obj.h_inds(:)}]);
     end
     
     function [c,dc] = momentumInterpolationFun(obj,centroidal_momentum,momentum_dot,com,dt)
-      % Use mid-point interpolation for momentum
       % first compute the centroidal momentum dot
       centroidal_momentum = reshape(centroidal_momentum,6,obj.N)*obj.momentum_normalizer;
       momentum_dot = reshape(momentum_dot,6,obj.N)*obj.momentum_dot_normalizer;
@@ -334,18 +362,32 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
       dt = reshape(dt,1,obj.N-1);
       hdot = [momentum_dot(4:6,:);momentum_dot(1:3,:)];
       hdot(1:3,:) = hdot(1:3,:)+cross(hdot(4:6,:),com);
-      c = reshape(diff(centroidal_momentum,[],2)-0.5*(hdot(:,1:end-1)+hdot(:,2:end)).*bsxfun(@times,dt,ones(6,1)),[],1);
+      if(obj.interpolation_method == ContactWrenchSetDynamicsFullKineamticsPlanner.BACKWARD_EULER)
+        c = reshape(diff(centroidal_momentum,[],2)-hdot(:,2:end).*bsxfun(@times,dt,ones(6,1)),[],1);
+      elseif(obj.interpolation_method == ContactWrenchSetDynamicsFullKineamticsPlanner.MIDPOINT);
+        c = reshape(diff(centroidal_momentum,[],2)-0.5*(hdot(:,1:end-1)+hdot(:,2:end)).*bsxfun(@times,dt,ones(6,1)),[],1);
+      end
       dc_dcentroidal_momentum = (-speye(6*(obj.N-1),6*obj.N)+[sparse(6*(obj.N-1),6) speye(6*(obj.N-1))])*obj.momentum_normalizer;
       com_cross = [0 0 1;0 -1 0;0 0 -1;1 0 0;0 1 0;-1 0 0]*com;
+      f_cross = [0 0 1;0 -1 0;0 0 -1;1 0 0;0 1 0;-1 0 0]*momentum_dot(1:3,:);
+      if(obj.interpolation_method == ContactWrenchSetDynamicsFullKineamticsPlanner.BACKWARD_EULER)
+        dc_dmomentum_dot = -sparse((1:6*(obj.N-1))',reshape(bsxfun(@plus,[4;5;6;1;2;3],6*(1:(obj.N-1))),[],1),reshape(bsxfun(@times,dt,ones(6,1)),[],1),6*(obj.N-1),6*obj.N)...
+          -sparse(reshape(bsxfun(@plus,[2;3;1;3;1;2],6*(0:(obj.N-2))),[],1),reshape(bsxfun(@plus,6+[1;1;2;2;3;3;],6*(0:(obj.N-2))),[],1),reshape(-com_cross(:,2:end).*bsxfun(@times,dt,ones(6,1)),[],1),6*(obj.N-1),6*obj.N);
+      elseif(obj.interpolation_method == ContactWrenchSetDynamicsFullKineamticsPlanner.MIDPOINT)
       dc_dmomentum_dot = -0.5*sparse((1:6*(obj.N-1))',reshape(bsxfun(@plus,[4;5;6;1;2;3],6*(0:(obj.N-2))),[],1),reshape(bsxfun(@times,dt,ones(6,1)),[],1),6*(obj.N-1),6*obj.N)...
         -0.5*sparse((1:6*(obj.N-1))',reshape(bsxfun(@plus,[4;5;6;1;2;3],6*(1:(obj.N-1))),[],1),reshape(bsxfun(@times,dt,ones(6,1)),[],1),6*(obj.N-1),6*obj.N)...
         -0.5*sparse(reshape(bsxfun(@plus,[2;3;1;3;1;2],6*(0:(obj.N-2))),[],1),reshape(bsxfun(@plus,[1;1;2;2;3;3;],6*(0:(obj.N-2))),[],1),reshape(-com_cross(:,1:end-1).*bsxfun(@times,dt,ones(6,1)),[],1),6*(obj.N-1),6*obj.N)...
         -0.5*sparse(reshape(bsxfun(@plus,[2;3;1;3;1;2],6*(0:(obj.N-2))),[],1),reshape(bsxfun(@plus,6+[1;1;2;2;3;3;],6*(0:(obj.N-2))),[],1),reshape(-com_cross(:,2:end).*bsxfun(@times,dt,ones(6,1)),[],1),6*(obj.N-1),6*obj.N);
+      end
       dc_dmomentum_dot = dc_dmomentum_dot*obj.momentum_dot_normalizer;
-      f_cross = [0 0 1;0 -1 0;0 0 -1;1 0 0;0 1 0;-1 0 0]*momentum_dot(1:3,:);
-      dc_dcom = -0.5*sparse(reshape(bsxfun(@plus,[2;3;1;3;1;2],6*(0:(obj.N-2))),[],1),reshape(bsxfun(@plus,[1;1;2;2;3;3;],3*(0:(obj.N-2))),[],1),reshape(f_cross(:,1:end-1).*bsxfun(@times,ones(6,1),dt),[],1),6*(obj.N-1),3*obj.N)...
-        -0.5*sparse(reshape(bsxfun(@plus,[2;3;1;3;1;2],6*(0:(obj.N-2))),[],1),reshape(bsxfun(@plus,3+[1;1;2;2;3;3;],3*(0:(obj.N-2))),[],1),reshape(f_cross(:,2:end).*bsxfun(@times,ones(6,1),dt),[],1),6*(obj.N-1),3*obj.N);
-      dc_ddt = sparse((1:6*(obj.N-1))',reshape(bsxfun(@times,ones(6,1),(1:obj.N-1)),[],1),-0.5*(hdot(:,1:end-1)+hdot(:,2:end)),6*(obj.N-1),obj.N-1);
+      if(obj.interpolation_method == ContactWrenchSetDynamicsFullKineamticsPlanner.BACKWARD_EULER)
+        dc_dcom = -sparse(reshape(bsxfun(@plus,[2;3;1;3;1;2],6*(0:(obj.N-2))),[],1),reshape(bsxfun(@plus,3+[1;1;2;2;3;3;],3*(0:(obj.N-2))),[],1),reshape(f_cross(:,2:end).*bsxfun(@times,ones(6,1),dt),[],1),6*(obj.N-1),3*obj.N);
+        dc_ddt = sparse((1:6*(obj.N-1))',reshape(bsxfun(@times,ones(6,1),(1:obj.N-1)),[],1),-hdot(:,2:end),6*(obj.N-1),obj.N-1);
+      elseif(obj.interpolation_method == ContactWrenchSetDynamicsFullKineamticsPlanner.MIDPOINT)
+        dc_dcom = -0.5*sparse(reshape(bsxfun(@plus,[2;3;1;3;1;2],6*(0:(obj.N-2))),[],1),reshape(bsxfun(@plus,[1;1;2;2;3;3;],3*(0:(obj.N-2))),[],1),reshape(f_cross(:,1:end-1).*bsxfun(@times,ones(6,1),dt),[],1),6*(obj.N-1),3*obj.N)...
+          -0.5*sparse(reshape(bsxfun(@plus,[2;3;1;3;1;2],6*(0:(obj.N-2))),[],1),reshape(bsxfun(@plus,3+[1;1;2;2;3;3;],3*(0:(obj.N-2))),[],1),reshape(f_cross(:,2:end).*bsxfun(@times,ones(6,1),dt),[],1),6*(obj.N-1),3*obj.N);
+        dc_ddt = sparse((1:6*(obj.N-1))',reshape(bsxfun(@times,ones(6,1),(1:obj.N-1)),[],1),-0.5*(hdot(:,1:end-1)+hdot(:,2:end)),6*(obj.N-1),obj.N-1);
+      end
       dc = [dc_dcentroidal_momentum dc_dmomentum_dot dc_dcom dc_ddt];
     end
     
@@ -355,7 +397,7 @@ classdef ContactWrenchSetDynamicsFullKineamticsPlanner < RigidBodyKinematicsPlan
         error('cws_margin_cost should be non-negative');
       end
       obj.cws_margin_cost = cws_margin_cost;
-      obj = obj.addCost(LinearConstraint(-inf,inf,-obj.cws_margin_cost),obj.cws_margin_ind);
+      obj = obj.addCost(LinearConstraint(-inf,inf,-obj.cws_margin_cost*ones(1,obj.N)),obj.cws_margin_ind);
     end
     
     function obj = setPostureErrCost(obj,Q,q_nom)

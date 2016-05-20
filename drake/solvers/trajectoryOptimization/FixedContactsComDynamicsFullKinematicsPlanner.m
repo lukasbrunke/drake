@@ -81,6 +81,7 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
         sol.grasp_wrench_vert{i} = obj.grasp_wrench_vert{i};
       end
     end
+    
     function checkSolution(obj,sol)
       checkSolution@ContactWrenchSetDynamicsFullKineamticsPlanner(obj,sol);
       mg = [0;0;-obj.robot_mass*obj.gravity];
@@ -94,8 +95,7 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
           cws_margin(i) = min(obj.bin_cws{i}-obj.Ain_cws{i}*(sol.momentum_dot(:,i)-wrench_gravity(:,i)));
         end
       end
-      cws_margin = min(cws_margin);
-      if(cws_margin<-1e-5)
+      if(any(cws_margin<-1e-5))
         error('The wrench is not within the contact wrench set');
       end
     end
@@ -164,9 +164,15 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
           valuecheck(contact_wrench_struct(i).cw.num_pts,1);
           % compute the vertices in the contact wrench set
           wrench_vert = contact_wrench_struct(i).cw.wrench_vert;
+          wrench_vert_world = wrench_vert;
           wrench_vert_world(4:6,:) = cross(repmat(contact_wrench_struct(i).contact_pos,1,contact_wrench_struct(i).cw.num_wrench_vert),wrench_vert(1:3,:),1)+wrench_vert(4:6,:);
           for j = 1:length(contact_wrench_struct(i).active_knot)
-            obj.cws_vert{contact_wrench_struct(i).active_knot(j)} = [obj.cws_ray{contact_wrench_struct(i).active_knot(j)} wrench_vert_world];
+            if(isempty(obj.cws_vert{contact_wrench_struct(i).active_knot(j)}))
+                obj.cws_vert{contact_wrench_struct(i).active_knot(j)} = wrench_vert_world;
+            else
+              obj.cws_vert{contact_wrench_struct(i).active_knot(j)} = repmat(obj.cws_vert{contact_wrench_struct(i).active_knot(j)},1,size(wrench_vert_world,2))+...
+                reshape(repmat(wrench_vert_world,size(obj.cws_vert{contact_wrench_struct(i).active_knot(j)},2),1),6,[]);
+            end
           end
           cnstr = WorldPositionConstraint(obj.robot,contact_wrench_struct(i).cw.body,contact_wrench_struct(i).cw.body_pts,contact_wrench_struct(i).contact_pos,contact_wrench_struct(i).contact_pos);
           obj = obj.addRigidBodyConstraint(cnstr,num2cell(contact_wrench_struct(i).active_knot));
@@ -180,6 +186,7 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
           error('Not supported');
         end
       end
+      % compute the Minkowski sum of the CWS vertices
       for i = 1:obj.N
 %         try
 %           P = Polyhedron('V',obj.cws_vert{i}','R',obj.cws_ray{i}');
@@ -204,7 +211,16 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
               obj.beq_cws{i} = P.He(:,7);
             end
           else
-            [obj.Ain_cws{i},obj.bin_cws{i},obj.Aeq_cws{i},obj.beq_cws{i}] = vert2lcon([zeros(6,1) obj.cws_ray{i}.*bsxfun(@times,ones(6,1),(obj.robot_mass*obj.gravity*10./sqrt(sum(obj.cws_ray{i}.^2,1)))) obj.cws_vert{i}]',eps);
+            try
+              P = Polyhedron('V',obj.cws_vert{i}','R',obj.cws_ray{i}');
+              P = P.computeHRep();
+              obj.Ain_cws{i} = P.H(:,1:6);
+              obj.bin_cws{i} = P.H(:,7);
+              obj.Aeq_cws{i} = P.He(:,1:6);
+              obj.beq_cws{i} = P.He(:,7);
+            catch
+              [obj.Ain_cws{i},obj.bin_cws{i},obj.Aeq_cws{i},obj.beq_cws{i}] = vert2lcon([zeros(6,1) obj.cws_ray{i}.*bsxfun(@times,ones(6,1),(obj.robot_mass*obj.gravity*10./sqrt(sum(obj.cws_ray{i}.^2,1)))) obj.cws_vert{i}]',eps);
+            end
           end
 %         end
         normalizer = sqrt(sum(obj.Ain_cws{i}.^2,2));
