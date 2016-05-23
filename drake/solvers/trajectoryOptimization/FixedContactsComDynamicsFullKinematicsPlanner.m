@@ -94,6 +94,29 @@ classdef FixedContactsComDynamicsFullKinematicsPlanner < ContactWrenchSetDynamic
         if(~isempty(obj.Ain_cws{i}))
           cws_margin(i) = min(obj.bin_cws{i}-obj.Ain_cws{i}*(sol.momentum_dot(:,i)-wrench_gravity(:,i)));
         end
+        % Also, solve the problem that hdot-wrench_gravity = sum
+        % contact_wrench
+        prog = spotsosprog();
+        fc_weights = cell(obj.num_fc_pts(i),1);
+        contact_wrench = zeros(6,1);
+        for j = 1:obj.num_fc_pts(i)
+          num_fc_edges_ij = size(obj.fc_edges{i}{j},2);
+          [prog,fc_weights{j}] = prog.newPos(num_fc_edges_ij,1);
+          fc_force_j = obj.fc_edges{i}{j}*fc_weights{j};
+          contact_wrench = contact_wrench+sum([fc_force_j;cross(obj.fc_contact_pos{i}(:,j),fc_force_j)],2);
+        end
+        grasp_wrench_vert_weight = cell(obj.num_grasp_pts(i),1);
+        for j = 1:obj.num_grasp_pts(i)
+          [prog,grasp_wrench_vert_weight{j}] = prog.newPos(obj.num_grasp_wrench_vert{i}(j),1);
+          prog = prog.withEqs(sum(grasp_wrench_vert_weight{j})-1);
+          grasp_wrench_ij = obj.grasp_wrench_vert{i}{j}*grasp_wrench_vert_weight{j};
+          contact_wrench = contact_wrench + sum([grasp_wrench_ij(1:3,:);cross(obj.grasp_pos{i}(:,j),grasp_wrench_ij(1:3,:))+grasp_wrench_ij(4:6,:)],2);
+        end
+        prog = prog.withEqs(sol.momentum_dot(:,i)-wrench_gravity(:,i)-contact_wrench);
+        wrench_sol = prog.minimize(msspoly.zeros(1,1),@spot_mosek);
+        if(~wrench_sol.isPrimalFeasible())
+          error('The contacts cannot generate the desired motion at knot %d',i);
+        end
       end
       if(any(cws_margin<-1e-5))
         error('The wrench is not within the contact wrench set');
