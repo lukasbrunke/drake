@@ -223,7 +223,7 @@ disturbance_pos = repmat(com0,1,nT)+bsxfun(@times,(0:nT-1),(com2-com0)/(nT-1));
 Qw = eye(6);
 fccdfkp_options = struct();
 fccdfkp = FixedContactsFixedDisturbanceComDynamicsFullKinematicsPlanner(robot,nT,tf_range,Q_comddot,Qv,Q,cws_margin_cost1,q_nom,contact_wrench_struct,Qw,disturbance_pos,fccdfkp_options);
-sccdfkp_sos_options = struct('num_fc_edges',num_ground_fc_edges,'l1_normalizer',1e3);
+sccdfkp_sos_options = struct('num_fc_edges',num_ground_fc_edges,'l1_normalizer',5e3,'l2_normalizer',10);
 sccdfkp_sos = SearchContactsFixedDisturbanceFullKinematicsSOSPlanner(robot,nT,tf_range,Q_comddot,Qv,Q,cws_margin_cost2,q_nom,contact_wrench_struct,Qw,disturbance_pos,sccdfkp_sos_options);
 
 % add feet contact constraint 
@@ -335,6 +335,11 @@ kny_lb = BoundingBoxConstraint(0.4*ones(2*nT,1),inf(2*nT,1));
 fccdfkp = fccdfkp.addConstraint(kny_lb,fccdfkp.q_inds([l_leg_kny;r_leg_kny],:));
 sccdfkp_sos = sccdfkp_sos.addConstraint(kny_lb,sccdfkp_sos.q_inds([l_leg_kny;r_leg_kny],:));
 
+% bend the knee for the initial posture
+kny_lb_init = BoundingBoxConstraint(0.8*ones(2,1),inf(2,1));
+fccdfkp = fccdfkp.addConstraint(kny_lb_init,fccdfkp.q_inds([l_leg_kny;r_leg_kny],1));
+sccdfkp_sos = sccdfkp_sos.addConstraint(kny_lb_init,sccdfkp_sos.q_inds([l_leg_kny;r_leg_kny],1));
+
 % % pelvis pass the trap
 % pelvis_pos_cnstr = BoundingBoxConstraint(trap_pos(1)+trap_size(1)/2,inf);
 % fccdfkp = fccdfkp.addConstraint(pelvis_pos_cnstr,fccdfkp.q_inds(1,nT));
@@ -358,7 +363,7 @@ fccdfkp = fccdfkp.addCost(angular_momentum_cost,reshape(fccdfkp.centroidal_momen
 sccdfkp_sos = sccdfkp_sos.addCost(angular_momentum_cost,reshape(sccdfkp_sos.centroidal_momentum_inds(1:3,:),[],1));
 
 % add lower bound on cws margin
-sccdfkp_sos = sccdfkp_sos.addConstraint(BoundingBoxConstraint(50*ones(nT,1),inf(nT,1)),sccdfkp_sos.cws_margin_ind);
+sccdfkp_sos = sccdfkp_sos.addConstraint(BoundingBoxConstraint(70*ones(nT,1),inf(nT,1)),sccdfkp_sos.cws_margin_ind);
 
 % initial velocity bounds
 init_vel_bnd = BoundingBoxConstraint(-0.5*ones(nv,1),0.5*ones(nv,1));
@@ -386,6 +391,10 @@ qsc_init = qsc_init.addContact(l_foot,l_foot_contact_pts,r_foot,r_foot_contact_p
 qsc_init = qsc_init.setActive(true);
 fccdfkp = fccdfkp.addConstraint(qsc_init,{1});
 sccdfkp_sos = sccdfkp_sos.addConstraint(qsc_init,{1});
+
+% Do not bend left shoulder backward too much
+l_arm_shz_bnd = BoundingBoxConstraint(-inf(nT-lhand_land0+1,1),0.65*ones(nT-lhand_land0+1,1));
+sccdfkp_sos = sccdfkp_sos.addConstraint(l_arm_shz_bnd,sccdfkp_sos.q_inds(l_arm_shz,lhand_land0:nT));
 
 x_init = zeros(fccdfkp.num_vars,1);
 x_init(fccdfkp.q_inds) = reshape(repmat(q0,1,nT),1,[]);
@@ -449,7 +458,7 @@ end
 x_init = sccdfkp_sos.setVGramVarVal(x_init,V_clean);
 
 sccdfkp_sos = sccdfkp_sos.setSolverOptions('snopt','print','test_trap_sccdfkp_sos3.out');
-sccdfkp_sos = sccdfkp_sos.setSolverOptions('snopt','majoriterationslimit',300);
+sccdfkp_sos = sccdfkp_sos.setSolverOptions('snopt','majoriterationslimit',500);
 sccdfkp_sos = sccdfkp_sos.setSolverOptions('snopt','superbasicslimit',14000);
 sccdfkp_sos = sccdfkp_sos.setSolverOptions('snopt','majoroptimalitytolerance',3e-4);
 

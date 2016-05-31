@@ -53,6 +53,7 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
     
     sos_cnstr_normalizer;
     l1_normalizer;
+    l2_normalizer;
     V_normalizer;
     
     ab_len
@@ -99,6 +100,9 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       if(~isfield(options,'l1_normalizer'))
         options.l1_normalizer = 100;
       end
+      if(~isfield(options,'l2_normalizer'))
+        options.l2_normalizer = 1;
+      end
       if(~isfield(options,'V_normalizer'))
         options.V_normalizer = 100;
       end
@@ -107,6 +111,7 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       obj.num_fc_edges = options.num_fc_edges;
       obj.sos_cnstr_normalizer = options.sos_cnstr_normalizer;
       obj.l1_normalizer = options.l1_normalizer;
+      obj.l2_normalizer = options.l2_normalizer;
       obj.V_normalizer = options.V_normalizer;
       
       obj = obj.parseContactWrenchStruct(contact_wrench_struct);
@@ -585,7 +590,7 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
                 warning('l2[%d] minimum eigen value %f',i,min_eig_Q);
                 R = chol(Q+(1.1*abs(min_eig_Q)+eps)*eye(obj.ab_len(i)+1));
               end
-              l2_gram_var_val{i}(:,(j-1)*obj.num_fc_edges+k) = R(triu_mask);
+              l2_gram_var_val{i}(:,(j-1)*obj.num_fc_edges+k) = R(triu_mask)/obj.l2_normalizer;
             end
           end
         end
@@ -699,7 +704,7 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
           for j = 1:obj.num_fc_pts(i)
             for k = 1:obj.num_fc_edges
               l2_gram = msspoly.zeros(obj.ab_len(i)+1,obj.ab_len(i)+1);
-              l2_gram(triu_mask) = obj.l2_gram_var{i}(:,(j-1)*obj.num_fc_edges+k);
+              l2_gram(triu_mask) = obj.l2_gram_var{i}(:,(j-1)*obj.num_fc_edges+k)*obj.l2_normalizer;
               l2_gram = l2_gram'*l2_gram;
               obj.l2{i}(j,k) = obj.ab_monomials1{i}'*l2_gram*obj.ab_monomials1{i};
             end
