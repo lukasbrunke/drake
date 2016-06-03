@@ -128,7 +128,7 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       obj = obj.setSolverOptions('snopt','majorfeasibilitytolerance',1e-6);
       obj = obj.setSolverOptions('snopt','superbasicslimit',obj.num_vars+1);
       obj = obj.setSolverOptions('snopt','majoroptimalitytolerance',3e-4);
-      obj = obj.setSolverOptions('snopt','iterationslimit',1e6);
+      obj = obj.setSolverOptions('snopt','iterationslimit',3e5);
       obj = obj.setSolverOptions('snopt','majoriterationslimit',500);
       obj = obj.setSolverOptions('snopt','scaleoption',0);
     end

@@ -278,7 +278,7 @@ sccdfkp_sos = sccdfkp_sos.addConstraint(dt_bnd,sccdfkp_sos.h_inds);
 
 % foot above ground
 lfoot_above_ground = WorldPositionConstraint(robot,l_foot,l_foot_contact_pts,[nan(2,4);0.05*ones(1,4)],[nan(1,4);(l_wall_pos(2)-wall_size(2)/2-0.01)*ones(1,4);nan(1,4)]);
-rfoot_above_ground = WorldPositionConstraint(robot,r_foot,r_foot_contact_pts,[nan(1,4);(r_wall_pos(2)+wall_size(2)/2+0.01)*ones(1,4);0.035*ones(1,4)],nan(3,4));
+rfoot_above_ground = WorldPositionConstraint(robot,r_foot,r_foot_contact_pts,[nan(1,4);(r_wall_pos(2)+wall_size(2)/2+0.01)*ones(1,4);0.05*ones(1,4)],nan(3,4));
 fccdfkp = fccdfkp.addConstraint(lfoot_above_ground,num2cell(lfoot_takeoff0:lfoot_land0-1));
 fccdfkp = fccdfkp.addConstraint(rfoot_above_ground,num2cell(rfoot_takeoff0:rfoot_land0-1));
 fccdfkp = fccdfkp.addConstraint(rfoot_above_ground,num2cell(rfoot_takeoff1:rfoot_land1-1));
@@ -392,9 +392,9 @@ qsc_init = qsc_init.setActive(true);
 fccdfkp = fccdfkp.addConstraint(qsc_init,{1});
 sccdfkp_sos = sccdfkp_sos.addConstraint(qsc_init,{1});
 
-% Do not bend left shoulder backward too much
-l_arm_shz_bnd = BoundingBoxConstraint(-inf(nT-lhand_land0+1,1),0.65*ones(nT-lhand_land0+1,1));
-sccdfkp_sos = sccdfkp_sos.addConstraint(l_arm_shz_bnd,sccdfkp_sos.q_inds(l_arm_shz,lhand_land0:nT));
+% % Do not bend left shoulder backward too much
+% l_arm_shz_bnd = BoundingBoxConstraint(-inf(nT-lhand_land0+1,1),0.65*ones(nT-lhand_land0+1,1));
+% sccdfkp_sos = sccdfkp_sos.addConstraint(l_arm_shz_bnd,sccdfkp_sos.q_inds(l_arm_shz,lhand_land0:nT));
 
 x_init = zeros(fccdfkp.num_vars,1);
 x_init(fccdfkp.q_inds) = reshape(repmat(q0,1,nT),1,[]);
