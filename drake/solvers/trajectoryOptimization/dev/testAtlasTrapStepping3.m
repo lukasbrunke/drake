@@ -199,8 +199,9 @@ rhand_contact_wrench = struct('active_knot',1:hand_off-1,'cw',rhand_cw,'contact_
 Q_comddot = eye(3);
 Qv = 0.1*ones(nv,1);
 Qv(4:6) = 10;
-Qv(l_arm) = 10;
-Qv(r_arm) = 10;
+Qv(l_arm) = 20;
+Qv(r_arm) = 20;
+Qv(back_bkx) = 10;
 Qv(back_bky) = 10;
 Qv = diag(Qv);
 Q = ones(nq,1);
@@ -331,7 +332,7 @@ fccdfkp = fccdfkp.addConstraint(ConstantConstraint(zeros(2*nT,1)),fccdfkp.v_inds
 sccdfkp_sos = sccdfkp_sos.addConstraint(ConstantConstraint(zeros(2*nT,1)),sccdfkp_sos.v_inds([l_arm_lwy;r_arm_lwy],:));
 
 % knee not straight
-kny_lb = BoundingBoxConstraint(0.4*ones(2*nT,1),inf(2*nT,1));
+kny_lb = BoundingBoxConstraint(0.5*ones(2*nT,1),inf(2*nT,1));
 fccdfkp = fccdfkp.addConstraint(kny_lb,fccdfkp.q_inds([l_leg_kny;r_leg_kny],:));
 sccdfkp_sos = sccdfkp_sos.addConstraint(kny_lb,sccdfkp_sos.q_inds([l_leg_kny;r_leg_kny],:));
 
@@ -353,7 +354,7 @@ fccdfkp = fccdfkp.addConstraint(qsc,{nT});
 sccdfkp_sos = sccdfkp_sos.addConstraint(qsc,{nT});
 
 % final velocity should be small
-final_velocity_bnd = BoundingBoxConstraint([-0.1*ones(3,1);-0.5*ones(nv-3,1)],[0.1*ones(3,1);0.5*ones(nv-3,1)]);
+final_velocity_bnd = BoundingBoxConstraint([-0.1*ones(6,1);-0.2*ones(nv-6,1)],[0.1*ones(6,1);0.2*ones(nv-6,1)]);
 fccdfkp = fccdfkp.addConstraint(final_velocity_bnd,fccdfkp.v_inds(:,nT));
 sccdfkp_sos = sccdfkp_sos.addConstraint(final_velocity_bnd,sccdfkp_sos.v_inds(:,nT));
 
@@ -458,7 +459,7 @@ end
 x_init = sccdfkp_sos.setVGramVarVal(x_init,V_clean);
 
 sccdfkp_sos = sccdfkp_sos.setSolverOptions('snopt','print','test_trap_sccdfkp_sos3.out');
-sccdfkp_sos = sccdfkp_sos.setSolverOptions('snopt','majoriterationslimit',500);
+sccdfkp_sos = sccdfkp_sos.setSolverOptions('snopt','majoriterationslimit',200);
 sccdfkp_sos = sccdfkp_sos.setSolverOptions('snopt','superbasicslimit',14000);
 sccdfkp_sos = sccdfkp_sos.setSolverOptions('snopt','majoroptimalitytolerance',3e-4);
 
