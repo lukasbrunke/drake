@@ -351,7 +351,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
         M.block(nL + nP + nC + mC * nC, nL + nP + nC + nC * i, nC, nC) =
             -MatrixXd::Identity(nC, nC);
       }
-      double mu = 1.0;  // TODO: pull this from contactConstraints
+      double mu = 0.65;  // TODO: pull this from contactConstraints
       M.block(nL + nP + nC + mC * nC, nL + nP, nC, nC) =
           mu * MatrixXd::Identity(nC, nC);
     }

@@ -13,8 +13,8 @@ checkDependency('lcmgl');
 
 if nargin<1, example_options=struct(); end
 example_options = applyDefaults(example_options, struct('use_bullet', false,...
-                                                        'perturb_body', 'mtorso',...
-                                                        'perturb_amount', [250;0;0],...
+                                                        'perturb_body', 'head',...
+                                                        'perturb_amount', [1000;0;0],...
                                                         'perturb_timing', [1.0 1.1],...
                                                         'terrain', RigidBodyFlatTerrain));
 
@@ -64,7 +64,7 @@ planeval = bipedControllers.BipedPlanEval(r, standing_plan);
 
 plancontroller = bipedControllers.BipedPlanEvalAndControlSystem(r, control, planeval);
 
-T = 6;
+T = 3;
 ts = example_options.perturb_timing;
 ts = [0 ts(1) ts(2) T];
 vals = example_options.perturb_amount;

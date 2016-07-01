@@ -157,6 +157,27 @@ classdef ContactForceTorqueSensor < TimeSteppingRigidBodySensorWithState %& Visu
         end
         
         xdn = [force;torque];
+        force_pts = zeros(3,size(normal,2));
+        for i = 1:size(normal,2)
+          force_pts(:,i) = normal(:,i)*z(normal_ind(i));
+          for j = 1:2*nD
+            force_pts(:,i) = force_pts(:,i)+tangent(:,i+(j-1)*N)*z(tangent_ind(i+(j-1)*N));
+          end
+        end
+        pos_quat_frame = manip.forwardKin(kinsol,findFrameId(manip,obj.kinframe.name),zeros(3,1),2);
+        force_world = quat2rotmat(pos_quat_frame(4:7))*force_pts;
+        force_vec = force_world/500;
+        contact_pos_world = manip.forwardKin(kinsol,obj.kinframe.body_ind,contact_pos_body,0);
+        lcmgl = drake.util.BotLCMGLClient(lcm.lcm.LCM.getSingleton,sprintf('%s force',obj.kinframe.name));
+        for i = 1:size(normal,2)
+          lcmgl.glColor3f(1,0,0);
+          if(norm(force_vec(:,i))>1e-3)
+          lcmgl.drawVector(contact_pos_world(:,i),force_vec(:,i),0.01,0.02,0.02);
+%           lcmgl.line3(contact_pos_world(1,i),contact_pos_world(2,i),contact_pos_world(3,i),...
+%             contact_pos_world(1,i)+force_vec(1,i),contact_pos_world(2,i)+force_vec(2,i),contact_pos_world(3,i)+force_vec(3,i));
+          end
+        end
+        lcmgl.switchBuffers();
       else
         xdn = zeros(6,1);
       end

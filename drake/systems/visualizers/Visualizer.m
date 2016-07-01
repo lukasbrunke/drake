@@ -81,9 +81,9 @@ classdef Visualizer < DrakeSystem
       %                (useful for, e.g., lcmgl debugging)
 
       typecheck(xtraj,'Trajectory');
-      if (xtraj.getOutputFrame()~=obj.getInputFrame)
-        xtraj = xtraj.inFrame(obj.getInputFrame);  % try to convert it
-      end
+%       if (xtraj.getOutputFrame()~=obj.getInputFrame)
+%         xtraj = xtraj.inFrame(obj.getInputFrame);  % try to convert it
+%       end
 
       if nargin < 3, options = struct(); end
       defaultOptions.slider = false;

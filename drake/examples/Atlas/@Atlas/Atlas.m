@@ -344,7 +344,7 @@ classdef Atlas < TimeSteppingRigidBodyManipulator & Biped
                                     'step_height', 0.05,... % approximate clearance over terrain (m)
                                     'drake_min_hold_time', 0.7,... % minimum time in double support (s)
                                     'drake_instep_shift', 0.0,... % Distance to shift ZMP trajectory inward toward the instep from the center of the foot (m)
-                                    'mu', 1.0,... % friction coefficient
+                                    'mu', 0.65,... % friction coefficient
                                     'constrain_full_foot_pose', true,... % whether to constrain the swing foot roll and pitch
                                     'pelvis_height_above_foot_sole', 0.83,... % default pelvis height when walking
                                     'support_contact_groups', {{'heel', 'toe'}},... % which contact groups are available for support when walking
