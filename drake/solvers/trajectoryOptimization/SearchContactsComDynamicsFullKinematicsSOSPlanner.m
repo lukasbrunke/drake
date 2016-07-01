@@ -53,6 +53,7 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
     
     sos_cnstr_normalizer;
     l1_normalizer;
+    l2_normalizer;
     V_normalizer;
     
     ab_len
@@ -99,6 +100,9 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       if(~isfield(options,'l1_normalizer'))
         options.l1_normalizer = 100;
       end
+      if(~isfield(options,'l2_normalizer'))
+        options.l2_normalizer = 1;
+      end
       if(~isfield(options,'V_normalizer'))
         options.V_normalizer = 100;
       end
@@ -107,6 +111,7 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       obj.num_fc_edges = options.num_fc_edges;
       obj.sos_cnstr_normalizer = options.sos_cnstr_normalizer;
       obj.l1_normalizer = options.l1_normalizer;
+      obj.l2_normalizer = options.l2_normalizer;
       obj.V_normalizer = options.V_normalizer;
       
       obj = obj.parseContactWrenchStruct(contact_wrench_struct);
@@ -123,7 +128,7 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
       obj = obj.setSolverOptions('snopt','majorfeasibilitytolerance',1e-6);
       obj = obj.setSolverOptions('snopt','superbasicslimit',obj.num_vars+1);
       obj = obj.setSolverOptions('snopt','majoroptimalitytolerance',3e-4);
-      obj = obj.setSolverOptions('snopt','iterationslimit',1e6);
+      obj = obj.setSolverOptions('snopt','iterationslimit',3e5);
       obj = obj.setSolverOptions('snopt','majoriterationslimit',500);
       obj = obj.setSolverOptions('snopt','scaleoption',0);
     end
@@ -145,18 +150,22 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
         end
         sol.grasp_pos{i} = reshape(x(obj.grasp_contact_pos_inds{i}),3,obj.num_grasp_pts(i));
       end
+      sol.l0 = msspoly.zeros(obj.N,1);
+      sol.l1 = msspoly.zeros(obj.N,1);
       sol.l2 = cell(obj.N,1);
+      sol.l3 = cell(obj.N,1);
       sol.l4 = cell(obj.N,1);
-      sol.l0 = subs(obj.l0,obj.l0_gram_var(:),reshape(x(obj.l0_gram_var_inds),[],1));
-      sol.l1 = subs(obj.l1,obj.l1_gram_var(:),reshape(x(obj.l1_gram_var_inds),[],1));
-      sol.l3 = subs(obj.l3,obj.l3_gram_var(:),reshape(x(obj.l3_gram_var_inds),[],1));
       sol.V = msspoly.zeros(obj.N,1);
-      triu_mask = triu(ones(obj.ab_len+1))~=0;
+      
       for i = 1:obj.N
+        triu_mask = triu(ones(obj.ab_len(i)+1))~=0;
+        sol.l0(i) = subs(obj.l0(i),obj.l0_gram_var{i}(:),reshape(x(obj.l0_gram_var_inds{i}),[],1));
+        sol.l1(i) = subs(obj.l1(i),obj.l1_gram_var{i}(:),reshape(x(obj.l1_gram_var_inds{i}),[],1));
         sol.l2{i} = subs(obj.l2{i},obj.l2_gram_var{i}(:),reshape(x(obj.l2_gram_var_inds{i}),[],1));
+        sol.l3{i} = subs(obj.l3{i},obj.l3_gram_var{i}(:),reshape(x(obj.l3_gram_var_inds{i}),[],1));
         sol.l4{i} = subs(obj.l4{i},obj.l4_gram_var{i}(:),reshape(x(obj.l4_gram_var_inds{i}),[],1));
-        V_gram_var_val = x(obj.V_gram_var_inds(:,i));
-        V_gram = zeros(obj.ab_len+1);
+        V_gram_var_val = x(obj.V_gram_var_inds{i});
+        V_gram = zeros(obj.ab_len(i)+1);
         V_gram(triu_mask) = V_gram_var_val*obj.V_normalizer;
         V_gram = V_gram'*V_gram;
         sol.V(i) = obj.ab_monomials2{i}'*V_gram*obj.ab_monomials2{i};
@@ -581,7 +590,7 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
                 warning('l2[%d] minimum eigen value %f',i,min_eig_Q);
                 R = chol(Q+(1.1*abs(min_eig_Q)+eps)*eye(obj.ab_len(i)+1));
               end
-              l2_gram_var_val{i}(:,(j-1)*obj.num_fc_edges+k) = R(triu_mask);
+              l2_gram_var_val{i}(:,(j-1)*obj.num_fc_edges+k) = R(triu_mask)/obj.l2_normalizer;
             end
           end
         end
@@ -695,7 +704,7 @@ classdef SearchContactsComDynamicsFullKinematicsSOSPlanner < ContactWrenchSetDyn
           for j = 1:obj.num_fc_pts(i)
             for k = 1:obj.num_fc_edges
               l2_gram = msspoly.zeros(obj.ab_len(i)+1,obj.ab_len(i)+1);
-              l2_gram(triu_mask) = obj.l2_gram_var{i}(:,(j-1)*obj.num_fc_edges+k);
+              l2_gram(triu_mask) = obj.l2_gram_var{i}(:,(j-1)*obj.num_fc_edges+k)*obj.l2_normalizer;
               l2_gram = l2_gram'*l2_gram;
               obj.l2{i}(j,k) = obj.ab_monomials1{i}'*l2_gram*obj.ab_monomials1{i};
             end
