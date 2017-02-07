@@ -627,6 +627,18 @@ class GurobiSolverImpl {
     }
   }
 
+    for (const auto it : prog.GetSolverOptionsDouble(SolverType::kGurobi)) {
+      error = GRBsetdblparam(grb_env_, it.first.c_str(), it.second);
+      DRAKE_DEMAND(!error);
+    }
+
+
+    for (const auto it : prog.GetSolverOptionsInt(SolverType::kGurobi)) {
+      error = GRBsetintparam(grb_env_, it.first.c_str(), it.second);
+      DRAKE_DEMAND(!error);
+    }
+  }
+
   ~GurobiSolverImpl() {
     GRBfreemodel(grb_model_);
     GRBfreeenv(grb_env_);
