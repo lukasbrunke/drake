@@ -18,7 +18,7 @@ class DrealSolver : public MathematicalProgramSolverInterface {
   // Dreal was available during compilation.
   bool available() const override;
 
-  SolutionResult Solve(MathematicalProgram& prog) const override;
+  SolutionResult Solve(MathematicalProgram& prog) override;
 };
 
 }  // namespace solvers

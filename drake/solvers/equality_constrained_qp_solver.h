@@ -17,7 +17,7 @@ class EqualityConstrainedQPSolver : public MathematicalProgramSolverInterface {
 
   bool available() const override;
 
-  SolutionResult Solve(MathematicalProgram& prog) const override;
+  SolutionResult Solve(MathematicalProgram& prog) override;
 };
 
 }  // namespace solvers

@@ -7,18 +7,24 @@
 
 namespace drake {
 namespace solvers {
+class GurobiSolverImpl;
 
 class GurobiSolver : public MathematicalProgramSolverInterface {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(GurobiSolver)
 
-  GurobiSolver() : MathematicalProgramSolverInterface(SolverType::kGurobi) {}
+  GurobiSolver();
+
+  ~GurobiSolver();
 
   // This solver is implemented in various pieces depending on if
   // Gurobi was available during compilation.
   bool available() const override;
 
-  SolutionResult Solve(MathematicalProgram& prog) const override;
+  SolutionResult Solve(MathematicalProgram& prog) override;
+
+ private:
+  std::unique_ptr<GurobiSolverImpl> gurobi_solver_impl_;
 };
 
 }  // end namespace solvers

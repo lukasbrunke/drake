@@ -60,7 +60,7 @@ void RunEllipsoidsSeparation(const Eigen::MatrixBase<DerivedX1>& x1,
                              const Eigen::MatrixBase<DerivedX2>& x2,
                              const Eigen::MatrixBase<DerivedR1>& R1,
                              const Eigen::MatrixBase<DerivedR2>& R2,
-                             const MathematicalProgramSolverInterface& solver) {
+                             MathematicalProgramSolverInterface* solver) {
   DRAKE_ASSERT(x1.cols() == 1);
   DRAKE_ASSERT(x2.cols() == 1);
   DRAKE_ASSERT(x1.rows() == x2.rows());
@@ -215,7 +215,7 @@ void SolveQPasSOCP(const Eigen::MatrixBase<DerivedQ>& Q,
                    const Eigen::MatrixBase<DerivedA>& A,
                    const Eigen::MatrixBase<DerivedBlower>& b_lb,
                    const Eigen::MatrixBase<DerivedBupper>& b_ub,
-                   const MathematicalProgramSolverInterface& solver) {
+                   MathematicalProgramSolverInterface* solver) {
   DRAKE_ASSERT(Q.rows() == Q.cols());
   Eigen::MatrixXd Q_symmetric = 0.5 * (Q + Q.transpose());
   const int kXdim = Q.rows();
@@ -275,7 +275,7 @@ void SolveQPasSOCP(const Eigen::MatrixBase<DerivedQ>& Q,
   EXPECT_TRUE(std::abs(objective_value_qp - objective_value_socp) < 1E-6);
 }
 
-void TestQPasSOCP(const MathematicalProgramSolverInterface& solver) {
+void TestQPasSOCP(MathematicalProgramSolverInterface* solver) {
   // Solve an un-constrained QP
   Eigen::MatrixXd Q = Eigen::Matrix2d::Identity();
   Eigen::VectorXd c = Eigen::Vector2d::Ones();
@@ -340,7 +340,7 @@ void FindSpringEquilibrium(const Eigen::VectorXd& weight,
                            double spring_rest_length, double spring_stiffness,
                            const Eigen::Vector2d& end_pos1,
                            const Eigen::Vector2d& end_pos2,
-                           const MathematicalProgramSolverInterface& solver) {
+                           MathematicalProgramSolverInterface* solver) {
   int num_nodes = weight.rows();
   MathematicalProgram prog;
   auto x = prog.NewContinuousVariables(num_nodes, "x");
@@ -442,7 +442,7 @@ void FindSpringEquilibrium(const Eigen::VectorXd& weight,
 }
 
 void TestFindSpringEquilibrium(
-    const MathematicalProgramSolverInterface& solver) {
+    MathematicalProgramSolverInterface* solver) {
   Eigen::VectorXd weight(5);
   weight << 1, 2, 3, 2.5, 4;
   double spring_rest_length = 0.2;
@@ -465,7 +465,7 @@ GTEST_TEST(TestSOCP, TestEllipsoidsSeparation0) {
     x2(0) = 2.0;
     Eigen::MatrixXd R1 = 0.5 * Eigen::Matrix3d::Identity();
     Eigen::MatrixXd R2 = Eigen::Matrix3d::Identity();
-    RunEllipsoidsSeparation(x1, x2, R1, R2, *solver);
+    RunEllipsoidsSeparation(x1, x2, R1, R2, solver.get());
   }
 }
 
@@ -479,7 +479,7 @@ GTEST_TEST(TestSOCP, TestEllipsoidsSeparation1) {
     x2(0) = 1.0;
     Eigen::MatrixXd R1 = Eigen::Matrix3d::Identity();
     Eigen::MatrixXd R2 = Eigen::Matrix3d::Identity();
-    RunEllipsoidsSeparation(x1, x2, R1, R2, *solver);
+    RunEllipsoidsSeparation(x1, x2, R1, R2, solver.get());
   }
 }
 
@@ -494,7 +494,7 @@ GTEST_TEST(TestSOCP, TestEllipsoidsSeparation2) {
     R1 << 0.1, 0.6, 0.2, 1.3;
     Eigen::MatrixXd R2 = Eigen::Matrix2d::Zero();
     R2 << -0.4, 1.5, 1.7, 0.3;
-    RunEllipsoidsSeparation(x1, x2, R1, R2, *solver);
+    RunEllipsoidsSeparation(x1, x2, R1, R2, solver.get());
   }
 }
 
@@ -509,7 +509,7 @@ GTEST_TEST(TestSOCP, TestEllipsoidsSeparation3) {
     R1 << 0.2, 0.4, 0.2, -0.2, -0.1, 0.3, 0.2, 0.1, 0.1;
     Eigen::MatrixXd R2 = Eigen::Matrix<double, 3, 2>::Zero();
     R2 << 0.1, 0.2, -0.1, 0.01, -0.2, 0.1;
-    RunEllipsoidsSeparation(x1, x2, R1, R2, *solver);
+    RunEllipsoidsSeparation(x1, x2, R1, R2, solver.get());
   }
 }
 
@@ -517,7 +517,7 @@ GTEST_TEST(TestSOCP, TestQPasSOCP) {
   std::list<std::unique_ptr<MathematicalProgramSolverInterface>> solvers;
   GetSecondOrderConicProgramSolvers(&solvers);
   for (const auto& solver : solvers) {
-    TestQPasSOCP(*solver);
+    TestQPasSOCP(solver.get());
   }
 }
 
@@ -525,7 +525,7 @@ GTEST_TEST(TestSOCP, TestFindSpringEquilibrium) {
   std::list<std::unique_ptr<MathematicalProgramSolverInterface>> solvers;
   GetSecondOrderConicProgramSolvers(&solvers);
   for (const auto& solver : solvers) {
-    TestFindSpringEquilibrium(*solver);
+    TestFindSpringEquilibrium(solver.get());
   }
 }
 
@@ -550,7 +550,7 @@ GTEST_TEST(TestSemidefiniteProgram, TestTrivialSDP) {
 
     prog.AddLinearCost(Eigen::Vector2d(1, 1), S.diagonal());
 
-    RunSolver(&prog, *solver);
+    RunSolver(&prog, solver.get());
 
     auto S_value = prog.GetSolution(S);
 
@@ -591,7 +591,7 @@ GTEST_TEST(TestSemidefiniteProgram, TestCommonLyapunov) {
     auto binding2 = prog.AddPositiveSemidefiniteConstraint(
         -A2.transpose() * P - P * A2 - 1E-3 * Matrix3d::Identity());
 
-    RunSolver(&prog, *solver);
+    RunSolver(&prog, solver.get());
 
     const Matrix3d P_value = prog.GetSolution(P);
     const auto Q1_flat_value = prog.GetSolution(binding1.variables());
@@ -682,7 +682,7 @@ GTEST_TEST(TestSemidefiniteProgram, TestOuterEllipsoid) {
     }
     prog.AddLinearCost(-P_trace);
 
-    RunSolver(&prog, *solver);
+    RunSolver(&prog, solver.get());
 
     auto P_value = prog.GetSolution(P);
     auto s_value = prog.GetSolution(s);
@@ -738,7 +738,7 @@ GTEST_TEST(TestSemidefiniteProgram, TestEigenvalueProblem) {
 
     prog.AddLinearCost(drake::Vector1d(1), z);
 
-    RunSolver(&prog, *solver);
+    RunSolver(&prog, solver.get());
 
     double z_value = prog.GetSolution(z(0));
     auto x_value = prog.GetSolution(x);

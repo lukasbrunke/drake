@@ -14,7 +14,7 @@ namespace solvers {
 bool EqualityConstrainedQPSolver::available() const { return true; }
 
 SolutionResult EqualityConstrainedQPSolver::Solve(
-    MathematicalProgram& prog) const {
+    MathematicalProgram& prog) {
   // There are three ways to solve the KKT subproblem for convex QPs.
   // Formally, we want to solve:
   // | G  A' | | x | = | -c |

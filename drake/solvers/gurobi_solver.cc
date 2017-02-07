@@ -442,68 +442,101 @@ void AddSecondOrderConeVariables(
 }
 }  // close namespace
 
-bool GurobiSolver::available() const { return true; }
+class GurobiSolverImpl {
+ public:
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(GurobiSolverImpl);
 
-SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
-  // We only process quadratic costs and linear / bounding box
-  // constraints.
+  explicit GurobiSolverImpl(MathematicalProgram& prog) : grb_env_(nullptr), grb_model_(nullptr), prog_(&prog), is_new_variable_(prog.num_vars(), false) {
+
+    GRBloadenv(&grb_env_, nullptr);
+    // Corresponds to no console or file logging.
+    GRBsetintparam(grb_env_, GRB_INT_PAR_OUTPUTFLAG, 0);
+
+    DRAKE_ASSERT(prog.generic_costs().empty());
+    DRAKE_ASSERT(prog.generic_constraints().empty());
+
+    const int num_prog_vars = prog.num_vars();
+    int num_gurobi_vars = num_prog_vars;
+
+    // Bound constraints.
+    std::vector<double> xlow(num_prog_vars,
+                             -std::numeric_limits<double>::infinity());
+    std::vector<double> xupp(num_prog_vars,
+                             std::numeric_limits<double>::infinity());
+
+    const std::vector<MathematicalProgram::VarType>& var_type =
+        prog.DecisionVariableTypes();
+
+    std::vector<char> gurobi_var_type(num_prog_vars);
+    for (int i = 0; i < num_prog_vars; ++i) {
+      switch (var_type[i]) {
+        case MathematicalProgram::VarType::CONTINUOUS:
+          gurobi_var_type[i] = GRB_CONTINUOUS;
+          break;
+        case MathematicalProgram::VarType::BINARY:
+          gurobi_var_type[i] = GRB_BINARY;
+          break;
+        case MathematicalProgram::VarType::INTEGER:
+          gurobi_var_type[i] = GRB_INTEGER;
+      }
+    }
+
+    for (const auto& binding : prog.bounding_box_constraints()) {
+      const auto& constraint = binding.constraint();
+      const Eigen::VectorXd& lower_bound = constraint->lower_bound();
+      const Eigen::VectorXd& upper_bound = constraint->upper_bound();
 
   GRBenv* env = nullptr;
   GRBloadenv(&env, nullptr);
-
-  DRAKE_ASSERT(prog.generic_costs().empty());
-  DRAKE_ASSERT(prog.generic_constraints().empty());
-
-  const int num_prog_vars = prog.num_vars();
-  int num_gurobi_vars = num_prog_vars;
-
-  // Potentially Gurobi can add variables on top of the variables in
-  // MathematicalProgram prog.
-  // is_new_variable[i] is true if the i'th variable in Gurobi environment is
-  // not stored in MathematicalProgram, but added by the GurobiSolver.
-  // For example, for Lorentz cone and rotated Lorentz cone constraint,to impose
-  // that A*x+b lies in the (rotated) Lorentz cone, we add decision variable z
-  // to Gurobi, defined as z = A*x + b.
-  // The size of is_new_variable should increase if we add new decision
-  // variables to Gurobi model.
-  // The invariant is
-  // EXPECT_TRUE(HasCorrectNumberOfVariables(model, is_new_variables.size()))
-  std::vector<bool> is_new_variable(num_prog_vars, false);
-
-  // Bound constraints.
-  std::vector<double> xlow(num_prog_vars,
-                           -std::numeric_limits<double>::infinity());
-  std::vector<double> xupp(num_prog_vars,
-                           std::numeric_limits<double>::infinity());
-
-  const std::vector<MathematicalProgram::VarType>& var_type =
-      prog.DecisionVariableTypes();
-
-  std::vector<char> gurobi_var_type(num_prog_vars);
-  for (int i = 0; i < num_prog_vars; ++i) {
-    switch (var_type[i]) {
-      case MathematicalProgram::VarType::CONTINUOUS:
-        gurobi_var_type[i] = GRB_CONTINUOUS;
-        break;
-      case MathematicalProgram::VarType::BINARY:
-        gurobi_var_type[i] = GRB_BINARY;
-        break;
-      case MathematicalProgram::VarType::INTEGER:
-        gurobi_var_type[i] = GRB_INTEGER;
+      for (int k = 0; k < static_cast<int>(binding.GetNumElements()); ++k) {
+        const int idx = prog.FindDecisionVariableIndex(binding.variables()(k));
+        xlow[idx] = std::max(lower_bound(k), xlow[idx]);
+        xupp[idx] = std::min(upper_bound(k), xupp[idx]);
+      }
     }
-  }
 
-  for (const auto& binding : prog.bounding_box_constraints()) {
-    const auto& constraint = binding.constraint();
-    const Eigen::VectorXd& lower_bound = constraint->lower_bound();
-    const Eigen::VectorXd& upper_bound = constraint->upper_bound();
+    // Our second order cone constraints imposes A*x+b lies within the (rotated)
+    // Lorentz cone. Unfortunately Gurobi only supports a vector z lying within
+    // the (rotated) Lorentz cone. So we create new variable z, with the
+    // constraint z - A*x = b and z being within the (rotated) Lorentz cone.
+    // Here lorentz_cone_new_varaible_indices and
+    // rotated_lorentz_cone_new_variable_indices
+    // record the indices of the newly created variable z in the Gurobi program.
+    std::vector<std::vector<int>> lorentz_cone_new_variable_indices;
+    AddSecondOrderConeVariables(
+        prog.lorentz_cone_constraints(), &is_new_variable_, &num_gurobi_vars,
+        &lorentz_cone_new_variable_indices, &gurobi_var_type, &xlow, &xupp);
 
-    for (int k = 0; k < static_cast<int>(binding.GetNumElements()); ++k) {
-      const int idx = prog.FindDecisionVariableIndex(binding.variables()(k));
-      xlow[idx] = std::max(lower_bound(k), xlow[idx]);
-      xupp[idx] = std::min(upper_bound(k), xupp[idx]);
-    }
-  }
+    std::vector<std::vector<int>> rotated_lorentz_cone_new_variable_indices;
+    AddSecondOrderConeVariables(prog.rotated_lorentz_cone_constraints(),
+                                &is_new_variable_, &num_gurobi_vars,
+                                &rotated_lorentz_cone_new_variable_indices,
+                                &gurobi_var_type, &xlow, &xupp);
+
+    GRBnewmodel(grb_env_, &grb_model_, "gurobi_model", num_gurobi_vars, nullptr, &xlow[0],
+                &xupp[0], gurobi_var_type.data(), nullptr);
+    int error = 0;
+    // TODO(naveenoid) : This needs access externally.
+    double sparseness_threshold = 1e-14;
+    error = AddCosts(grb_model_, prog, sparseness_threshold);
+    DRAKE_DEMAND(!error);
+
+    error = ProcessLinearConstraints(grb_model_, prog, sparseness_threshold);
+    DRAKE_DEMAND(!error);
+
+    // Add Lorentz cone constraints.
+    error = AddSecondOrderConeConstraints(
+        prog, prog.lorentz_cone_constraints(), sparseness_threshold,
+        lorentz_cone_new_variable_indices, grb_model_);
+    DRAKE_DEMAND(!error);
+
+    // Add rotated Lorentz cone constraints.
+    error = AddSecondOrderConeConstraints(
+        prog, prog.rotated_lorentz_cone_constraints(), sparseness_threshold,
+        rotated_lorentz_cone_new_variable_indices, grb_model_);
+    DRAKE_DEMAND(!error);
+
+    DRAKE_ASSERT(HasCorrectNumberOfVariables(grb_model_, is_new_variable_.size()));
 
   // Our second order cone constraints imposes A*x+b lies within the (rotated)
   // Lorentz cone. Unfortunately Gurobi only supports a vector z lying within
@@ -582,18 +615,27 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
   }
 
   error = GRBoptimize(model);
+    for (const auto it : prog.GetSolverOptionsDouble(SolverType::kGurobi)) {
+      error = GRBsetdblparam(grb_env_, it.first.c_str(), it.second);
+      DRAKE_DEMAND(!error);
+    }
 
-  SolutionResult result = SolutionResult::kUnknownError;
 
-  // If any error exists so far, it's from calling GRBoptimize.
-  // TODO(naveenoid) : Properly handle gurobi specific error.
-  // message.
-  if (error) {
-    // TODO(naveenoid) : log error message using GRBgeterrormsg(env).
-    result = SolutionResult::kInvalidInput;
-  } else {
-    int optimstatus = 0;
-    GRBgetintattr(model, GRB_INT_ATTR_STATUS, &optimstatus);
+    for (const auto it : prog.GetSolverOptionsInt(SolverType::kGurobi)) {
+      error = GRBsetintparam(grb_env_, it.first.c_str(), it.second);
+      DRAKE_DEMAND(!error);
+    }
+  }
+
+  ~GurobiSolverImpl() {
+    GRBfreemodel(grb_model_);
+    GRBfreeenv(grb_env_);
+  }
+
+  SolutionResult Solve() {
+    int error = GRBoptimize(grb_model_);
+
+    SolutionResult result = SolutionResult::kUnknownError;
 
     if (optimstatus != GRB_OPTIMAL && optimstatus != GRB_SUBOPTIMAL) {
       switch (optimstatus) {
@@ -610,30 +652,46 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
           break;
         }
       }
+    // If any error exists so far, it's from calling GRBoptimize.
+    // TODO(naveenoid) : Properly handle gurobi specific error.
+    // message.
+    if (error) {
+      // TODO(naveenoid) : log error message using GRBgeterrormsg(env).
+      result = SolutionResult::kInvalidInput;
     } else {
-      result = SolutionResult::kSolutionFound;
-      int num_total_variables = is_new_variable.size();
-      // Gurobi has solved not only for the decision variables in
-      // MathematicalProgram prog, but also for any extra decision variables
-      // that this GurobiSolver injected to craft certain constraints, such as
-      // Lorentz cones.  We therefore filter out the optimized values for
-      // injected variables, and report back values for the MathematicalProgram
-      // variables only.
-      // solver_sol_vector includes the potentially newly added variables, i.e.,
-      // variables not in MathematicalProgram prog, but added to Gurobi by
-      // GurobiSolver.
-      // prog_sol_vector only includes the original variables in
-      // MathematicalProgram prog.
-      std::vector<double> solver_sol_vector(num_total_variables);
-      GRBgetdblattrarray(model, GRB_DBL_ATTR_X, 0, num_total_variables,
-                         solver_sol_vector.data());
-      Eigen::VectorXd prog_sol_vector(num_prog_vars);
-      int prog_var_count = 0;
-      for (int i = 0; i < num_total_variables; ++i) {
-        if (!is_new_variable[i]) {
-          prog_sol_vector(prog_var_count) = solver_sol_vector[i];
-          ++prog_var_count;
+      int optimstatus = 0;
+      GRBgetintattr(grb_model_, GRB_INT_ATTR_STATUS, &optimstatus);
+
+      if (optimstatus != GRB_OPTIMAL && optimstatus != GRB_SUBOPTIMAL) {
+        if (optimstatus == GRB_INF_OR_UNBD || optimstatus == GRB_INFEASIBLE) {
+          result = SolutionResult::kInfeasibleConstraints;
         }
+      } else {
+        result = SolutionResult::kSolutionFound;
+        int num_total_variables = is_new_variable_.size();
+        // Gurobi has solved not only for the decision variables in
+        // MathematicalProgram prog, but also for any extra decision variables
+        // that this GurobiSolver injected to craft certain constraints, such as
+        // Lorentz cones.  We therefore filter out the optimized values for
+        // injected variables, and report back values for the MathematicalProgram
+        // variables only.
+        // solver_sol_vector includes the potentially newly added variables, i.e.,
+        // variables not in MathematicalProgram prog, but added to Gurobi by
+        // GurobiSolver.
+        // prog_sol_vector only includes the original variables in
+        // MathematicalProgram prog.
+        std::vector<double> solver_sol_vector(num_total_variables);
+        GRBgetdblattrarray(grb_model_, GRB_DBL_ATTR_X, 0, num_total_variables,
+                           solver_sol_vector.data());
+        Eigen::VectorXd prog_sol_vector(prog_->num_vars());
+        int prog_var_count = 0;
+        for (int i = 0; i < num_total_variables; ++i) {
+          if (!is_new_variable_[i]) {
+            prog_sol_vector(prog_var_count) = solver_sol_vector[i];
+            ++prog_var_count;
+          }
+        }
+        prog_->SetDecisionVariableValues(prog_sol_vector);
       }
       prog.SetDecisionVariableValues(prog_sol_vector);
 
@@ -642,14 +700,39 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
       GRBgetdblattr(model, GRB_DBL_ATTR_OBJVAL, &optimal_cost);
       prog.SetOptimalCost(optimal_cost);
     }
+
+    prog_->SetSolverResult(SolverType::kGurobi, error);
+
+    return result;
   }
 
-  prog.SetSolverResult(solver_type(), error);
+ private:
+  GRBenv* grb_env_;
+  GRBmodel* grb_model_;
+  MathematicalProgram* prog_;
+  // Potentially Gurobi can add variables on top of the variables in
+  // MathematicalProgram prog.
+  // is_new_variable[i] is true if the i'th variable in Gurobi environment is
+  // not stored in MathematicalProgram, but added by the GurobiSolver.
+  // For example, for Lorentz cone and rotated Lorentz cone constraint,to impose
+  // that A*x+b lies in the (rotated) Lorentz cone, we add decision variable z
+  // to Gurobi, defined as z = A*x + b.
+  // The size of is_new_variable should increase if we add new decision
+  // variables to Gurobi model.
+  // The invariant is
+  // EXPECT_TRUE(HasCorrectNumberOfVariables(model, is_new_variables.size()))
+  std::vector<bool> is_new_variable_;
+};
 
-  GRBfreemodel(model);
-  GRBfreeenv(env);
+GurobiSolver::GurobiSolver() : MathematicalProgramSolverInterface(SolverType::kGurobi), gurobi_solver_impl_(nullptr) {};
 
-  return result;
+GurobiSolver::~GurobiSolver() {}
+
+bool GurobiSolver::available() const { return true; }
+
+SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) {
+  gurobi_solver_impl_ = std::make_unique<GurobiSolverImpl>(prog);
+  return gurobi_solver_impl_->Solve();
 }
 
 }  // namespace solvers

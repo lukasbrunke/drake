@@ -277,7 +277,7 @@ class MobyLCPSolver : public MathematicalProgramSolverInterface {
 
   bool available() const override { return true; }
 
-  SolutionResult Solve(MathematicalProgram& prog) const override;
+  SolutionResult Solve(MathematicalProgram& prog) override;
 
   /// Returns the number of pivoting operations made by the last LCP solve.
   int get_num_pivots() const { return pivots_; }

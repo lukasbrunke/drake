@@ -130,7 +130,7 @@ SolutionResult MobyLCPSolver<Eigen::AutoDiffScalar<drake::Vector1d>>::Solve(
 // MobyLcpMathematicalProgram class.
 template <typename T>
 // NOLINTNEXTLINE(*)  Don't lint old, non-style-compliant code below.
-SolutionResult MobyLCPSolver<T>::Solve(MathematicalProgram& prog) const {
+SolutionResult MobyLCPSolver<T>::Solve(MathematicalProgram& prog) {
   // TODO(ggould-tri) This solver currently imposes restrictions that its
   // problem:
   //

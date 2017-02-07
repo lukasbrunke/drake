@@ -295,7 +295,7 @@ void WrapConstraint(const MathematicalProgram& prog, const Binding<C>& binding,
 
 bool NloptSolver::available() const { return true; }
 
-SolutionResult NloptSolver::Solve(MathematicalProgram& prog) const {
+SolutionResult NloptSolver::Solve(MathematicalProgram& prog) {
   const int nx = prog.num_vars();
 
   // Load the algo to use and the size.

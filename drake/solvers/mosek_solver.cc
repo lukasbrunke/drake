@@ -562,7 +562,7 @@ MSKrescodee SpecifyVariableType(const MathematicalProgram& prog,
 
 bool MosekSolver::available() const { return true; }
 
-SolutionResult MosekSolver::Solve(MathematicalProgram& prog) const {
+SolutionResult MosekSolver::Solve(MathematicalProgram& prog) {
   const int num_vars = prog.num_vars();
   MSKenv_t env = nullptr;
   MSKtask_t task = nullptr;

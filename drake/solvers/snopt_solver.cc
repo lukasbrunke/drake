@@ -352,7 +352,7 @@ void UpdateConstraintBoundsAndGradients(
 
 bool SnoptSolver::available() const { return true; }
 
-SolutionResult SnoptSolver::Solve(MathematicalProgram& prog) const {
+SolutionResult SnoptSolver::Solve(MathematicalProgram& prog) {
   auto d = prog.GetSolverData<SNOPTData>();
   SNOPTRun cur(*d, &prog);
 
