@@ -7,6 +7,7 @@ set(drakeForceClosureHeaders
 add_library_with_exports(LIB_NAME drakeForceClosure
         SOURCE_FILES ${drakeForceClosureSources} ${drakeForceClosureHeaders})
 target_link_libraries(drakeForceClosure
-        Eigen3::Eigen)
+        Eigen3::Eigen
+        qhullcpp)
 
 add_subdirectory(test)

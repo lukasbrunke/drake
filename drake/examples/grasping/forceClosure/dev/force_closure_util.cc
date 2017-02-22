@@ -2,6 +2,8 @@
 
 #include <Eigen/Dense>
 
+#include "libqhullcpp/Qhull.h"
+
 namespace drake {
 namespace examples {
 namespace grasping {
