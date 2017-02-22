@@ -1,0 +1,2 @@
+drake_add_cc_test(force_closure_util_test)
+target_link_libraries(force_closure_util_test drakeForceClosure drakeCommon)
