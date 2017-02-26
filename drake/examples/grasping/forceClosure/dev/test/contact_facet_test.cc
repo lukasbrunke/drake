@@ -18,6 +18,7 @@ GTEST_TEST(ContactFacetTest, testFrictionCone) {
   // clang-format on
   Eigen::Vector3d normal(0, 0, 1);
 
+  // Test the friction cone edges when the facet has different orientation.
   std::vector<Eigen::AngleAxisd> rotate;
   rotate.push_back(Eigen::AngleAxisd(0, Eigen::Vector3d(0, 0, 1)));
   rotate.push_back(Eigen::AngleAxisd(M_PI/3, Eigen::Vector3d(0, 1, 0)));
@@ -28,11 +29,19 @@ GTEST_TEST(ContactFacetTest, testFrictionCone) {
 
     EXPECT_EQ(f.num_vertices(), 3);
 
-    EXPECT_TRUE(CompareMatrices(f.facet_normal(), rotate_matrix * normal, 1E-12, MatrixCompareType::absolute));
+    const auto& f_normal = f.facet_normal();
+    EXPECT_TRUE(CompareMatrices(f_normal, rotate_matrix * normal, 1E-12, MatrixCompareType::absolute));
+
+    // For a single edge with friction coefficient being 0, the edge is the facet normal.
+    EXPECT_TRUE(CompareMatrices(f.LinearizedFrictionConeEdges<1>(0), f_normal, 1E-12, MatrixCompareType::absolute));
+
+    // For 4 edges case.
     const auto& edges = f.LinearizedFrictionConeEdges<4>(1);
     EXPECT_EQ(edges.cols(), 4);
-    const auto& f_normal = f.facet_normal();
+
     EXPECT_TRUE(CompareMatrices(edges.rowwise().sum(), 4 * f_normal, 1E-12, MatrixCompareType::absolute));
+    
+    // Check the angle between the edges and the facet normal, the cosine of the angle should be 1/sqrt(2).
     EXPECT_TRUE(CompareMatrices(
         ((f_normal.transpose() * edges).array() / (edges.colwise().norm().array())).matrix(),
         Eigen::RowVector4d::Constant(1 / sqrt(2)), 1E-12, MatrixCompareType::absolute));
