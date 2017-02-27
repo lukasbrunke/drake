@@ -14,7 +14,6 @@ target_link_libraries(drakeForceClosure
         drakeCommon
         drakeOptimization
         Eigen3::Eigen
-        Qhull::qhullcpp
-        Qhull::qhull)
+        Qhull::qhullcpp)
 
 add_subdirectory(test)
