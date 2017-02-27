@@ -40,7 +40,7 @@ GTEST_TEST(ContactFacetTest, testFrictionCone) {
     EXPECT_EQ(edges.cols(), 4);
 
     EXPECT_TRUE(CompareMatrices(edges.rowwise().sum(), 4 * f_normal, 1E-12, MatrixCompareType::absolute));
-    
+
     // Check the angle between the edges and the facet normal, the cosine of the angle should be 1/sqrt(2).
     EXPECT_TRUE(CompareMatrices(
         ((f_normal.transpose() * edges).array() / (edges.colwise().norm().array())).matrix(),
