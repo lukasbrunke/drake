@@ -2,12 +2,15 @@
 
 #include <iostream>
 #include "libqhullcpp/Qhull.h"
+#include "libqhullcpp/QhullFacetList.h"
 
 #include <Eigen/Dense>
 
 #include "drake/common/drake_assert.h"
 
 using Eigen::Matrix;
+using orgQhull::Qhull;
+using orgQhull::QhullHyperplane;
 
 namespace drake {
 namespace examples {
@@ -36,7 +39,7 @@ Matrix<double, 6, 12> GenerateWrenchPolytopeInnerSphere12Vertices() {
   }
   return W;
 };
-/*
+
 double ForceClosureQ1metricLinearizedFrictionCone(const Eigen::Matrix3Xd& contact_pts, const std::vector<Eigen::Matrix3Xd>& friction_edges, const Eigen::Matrix<double, 6, 6>& Q) {
   int num_wrenches = 0;
   DRAKE_DEMAND(contact_pts.cols() == static_cast<int>(friction_edges.size()));
@@ -48,20 +51,20 @@ double ForceClosureQ1metricLinearizedFrictionCone(const Eigen::Matrix3Xd& contac
   for (int i = 0; i < contact_pts.cols(); ++i) {
     wrenches.block(0, wrench_count, 3, friction_edges[i].cols()) = friction_edges[i];
     for (int j = 0; j < friction_edges[i].cols(); ++j) {
-      wrenches.block(3, wrench_count + j, 3, 1) = contact_pts.col(i).cross3(friction_edges[i].col(j));
+      wrenches.block(3, wrench_count + j, 3, 1) = contact_pts.col(i).cross(friction_edges[i].col(j));
     }
     wrench_count += friction_edges[i].cols();
   }
   Qhull cws_qhull("", 6, num_wrenches, wrenches.data(), "");
   double q1_metric = std::numeric_limits<double>::infinity();
-  Eigen::Matrix<double, 6, 6> Qw_inv = Q.inverse();
+  //Eigen::Matrix<double, 6, 6> Qw_inv = Q.inverse();
   for (const auto& f : cws_qhull.facetList()) {
     const QhullHyperplane& h = f.hyperplane();
     std::cout<<"h" << h <<std::endl;
     q1_metric = std::min(q1_metric, h.offset());
   }
   return 0;
-}*/
+}
 }  // namespace forceClosure
 }  // namespace grasping
 }  // namespace examples
