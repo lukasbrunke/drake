@@ -1,5 +1,7 @@
 #include "drake/examples/grasping/forceClosure/dev/force_closure_grasp_optimization.h"
 
+using Eigen::VectorXd;
+
 using drake::symbolic::Expression;
 
 namespace drake {
@@ -23,26 +25,49 @@ ForceClosureGraspOptimization::ForceClosureGraspOptimization(
     contact_on_facet_[i] = prog_->NewBinaryVariables(num_facet_for_contact_i, "b");
     // Each contact is assigned to one facet.
     Expression contact_on_facet_sum(0);
-    for (int j = 0; j < num_facet_for_contact_i; ++j) {
-      contact_on_facet_sum += contact_on_facet_[i](j);
-    }
-    prog_->AddLinearConstraint(contact_on_facet_sum == 1);
+    prog_->AddLinearConstraint(contact_on_facet_[i].cast<Expression>().sum() == 1);
 
     facet_vertices_weights_[i].resize(num_facet_for_contact_i);
     for (int j = 0; j < num_facet_for_contact_i; ++j) {
       int facet_idx = facet_idx_per_contact_[i][j];
       facet_vertices_weights_[i][j] = prog_->NewContinuousVariables(contact_facets_[facet_idx].num_vertices(),"lambda");
       prog_->AddBoundingBoxConstraint(0, 1, facet_vertices_weights_[i][j]);
-      Expression facet_vertices_weights_sum(0);
-      for (int k = 0; k < facet_vertices_weights_[i][j].rows(); ++k) {
-        facet_vertices_weights_sum += facet_vertices_weights_[i][j](k);
-      }
-      prog_->AddLinearConstraint(facet_vertices_weights_sum == contact_on_facet_[i](j));
+      prog_->AddLinearConstraint(facet_vertices_weights_[i][j].cast<Expression>().sum() == contact_on_facet_[i](j));
     }
-
   }
 }
+
+std::vector<VectorXd> ForceClosureGraspOptimization::contact_on_facet_value() const {
+  std::vector<VectorXd> contact_on_facet(num_contacts_);
+  for (int i = 0; i < num_contacts_; ++i) {
+    contact_on_facet[i] = prog_->GetSolution(contact_on_facet_[i]);
+  }
+  return contact_on_facet;
 }
+
+std::vector<std::vector<VectorXd>> ForceClosureGraspOptimization::facet_vertices_weights_value() const {
+  std::vector<std::vector<VectorXd>> facet_vertices_weights(num_contacts_);
+  for (int i = 0; i < num_contacts_; ++i) {
+    facet_vertices_weights[i].resize(facet_idx_per_contact_[i].size());
+    for (int j = 0; j < static_cast<int>(facet_idx_per_contact_[i].size()); ++j) {
+      facet_vertices_weights[i][j] = prog_->GetSolution(facet_vertices_weights_[i][j]);
+    }
+  }
+  return facet_vertices_weights;
 }
+Eigen::Matrix3Xd ForceClosureGraspOptimization::contact_pos(
+    const std::vector<VectorXd>& contact_on_facet,
+    const std::vector<std::vector<VectorXd>>& facet_vertices_weights) const {
+  Eigen::Matrix3Xd pos(3, num_contacts_);
+  pos.setZero();
+  for (int i = 0; i < num_contacts_; ++i) {
+    for (int j = 0; j < static_cast<int>(facet_idx_per_contact_[i].size()); ++j) {
+      pos.col(i) += contact_on_facet[i](j) * contact_facets_[facet_idx_per_contact_[i][j]].vertices() * facet_vertices_weights[i][j];
+    }
+  }
+  return pos;
 }
-}
+}  // namespace forceClosure
+}  // namespace grasping
+}  // namespace examples
+}  // namespace drake

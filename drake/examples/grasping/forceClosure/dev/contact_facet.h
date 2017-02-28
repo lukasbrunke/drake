@@ -19,6 +19,8 @@ class ContactFacet {
 
   int num_vertices() const {return vertices_.cols();}
 
+  double offset() const { return offset_; }
+
   template<int kNumEdges>
   typename std::enable_if<kNumEdges != Eigen::Dynamic, Eigen::Matrix<double, 3, kNumEdges>>::type
   LinearizedFrictionConeEdges(double friction_coefficient) const {
@@ -47,6 +49,7 @@ class ContactFacet {
  private:
   Eigen::Matrix3Xd vertices_;
   Eigen::Vector3d facet_normal_;
+  double offset_;
 };
 }  // namespace forceClosure
 }  // namespace examples

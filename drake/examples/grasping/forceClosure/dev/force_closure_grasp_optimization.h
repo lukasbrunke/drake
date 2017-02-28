@@ -33,6 +33,14 @@ class ForceClosureGraspOptimization {
   const std::vector<solvers::VectorXDecisionVariable>& contact_on_facet() const {return contact_on_facet_;};
 
   const std::vector<std::vector<solvers::VectorXDecisionVariable>> facet_vertices_weights() const {return facet_vertices_weights_;};
+
+  std::vector<Eigen::VectorXd> contact_on_facet_value() const;
+
+  std::vector<std::vector<Eigen::VectorXd>> facet_vertices_weights_value() const;
+
+  Eigen::Matrix3Xd contact_pos(const std::vector<Eigen::VectorXd>& contact_on_facet,
+    const std::vector<std::vector<Eigen::VectorXd>>& facet_vertices_weights) const;
+
  private:
   int num_contacts_{};
   std::unique_ptr<drake::solvers::MathematicalProgram> prog_{};

@@ -1,3 +1,6 @@
+drake_add_cc_test(force_closure_grasp_optimization_test)
+target_link_libraries(force_closure_grasp_optimization_test drakeForceClosure)
+
 drake_add_cc_test(force_closure_util_test)
 target_link_libraries(force_closure_util_test drakeForceClosure drakeCommon)
 
