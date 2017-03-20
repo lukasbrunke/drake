@@ -24,7 +24,8 @@ drake_cc_googletest(
     srcs = ["test/IRB140_analytical_kinematics_test.cc"],
     deps = [
         ":IRB140_analytical_kinematics",
-        "//drake/common:drake_path",
+        "//drake/common:eigen_matrix_compare",
+        "//drake/multibody:rigid_body_tree",
         "//drake/multibody:rigid_body_tree_construction",
         "//drake/multibody/parsers",
     ],
