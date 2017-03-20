@@ -1,9 +1,9 @@
 #pragma once
 
-#include "drake/multibody/rigid_body_tree.h"
-
 #include <Eigen/Core>
 #include <Eigen/Geometry>
+
+#include "drake/common/drake_copyable.h"
 
 namespace drake {
 namespace examples {
@@ -38,14 +38,14 @@ class IRB140AnalyticalKinematics {
   Eigen::Isometry3d X_56(double theta) const;
 
  private:
-  const double l0;  // offset of joint 1 in base link in the z direction.
-  const double l1_x;  // offset of joint 2 in link 1 in the x direction.
-  const double l1_y;  // offset of joint 2 in link 1 in the -y direction.
-  const double l2;  // offset of joint 3 in link 2 in the -y direction.
-  const double l3;  // offset of joint 4 in link 3 in the x direction.
-  const double l4;  // offset of joint 5 in link 4 in the x direction.
-  const double l5;  // offset of joint 6 in link 5 in the x direction.
+  const double l0_;  // offset of joint 1 in base link in the z direction.
+  const double l1_x_;  // offset of joint 2 in link 1 in the x direction.
+  const double l1_y_;  // offset of joint 2 in link 1 in the -y direction.
+  const double l2_;  // offset of joint 3 in link 2 in the -y direction.
+  const double l3_;  // offset of joint 4 in link 3 in the x direction.
+  const double l4_;  // offset of joint 5 in link 4 in the x direction.
+  const double l5_;  // offset of joint 6 in link 5 in the x direction.
 };
-}
-}
-}
+}  // namespace IRB140
+}  // namespace examples
+}  // namespace drake
