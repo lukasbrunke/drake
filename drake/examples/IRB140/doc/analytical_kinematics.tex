@@ -1,0 +1,39 @@
+\documentclass{article}
+\usepackage{amsmath, amsfonts, leftidx}
+\begin{document}
+Joint 1 connects base link (link 0) and link 1, by rotating about -y axis of the joint frame by angle $\theta_1$. The transform from the axis inboard frame to the base link frame is 
+\begin{align}
+	\begin{bmatrix}1 & 0 & 0 & 0\\
+		       0 & 0 & 1 & 0\\
+			0 & -1 & 0 & l_0\\
+	               0 & 0 & 0 & 1\end{bmatrix}
+\end{align}
+So the transform from link 1 to link 0 is
+\begin{align}
+\leftidx{^0}X^1 = \begin{bmatrix}c_1& 0 & s_1 & 0\\
+                                -s_1& 0 & c_1 & 0\\
+                                  0 & -1&  0  & l_0\\
+                                  0 & 0 &  0  & 1\end{bmatrix}
+\end{align}
+where $c_1 = \cos\theta_1, s_1=\sin\theta_1$.
+
+Joint 2 connects link 2 and link 1, by rotating about  z axis of the joint frame by angle $\theta_2$. The transform from the axis inboard frame to link 1 frame is
+\begin{align}
+	\begin{bmatrix}
+		1 & 0 & 0 & l_{1x}\\
+		0 & 1 & 0 & -l_{1y}\\
+		0 & 0 & 1 & 0\\
+		0 & 0 & 0 & 1
+	\end{bmatrix}
+\end{align}
+So the transform from link 2 to link 1 is
+\begin{align}
+\leftidx{^1}X^2 = \begin{bmatrix}
+	c_2 & -s_2 & 0  & l_{1x}\\
+	s_2 & c_2  & 0  & -l_{1y}\\
+	0   &  0   & 1  & 0\\
+	0   & 0    & 0  & 1
+		\end{bmatrix}
+\end{align}
+where $c_2 = \cos\theta_2, s_2 = \sin\theta_2$.
+\end{document}
