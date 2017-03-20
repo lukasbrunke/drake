@@ -10,7 +10,9 @@ IRB140AnalyticalKinematics::IRB140AnalyticalKinematics()
       l2(0.36),
       l3(0.2185),
       l4(0.1615),
-      l5(0.065) {
+      l5(0.065) {}
+
+Eigen::Isometry3d IRB140AnalyticalKinematics::X_01(double theta) const {
 
 }
 }
