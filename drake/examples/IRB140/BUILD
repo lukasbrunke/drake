@@ -16,6 +16,7 @@ drake_cc_library(
     hdrs = ["IRB140_analytical_kinematics.h"],
     deps = [
         "//drake/common",
+        "//drake/common:symbolic",
     ],
 )
 

@@ -1,14 +1,7 @@
 \documentclass{article}
 \usepackage{amsmath, amsfonts, leftidx}
 \begin{document}
-Joint 1 connects base link (link 0) and link 1, by rotating about -y axis of the joint frame by angle $\theta_1$. The transform from the axis inboard frame to the base link frame is 
-\begin{align}
-	\begin{bmatrix}1 & 0 & 0 & 0\\
-		       0 & 0 & 1 & 0\\
-			0 & -1 & 0 & l_0\\
-	               0 & 0 & 0 & 1\end{bmatrix}
-\end{align}
-So the transform from link 1 to link 0 is
+Joint 1 connects base link (link 0) and link 1, by rotating about -y axis of the joint frame by angle $\theta_1$. The transform from link 1 to link 0 is
 \begin{align}
 \leftidx{^0}X^1 = \begin{bmatrix}c_1& 0 & s_1 & 0\\
                                 -s_1& 0 & c_1 & 0\\
@@ -17,16 +10,7 @@ So the transform from link 1 to link 0 is
 \end{align}
 where $c_1 = \cos\theta_1, s_1=\sin\theta_1$.
 
-Joint 2 connects link 2 and link 1, by rotating about  z axis of the joint frame by angle $\theta_2$. The transform from the axis inboard frame to link 1 frame is
-\begin{align}
-	\begin{bmatrix}
-		1 & 0 & 0 & l_{1x}\\
-		0 & 1 & 0 & -l_{1y}\\
-		0 & 0 & 1 & 0\\
-		0 & 0 & 0 & 1
-	\end{bmatrix}
-\end{align}
-So the transform from link 2 to link 1 is
+Joint 2 connects link 2 and link 1, by rotating about  z axis of the joint frame by angle $\theta_2$.  The transform from link 2 to link 1 is
 \begin{align}
 \leftidx{^1}X^2 = \begin{bmatrix}
 	c_2 & -s_2 & 0  & l_{1x}\\
@@ -72,11 +56,16 @@ where $c_5=\cos\theta_5,s_5=\sin\theta_5$.
 Joint 6 connects link 6 and link 5, by rotating about x axis of the joint frame by angle $\theta_6$. The transform from link 6 to link 5 is
 \begin{align}
 	\leftidx{^5}X^6 = \begin{bmatrix}
-		1 & 9 & 0 & l_5\\
+		1 & 0 & 0 & l_5\\
 		0 & c_6 & -s_6 & 0\\
 		0 & s_6 & c_6 & 0\\
 		0 & 0 & 0 & 1
 	\end{bmatrix}
 \end{align}
 where $c_6=\cos\theta_6, s_6=\sin\theta_6$.
+
+We first notice that $\leftidx{^0}X^5$ has the property
+\begin{align}
+	\tan\theta_1 = \arctan2(-\leftidx{^0}p^5_y, \leftidx{^0}p^5_x)
+\end{align}
 \end{document}
