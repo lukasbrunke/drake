@@ -26,6 +26,34 @@ Eigen::Isometry3d IRB140AnalyticalKinematics::X_12(double theta) const {
   X.translation() = Eigen::Vector3d(l1_x_, -l1_y_, 0);
   return X;
 }
+
+Eigen::Isometry3d IRB140AnalyticalKinematics::X_23(double theta) const {
+  Eigen::Isometry3d X;
+  X.linear() = Eigen::AngleAxisd(theta, Eigen::Vector3d(0, 0, 1)).toRotationMatrix();
+  X.translation() = Eigen::Vector3d(0, -l2_, 0);
+  return X;
+}
+
+Eigen::Isometry3d IRB140AnalyticalKinematics::X_34(double theta) const {
+  Eigen::Isometry3d X;
+  X.linear() = Eigen::AngleAxisd(theta, Eigen::Vector3d(1, 0, 0)).toRotationMatrix();
+  X.translation() = Eigen::Vector3d(l3_, 0, 0);
+  return X;
+}
+
+Eigen::Isometry3d IRB140AnalyticalKinematics::X_45(double theta) const {
+  Eigen::Isometry3d X;
+  X.linear() = Eigen::AngleAxisd(theta, Eigen::Vector3d(0, 0, -1)).toRotationMatrix();
+  X.translation() = Eigen::Vector3d(l4_, 0, 0);
+  return X;
+}
+
+Eigen::Isometry3d IRB140AnalyticalKinematics::X_56(double theta) const {
+  Eigen::Isometry3d X;
+  X.linear() = Eigen::AngleAxisd(theta, Eigen::Vector3d(1, 0, 0)).toRotationMatrix();
+  X.translation() = Eigen::Vector3d(l5_, 0, 0);
+  return X;
+}
 }
 }
 }
