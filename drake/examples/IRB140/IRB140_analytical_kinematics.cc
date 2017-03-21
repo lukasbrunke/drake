@@ -14,7 +14,8 @@ IRB140AnalyticalKinematics::IRB140AnalyticalKinematics()
 
 Eigen::Isometry3d IRB140AnalyticalKinematics::X_01(double theta) const {
   Eigen::Isometry3d X;
-  X.linear() = (Eigen::AngleAxisd(-M_PI_2, Eigen::Vector3d(1, 0, 0)) * Eigen::AngleAxisd(theta, Eigen::Vector3d(0, -1, 0))).toRotationMatrix();
+  Eigen::Matrix3d R_0J = Eigen::AngleAxisd(-M_PI_2, Eigen::Vector3d(1, 0, 0)).toRotationMatrix();
+  X.linear() = R_0J * Eigen::AngleAxisd(theta, Eigen::Vector3d(0, -1, 0)).toRotationMatrix();
   X.translation() = Eigen::Vector3d(0, 0, l0_);
   return X;
 }
