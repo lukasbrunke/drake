@@ -4,6 +4,8 @@
 #include <Eigen/Geometry>
 
 #include "drake/common/drake_copyable.h"
+#include "drake/common/symbolic_variable.h"
+#include "drake/common/symbolic_expression.h"
 
 namespace drake {
 namespace examples {
@@ -37,6 +39,13 @@ class IRB140AnalyticalKinematics {
   // The pose of link 6 measured and expressed in link 5.
   Eigen::Isometry3d X_56(double theta) const;
 
+  Eigen::Matrix<symbolic::Expression, 4, 4> X_01_sym() const;
+  Eigen::Matrix<symbolic::Expression, 4, 4> X_12_sym() const;
+  Eigen::Matrix<symbolic::Expression, 4, 4> X_23_sym() const;
+  Eigen::Matrix<symbolic::Expression, 4, 4> X_34_sym() const;
+  Eigen::Matrix<symbolic::Expression, 4, 4> X_45_sym() const;
+  Eigen::Matrix<symbolic::Expression, 4, 4> X_56_sym() const;
+
  private:
   const double l0_;  // offset of joint 1 in base link in the z direction.
   const double l1_x_;  // offset of joint 2 in link 1 in the x direction.
@@ -45,6 +54,17 @@ class IRB140AnalyticalKinematics {
   const double l3_;  // offset of joint 4 in link 3 in the x direction.
   const double l4_;  // offset of joint 5 in link 4 in the x direction.
   const double l5_;  // offset of joint 6 in link 5 in the x direction.
+
+ public:
+  Eigen::Matrix<symbolic::Variable, 6, 1> c_;  // c_[i] is the cos of i'th joint angle.
+  Eigen::Matrix<symbolic::Variable, 6, 1> s_;  // s_[i] is the sin of i'th joint angle.
+  symbolic::Variable l0_var_;
+  symbolic::Variable l1_x_var_;
+  symbolic::Variable l1_y_var_;
+  symbolic::Variable l2_var_;
+  symbolic::Variable l3_var_;
+  symbolic::Variable l4_var_;
+  symbolic::Variable l5_var_;
 };
 }  // namespace IRB140
 }  // namespace examples

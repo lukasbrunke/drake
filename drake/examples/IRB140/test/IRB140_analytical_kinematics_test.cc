@@ -48,12 +48,24 @@ class IRB140Test : public ::testing::Test {
   IRB140AnalyticalKinematics analytical_kinematics;
 };
 
+void printPose(const Eigen::Matrix<symbolic::Expression, 4, 4>& pose) {
+  std::cout <<"R\n";
+  for (int j = 0; j < 3; ++j) {
+    for (int i = 0; i < 3; ++i) {
+      std::cout << pose(i, j) << std::endl;
+    }
+  }
+  std::cout <<"p\n";
+  for (int i = 0; i < 3; ++i) {
+    std::cout << pose(i, 3) << std::endl;
+  }
+}
 TEST_F(IRB140Test, link_forward_kinematics) {
   const auto& joint_lb = rigid_body_tree_->joint_limit_min;
   const auto& joint_ub = rigid_body_tree_->joint_limit_max;
   Eigen::Matrix<double, 6, 1> q = joint_lb;
   for (int i = 0; i < 6; ++i) {
-    q(i) += (joint_ub(i) - joint_lb(i)) * i / 10.0;
+    q(i) += (joint_ub(i) - joint_lb(i)) * (i + 1) / 10.0;
   }
 
   auto cache = rigid_body_tree_->CreateKinematicsCache();
@@ -93,6 +105,44 @@ TEST_F(IRB140Test, link_forward_kinematics) {
 
   const auto X_56 = analytical_kinematics.X_56(q(5));
   CompareIsometry3d(X_PC[5], X_56, 1E-5);
+
+  const auto X_01_sym = analytical_kinematics.X_01_sym();
+  const auto X_12_sym = analytical_kinematics.X_12_sym();
+  const auto X_23_sym = analytical_kinematics.X_23_sym();
+  const auto X_34_sym = analytical_kinematics.X_34_sym();
+  const auto X_45_sym = analytical_kinematics.X_45_sym();
+  const auto X_56_sym = analytical_kinematics.X_56_sym();
+  symbolic::Variable c23("c23");
+  symbolic::Variable s23("s23");
+  Eigen::Matrix<symbolic::Expression, 4, 4> X_13_sym;
+  X_13_sym << c23, -s23, 0, analytical_kinematics.l1_x_var_ + analytical_kinematics.s_[1] * analytical_kinematics.l2_var_,
+              s23, c23, 0, -analytical_kinematics.l1_y_var_ - analytical_kinematics.c_[1] * analytical_kinematics.l2_var_,
+              0, 0, 1, 0,
+              0, 0, 0, 1;
+
+  std::cout << X_01_sym << std::endl;
+  std::cout << X_12_sym << std::endl;
+  std::cout << X_23_sym << std::endl;
+  std::cout << X_34_sym << std::endl;
+  std::cout << X_45_sym << std::endl;
+  std::cout << X_56_sym << std::endl;
+
+  std::cout << "X_13\n" << X_13_sym << std::endl;
+  const auto X_16_sym = X_13_sym * X_34_sym * X_45_sym * X_56_sym;
+  const auto X_06_sym  = X_01_sym * X_16_sym;
+  const auto X_05_sym = X_01_sym * X_13_sym * X_34_sym * X_45_sym;
+  const auto X_03_sym = X_01_sym * X_13_sym;
+  const auto X_04_sym = X_03_sym * X_34_sym;
+  std::cout << "X_16\n";
+  printPose(X_16_sym);
+  std::cout <<"X_06\n";
+  printPose(X_06_sym);
+  std::cout <<"X_05\n";
+  printPose(X_05_sym);
+  std::cout << "X_03\n";
+  printPose(X_03_sym);
+  std::cout << "X_04\n";
+  printPose(X_04_sym);
 }
 }  // namespace
 }  // namespace IRB140
