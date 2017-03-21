@@ -67,7 +67,6 @@ TEST_F(IRB140Test, link_forward_kinematics) {
     X_WB[i] = rigid_body_tree_->CalcBodyPoseInWorldFrame(cache, *(rigid_body_tree_->FindBody("link_" + std::to_string(i))));
   }
 
-
   // X_PC[i] is the pose of child body frame `C` (body[i+1]) in the parent body
   // frame `P` (body[i])
   std::array<Isometry3d, 6> X_PC;
@@ -82,6 +81,18 @@ TEST_F(IRB140Test, link_forward_kinematics) {
 
   const auto X_12 = analytical_kinematics.X_12(q(1));
   CompareIsometry3d(X_PC[1], X_12, 1e-5);
+
+  const auto X_23 = analytical_kinematics.X_23(q(2));
+  CompareIsometry3d(X_PC[2], X_23, 1e-5);
+
+  const auto X_34 = analytical_kinematics.X_34(q(3));
+  CompareIsometry3d(X_PC[3], X_34, 1E-5);
+
+  const auto X_45 = analytical_kinematics.X_45(q(4));
+  CompareIsometry3d(X_PC[4], X_45, 1E-5);
+
+  const auto X_56 = analytical_kinematics.X_56(q(5));
+  CompareIsometry3d(X_PC[5], X_56, 1E-5);
 }
 }  // namespace
 }  // namespace IRB140
