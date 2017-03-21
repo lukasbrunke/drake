@@ -37,5 +37,46 @@ So the transform from link 2 to link 1 is
 \end{align}
 where $c_2 = \cos\theta_2, s_2 = \sin\theta_2$.
 
-Joint 3 connects link 3 and link 2, by rotating about z axis of the joint frame by angle $\theta_3$. The transform from the axis inboard frame to linke 2 frame is
+Joint 3 connects link 3 and link 2, by rotating about z axis of the joint frame by angle $\theta_3$. The transform from link 3 to link 2 is
+\begin{align}
+	\leftidx{^2}X^3 = \begin{bmatrix} 
+		c_3 & -s_3 & 0 & 0\\
+		s_3 &  c_3 & 0 & -l_2\\
+		0 & 0 & 1 & 0\\
+		0 & 0 & 0 & 1
+	\end{bmatrix}
+\end{align}
+where $c_3 = \cos\theta_3, s_3 = \sin\theta_3$.
+
+Joint 4 connects link 4 and link 3, by rotating about x axis of the joint frame by angle $\theta_4$. The transform from link 4 to link 3 is
+\begin{align}
+	\leftidx{^3}X^4 = \begin{bmatrix}
+		1 & 0 & 0 & l_3\\
+		0 & c_4 & -s_4 & 0\\
+		0 & s_4 &  c_4 & 0\\
+		0 & 0 & 0 & 1
+	\end{bmatrix}
+\end{align}
+
+Joint 5 connects link 5 and link 4, by rotating about -z axis of the joint frame by angle $\theta_5$. The transform from link 5 to link 4 is
+\begin{align}
+	\leftidx{^4}X^5 = \begin{bmatrix}
+		c_5 & s_5 & 0 & l_4\\
+		-s_5 & c_5 & 0 & 0\\
+		0 & 0 & 1 & 0\\
+		0 & 0 & 0 & 1
+	\end{bmatrix}
+\end{align}
+where $c_5=\cos\theta_5,s_5=\sin\theta_5$.
+
+Joint 6 connects link 6 and link 5, by rotating about x axis of the joint frame by angle $\theta_6$. The transform from link 6 to link 5 is
+\begin{align}
+	\leftidx{^5}X^6 = \begin{bmatrix}
+		1 & 9 & 0 & l_5\\
+		0 & c_6 & -s_6 & 0\\
+		0 & s_6 & c_6 & 0\\
+		0 & 0 & 0 & 1
+	\end{bmatrix}
+\end{align}
+where $c_6=\cos\theta_6, s_6=\sin\theta_6$.
 \end{document}
