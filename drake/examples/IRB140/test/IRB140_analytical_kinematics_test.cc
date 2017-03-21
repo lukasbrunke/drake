@@ -28,6 +28,11 @@ std::unique_ptr<RigidBodyTreed> ConstructIRB140() {
   return rigid_body_tree;
 }
 
+void CompareIsometry3d(const Eigen::Isometry3d& X1, const Eigen::Isometry3d& X2, double tol = 1E-10) {
+  EXPECT_TRUE(CompareMatrices(X1.linear(), X2.linear(), tol, MatrixCompareType::absolute));
+  EXPECT_TRUE(CompareMatrices(X1.translation(), X2.translation(), tol, MatrixCompareType::absolute));
+}
+
 class IRB140Test : public ::testing::Test {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(IRB140Test)
@@ -55,21 +60,28 @@ TEST_F(IRB140Test, link_forward_kinematics) {
   cache.initialize(q);
   rigid_body_tree_->doKinematics(cache);
 
-  std::array<Isometry3d, 6> X_WB;  // The pose of body frame `B` in the world frame `W`.
-  for (int i = 0; i < 6; ++i) {
-    X_WB[i] = rigid_body_tree_->CalcBodyPoseInWorldFrame(cache, *(rigid_body_tree_->FindBody("link_" + std::to_string(i + 1))));
+  std::array<Isometry3d, 7> X_WB;  // The pose of body frame `B` in the world frame `W`.
+  X_WB[0].linear() = Eigen::Matrix3d::Identity();
+  X_WB[0].translation() = Eigen::Vector3d::Zero();
+  for (int i = 1; i < 7; ++i) {
+    X_WB[i] = rigid_body_tree_->CalcBodyPoseInWorldFrame(cache, *(rigid_body_tree_->FindBody("link_" + std::to_string(i))));
   }
 
 
-  std::array<Isometry3d, 5> X_PC;  // The pose of child body frame `C` in the parent body frame `P`.
-  for (int i = 0; i < 5; ++i) {
+  // X_PC[i] is the pose of child body frame `C` (body[i+1]) in the parent body
+  // frame `P` (body[i])
+  std::array<Isometry3d, 6> X_PC;
+  X_PC[0] = X_WB[1];
+  for (int i = 1; i < 6; ++i) {
     X_PC[i].linear() = X_WB[i].linear().transpose() * X_WB[i + 1].linear();
-    X_PC[i].translation() = X_WB[i].linear().transpose() * (X_PC[i+1].translation() - X_PC[i].translation());
+    X_PC[i].translation() = X_WB[i].linear().transpose() * (X_WB[i+1].translation() - X_WB[i].translation());
   }
 
   const auto X_01 = analytical_kinematics.X_01(q(0));
-  EXPECT_TRUE(CompareMatrices(X_PC[0].linear(), X_01.linear()));
-  EXPECT_TRUE(CompareMatrices(X_PC[0].translation(), X_01.translation()));
+  CompareIsometry3d(X_PC[0], X_01, 1E-5);
+
+  const auto X_12 = analytical_kinematics.X_12(q(1));
+  CompareIsometry3d(X_PC[1], X_12, 1e-5);
 }
 }  // namespace
 }  // namespace IRB140
