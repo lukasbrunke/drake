@@ -53,7 +53,6 @@ class IRB140AnalyticalKinematics {
   const double l2_;  // offset of joint 3 in link 2 in the -y direction.
   const double l3_;  // offset of joint 4 in link 3 in the x direction.
   const double l4_;  // offset of joint 5 in link 4 in the x direction.
-  const double l5_;  // offset of joint 6 in link 5 in the x direction.
 
  public:
   Eigen::Matrix<symbolic::Variable, 6, 1> c_;  // c_[i] is the cos of i'th joint angle.
@@ -64,7 +63,6 @@ class IRB140AnalyticalKinematics {
   symbolic::Variable l2_var_;
   symbolic::Variable l3_var_;
   symbolic::Variable l4_var_;
-  symbolic::Variable l5_var_;
 };
 }  // namespace IRB140
 }  // namespace examples
