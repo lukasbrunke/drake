@@ -56,7 +56,7 @@ where $c_5=\cos\theta_5,s_5=\sin\theta_5$.
 Joint 6 connects link 6 and link 5, by rotating about x axis of the joint frame by angle $\theta_6$. The transform from link 6 to link 5 is
 \begin{align}
 	\leftidx{^5}X^6 = \begin{bmatrix}
-		1 & 0 & 0 & l_5\\
+		1 & 0 & 0 & 0\\
 		0 & c_6 & -s_6 & 0\\
 		0 & s_6 & c_6 & 0\\
 		0 & 0 & 0 & 1
@@ -64,8 +64,8 @@ Joint 6 connects link 6 and link 5, by rotating about x axis of the joint frame 
 \end{align}
 where $c_6=\cos\theta_6, s_6=\sin\theta_6$.
 
-We first notice that $\leftidx{^0}X^5$ has the property
+We first notice that $\leftidx{^0}X^6$ has the property
 \begin{align}
-	\tan\theta_1 = \arctan2(-\leftidx{^0}p^5_y, \leftidx{^0}p^5_x)
+	\tan\theta_1 = \arctan2(-\leftidx{^0}p^6_y, \leftidx{^0}p^6_x)
 \end{align}
 \end{document}
