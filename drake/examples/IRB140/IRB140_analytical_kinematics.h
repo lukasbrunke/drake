@@ -39,6 +39,8 @@ class IRB140AnalyticalKinematics {
   // The pose of link 6 measured and expressed in link 5.
   Eigen::Isometry3d X_56(double theta) const;
 
+  Eigen::Matrix<double, 6, 1> inverse_kinematics(const Eigen::Isometry3d& link6_pose);
+
   Eigen::Matrix<symbolic::Expression, 4, 4> X_01_sym() const;
   Eigen::Matrix<symbolic::Expression, 4, 4> X_12_sym() const;
   Eigen::Matrix<symbolic::Expression, 4, 4> X_23_sym() const;
