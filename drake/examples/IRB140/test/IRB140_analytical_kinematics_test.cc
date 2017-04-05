@@ -16,7 +16,7 @@ namespace IRB140 {
 namespace {
 std::unique_ptr<RigidBodyTreed> ConstructIRB140() {
   std::unique_ptr<RigidBodyTreed> rigid_body_tree = std::make_unique<RigidBodyTreed>();
-  const std::string model_path = drake::GetDrakePath() + "/examples/IRB140/urdf/irb_140.urdf";
+  const std::string model_path = drake::GetDrakePath() + "/examples/IRB140/urdf/irb_140_robotiq_ati_shift.urdf";
 
   parsers::urdf::AddModelInstanceFromUrdfFile(
       model_path,
