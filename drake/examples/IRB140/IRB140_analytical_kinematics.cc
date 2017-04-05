@@ -15,15 +15,13 @@ IRB140AnalyticalKinematics::IRB140AnalyticalKinematics()
       l2_(0.36),
       l3_(0.2185),
       l4_(0.1615),
-      l5_(0.065),
       c_{}, s_{},
       l0_var_("l0"),
       l1_x_var_("l1x"),
       l1_y_var_("l1y"),
       l2_var_("l2"),
       l3_var_("l3"),
-      l4_var_("l4"),
-      l5_var_("l5") {
+      l4_var_("l4") {
   for (int i = 0; i < 6; ++i) {
     c_[i] = symbolic::Variable("c" + std::to_string(i + 1));
     s_[i] = symbolic::Variable("s" + std::to_string(i + 1));
@@ -69,7 +67,7 @@ Isometry3d IRB140AnalyticalKinematics::X_45(double theta) const {
 Isometry3d IRB140AnalyticalKinematics::X_56(double theta) const {
   Isometry3d X;
   X.linear() = Eigen::AngleAxisd(theta, Eigen::Vector3d(1, 0, 0)).toRotationMatrix();
-  X.translation() = Eigen::Vector3d(l5_, 0, 0);
+  X.translation() = Eigen::Vector3d::Zero();
   return X;
 }
 
@@ -131,7 +129,7 @@ Matrix<Expression, 4, 4> IRB140AnalyticalKinematics::X_45_sym() const {
 Matrix<Expression, 4, 4> IRB140AnalyticalKinematics::X_56_sym() const {
   Matrix<Expression, 4, 4> X;
   // clang-format off
-  X << 1, 0, 0, l5_var_,
+  X << 1, 0, 0, 0,
        0, c_[5], -s_[5], 0,
        0, s_[5], c_[5], 0,
        0, 0, 0, 1;
