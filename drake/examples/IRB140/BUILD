@@ -17,6 +17,9 @@ drake_cc_library(
     deps = [
         "//drake/common",
         "//drake/common:symbolic",
+        "//drake/multibody:rigid_body_tree",
+        "//drake/multibody:rigid_body_tree_construction",
+        "//drake/multibody/parsers",
     ],
 )
 
@@ -26,9 +29,6 @@ drake_cc_googletest(
     deps = [
         ":IRB140_analytical_kinematics",
         "//drake/common:eigen_matrix_compare",
-        "//drake/multibody:rigid_body_tree",
-        "//drake/multibody:rigid_body_tree_construction",
-        "//drake/multibody/parsers",
     ],
 )
 
