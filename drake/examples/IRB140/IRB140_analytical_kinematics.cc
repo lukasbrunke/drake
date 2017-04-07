@@ -136,6 +136,21 @@ Matrix<Expression, 4, 4> IRB140AnalyticalKinematics::X_56_sym() const {
   // clang-format on
   return X;
 };
+
+std::vector<Eigen::Matrix<double, 6, 1>> IRB140AnalyticalKinematics::inverse_kinematics(const Eigen::Isometry3d& link6_pose) {
+  Eigen::Matrix<double, 6, 1> q;
+  q(0) = std::atan2(-link6_pose.translation()(1), -link6_pose.translation()(0));
+  double a0 = link6_pose.translation()(2) - l0_ - l1_y_;
+  double b0 = link6_pose.translation()(2) / std::cos(q(0)) - l1_x_;
+  // The angle q(1) + q(2) can be computed from
+  // b0 * cos(q(1) + q(2)) -a0 * sin(q(1) + q(2)) = c0
+  // where c0 = (a0^2 + b0^2 + (l3 + l4)^2 - l2^2) / (2 * l3 + 2 * l4)
+  double c0 = (a0 * a0 + b0 * b0 + std::pow(l3_ + l4_, 2.0) - l2_ * l2_) / (2 * l3_ + 2 * l4_);
+  double phi0 = atan2(b0, -a0);
+  double q12_plus_phi0 = std::asin(c0 / (std::sqrt(a0 * a0 + b0 * b0)));
+
+};
+
 }
 }
 }
