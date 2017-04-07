@@ -1,5 +1,11 @@
 #include "drake/examples/IRB140/IRB140_analytical_kinematics.h"
 
+#include <queue>
+
+#include "drake/common/drake_path.h"
+#include "drake/multibody/parsers/urdf_parser.h"
+#include "drake/multibody/rigid_body_tree_construction.h"
+
 using Eigen::Isometry3d;
 using Eigen::Matrix;
 using drake::symbolic::Variable;
@@ -9,7 +15,8 @@ namespace drake {
 namespace examples {
 namespace IRB140 {
 IRB140AnalyticalKinematics::IRB140AnalyticalKinematics()
-    : l0_(0.1095),
+    : robot_(std::make_unique<RigidBodyTreed>()),
+      l0_(0.1095),
       l1_x_(0.07),
       l1_y_(0.2425),
       l2_(0.36),
@@ -22,6 +29,13 @@ IRB140AnalyticalKinematics::IRB140AnalyticalKinematics()
       l2_var_("l2"),
       l3_var_("l3"),
       l4_var_("l4") {
+  const std::string model_path = drake::GetDrakePath() + "/examples/IRB140/urdf/irb_140_shift.urdf";
+  parsers::urdf::AddModelInstanceFromUrdfFile(
+      model_path,
+      drake::multibody::joints::kFixed,
+      nullptr,
+      robot_.get());
+
   for (int i = 0; i < 6; ++i) {
     c_[i] = symbolic::Variable("c" + std::to_string(i + 1));
     s_[i] = symbolic::Variable("s" + std::to_string(i + 1));
@@ -137,18 +151,84 @@ Matrix<Expression, 4, 4> IRB140AnalyticalKinematics::X_56_sym() const {
   return X;
 };
 
-std::vector<Eigen::Matrix<double, 6, 1>> IRB140AnalyticalKinematics::inverse_kinematics(const Eigen::Isometry3d& link6_pose) {
-  Eigen::Matrix<double, 6, 1> q;
-  q(0) = std::atan2(-link6_pose.translation()(1), -link6_pose.translation()(0));
+std::vector<double> IRB140AnalyticalKinematics::q1(const Eigen::Isometry3d& link6_pose) {
+  double theta = std::atan2(-link6_pose.translation()(1), link6_pose.translation()(0));
+  if (theta >= robot_->joint_limit_min(0) && theta <= robot_->joint_limit_max(0)) {
+    return std::vector<double>(1, theta);
+  }
+  return std::vector<double>();
+}
+
+std::pair<double, double> compute_q2_q3(double q2_plus_q3, double a0, double b0, double l2, double l3, double l4) {
+  double sin_q3 = (b0 * std::cos(q2_plus_q3) - a0 * std::sin(q2_plus_q3) - l3 - l4) / -l2;
+  double cos_q3 = (a0 * std::cos(q2_plus_q3) + b0 * std::sin(q2_plus_q3)) / l2;
+  double q3 = std::atan2(sin_q3, cos_q3);
+  if (std::abs(std::sin(q3) - sin_q3) > 1E-10 || std::abs(std::cos(q3) - cos_q3) > 1E-10) {
+    return std::pair<double, double>();
+  }
+  double q2 = q2_plus_q3 - q3;
+  return std::make_pair(q2, q3);
+};
+
+std::vector<std::pair<double, double>> IRB140AnalyticalKinematics::q23(const Eigen::Isometry3d& link6_pose, double q1) {
+  std::vector<std::pair<double, double>> q23_all;
   double a0 = link6_pose.translation()(2) - l0_ - l1_y_;
-  double b0 = link6_pose.translation()(2) / std::cos(q(0)) - l1_x_;
-  // The angle q(1) + q(2) can be computed from
-  // b0 * cos(q(1) + q(2)) -a0 * sin(q(1) + q(2)) = c0
+  double b0 = link6_pose.translation()(2) / std::cos(q1) - l1_x_;
+  // The angle q2 + q3 can be computed from
+  // b0 * cos(q2 + q3) -a0 * sin(q2 + q3) = c0
   // where c0 = (a0^2 + b0^2 + (l3 + l4)^2 - l2^2) / (2 * l3 + 2 * l4)
   double c0 = (a0 * a0 + b0 * b0 + std::pow(l3_ + l4_, 2.0) - l2_ * l2_) / (2 * l3_ + 2 * l4_);
   double phi0 = atan2(b0, -a0);
-  double q12_plus_phi0 = std::asin(c0 / (std::sqrt(a0 * a0 + b0 * b0)));
+  double sin_q23_plus_phi0 = c0 / (std::sqrt(a0 * a0 + b0 * b0));
+  if (std::abs(sin_q23_plus_phi0) <= 1) {
+    std::vector<double> q23_plus_phi0;
+    q23_plus_phi0.push_back(std::asin(sin_q23_plus_phi0));
+    q23_plus_phi0.push_back(M_PI - q23_plus_phi0[0]);
+    q23_plus_phi0.push_back(-M_PI - q23_plus_phi0[0]);
+    q23_plus_phi0.push_back(3 * M_PI - q23_plus_phi0[0]);
+    q23_plus_phi0.push_back(2 * M_PI + q23_plus_phi0[0]);
+    q23_plus_phi0.push_back(-2 * M_PI + q23_plus_phi0[0]);
+    for (double q23_plus_phi0_val : q23_plus_phi0) {
+      double q2_plus_q3 = q23_plus_phi0_val - phi0;
+      const std::pair<double, double> q23 = compute_q2_q3(q2_plus_q3, a0, b0, l2_, l3_, l4_);
+      if (q23.first >= robot_->joint_limit_min(1) && q23.first <= robot_->joint_limit_max(1) &&
+          q23.second >= robot_->joint_limit_min(2) && q23.second <= robot_->joint_limit_max(2)) {
+        q23_all.push_back(q23);
+      }
+    }
+  }
+  return q23_all;
+};
 
+std::vector<Eigen::Matrix<double, 6, 1>> IRB140AnalyticalKinematics::inverse_kinematics(const Eigen::Isometry3d& link6_pose) {
+  std::queue<Eigen::Matrix<double, 6, 1>> q_all;
+  const auto& q1_all = q1(link6_pose);
+  for (const auto& q1_val : q1_all) {
+    Eigen::Matrix<double, 6, 1> q;
+    q(0) = q1_val;
+    q_all.push(q);
+  }
+
+  int q_all_size = q_all.size();
+  for (int i = 0; i < q_all_size; ++i) {
+    Eigen::Matrix<double, 6, 1> q = q_all.front();
+    q_all.pop();
+    const auto& q23_all = q23(link6_pose, q(0));
+    for (int j = 0; j < static_cast<int>(q23_all.size()); ++j) {
+      q(1) = q23_all[j].first;
+      q(2) = q23_all[j].second;
+      q_all.push(q);
+    }
+  }
+
+  std::vector<Eigen::Matrix<double, 6, 1>> q_all_vec;
+  q_all_vec.reserve(q_all.size());
+  while (!q_all.empty()) {
+    const Eigen::Matrix<double, 6, 1> q = q_all.front();
+    q_all_vec.push_back(q);
+    q_all.pop();
+  }
+  return q_all_vec;
 };
 
 }

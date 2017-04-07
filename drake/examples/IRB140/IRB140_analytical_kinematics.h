@@ -7,6 +7,8 @@
 #include "drake/common/symbolic_variable.h"
 #include "drake/common/symbolic_expression.h"
 
+#include "drake/multibody/rigid_body_tree.h"
+
 namespace drake {
 namespace examples {
 namespace IRB140 {
@@ -20,6 +22,8 @@ class IRB140AnalyticalKinematics {
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(IRB140AnalyticalKinematics)
 
   IRB140AnalyticalKinematics();
+
+  RigidBodyTreed* robot() const {return robot_.get();}
 
   // The pose of link 1 measured and expressed in link 0.
   Eigen::Isometry3d X_01(double theta) const;
@@ -41,6 +45,10 @@ class IRB140AnalyticalKinematics {
 
   std::vector<Eigen::Matrix<double, 6, 1>> inverse_kinematics(const Eigen::Isometry3d& link6_pose);
 
+  std::vector<double> q1(const Eigen::Isometry3d& link6_pose);
+
+  std::vector<std::pair<double, double>> q23(const Eigen::Isometry3d& link6_pose, double q1);
+
   Eigen::Matrix<symbolic::Expression, 4, 4> X_01_sym() const;
   Eigen::Matrix<symbolic::Expression, 4, 4> X_12_sym() const;
   Eigen::Matrix<symbolic::Expression, 4, 4> X_23_sym() const;
@@ -49,6 +57,7 @@ class IRB140AnalyticalKinematics {
   Eigen::Matrix<symbolic::Expression, 4, 4> X_56_sym() const;
 
  private:
+  std::unique_ptr<RigidBodyTreed> robot_;
   const double l0_;  // offset of joint 1 in base link in the z direction.
   const double l1_x_;  // offset of joint 2 in link 1 in the x direction.
   const double l1_y_;  // offset of joint 2 in link 1 in the -y direction.
