@@ -2,11 +2,7 @@
 
 #include <gtest/gtest.h>
 
-#include "drake/common/drake_path.h"
 #include "drake/common/eigen_matrix_compare.h"
-#include "drake/multibody/parsers/urdf_parser.h"
-#include "drake/multibody/rigid_body_tree.h"
-#include "drake/multibody/rigid_body_tree_construction.h"
 
 using Eigen::Isometry3d;
 
@@ -14,19 +10,6 @@ namespace drake {
 namespace examples {
 namespace IRB140 {
 namespace {
-std::unique_ptr<RigidBodyTreed> ConstructIRB140() {
-  std::unique_ptr<RigidBodyTreed> rigid_body_tree = std::make_unique<RigidBodyTreed>();
-  const std::string model_path = drake::GetDrakePath() + "/examples/IRB140/urdf/irb_140_robotiq_ati_shift.urdf";
-
-  parsers::urdf::AddModelInstanceFromUrdfFile(
-      model_path,
-      drake::multibody::joints::kFixed,
-      nullptr,
-      rigid_body_tree.get());
-
-  multibody::AddFlatTerrainToWorld(rigid_body_tree.get());
-  return rigid_body_tree;
-}
 
 void CompareIsometry3d(const Eigen::Isometry3d& X1, const Eigen::Isometry3d& X2, double tol = 1E-10) {
   EXPECT_TRUE(CompareMatrices(X1.linear(), X2.linear(), tol, MatrixCompareType::absolute));
@@ -37,14 +20,11 @@ class IRB140Test : public ::testing::Test {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(IRB140Test)
 
-  IRB140Test()
-      : rigid_body_tree_(ConstructIRB140()),
-        analytical_kinematics() {}
+  IRB140Test() : analytical_kinematics() {}
 
   ~IRB140Test() override{}
 
  protected:
-  std::unique_ptr<RigidBodyTreed> rigid_body_tree_;
   IRB140AnalyticalKinematics analytical_kinematics;
 };
 
@@ -60,23 +40,24 @@ void printPose(const Eigen::Matrix<symbolic::Expression, 4, 4>& pose) {
     std::cout << pose(i, 3) << std::endl;
   }
 }
+
 TEST_F(IRB140Test, link_forward_kinematics) {
-  const auto& joint_lb = rigid_body_tree_->joint_limit_min;
-  const auto& joint_ub = rigid_body_tree_->joint_limit_max;
+  const auto& joint_lb = analytical_kinematics.robot()->joint_limit_min;
+  const auto& joint_ub = analytical_kinematics.robot()->joint_limit_max;
   Eigen::Matrix<double, 6, 1> q = joint_lb;
   for (int i = 0; i < 6; ++i) {
     q(i) += (joint_ub(i) - joint_lb(i)) * (i + 1) / 10.0;
   }
 
-  auto cache = rigid_body_tree_->CreateKinematicsCache();
+  auto cache = analytical_kinematics.robot()->CreateKinematicsCache();
   cache.initialize(q);
-  rigid_body_tree_->doKinematics(cache);
+  analytical_kinematics.robot()->doKinematics(cache);
 
   std::array<Isometry3d, 7> X_WB;  // The pose of body frame `B` in the world frame `W`.
   X_WB[0].linear() = Eigen::Matrix3d::Identity();
   X_WB[0].translation() = Eigen::Vector3d::Zero();
   for (int i = 1; i < 7; ++i) {
-    X_WB[i] = rigid_body_tree_->CalcBodyPoseInWorldFrame(cache, *(rigid_body_tree_->FindBody("link_" + std::to_string(i))));
+    X_WB[i] = analytical_kinematics.robot()->CalcBodyPoseInWorldFrame(cache, *(analytical_kinematics.robot()->FindBody("link_" + std::to_string(i))));
   }
 
   // X_PC[i] is the pose of child body frame `C` (body[i+1]) in the parent body
@@ -120,29 +101,57 @@ TEST_F(IRB140Test, link_forward_kinematics) {
               0, 0, 1, 0,
               0, 0, 0, 1;
 
-  std::cout << X_01_sym << std::endl;
-  std::cout << X_12_sym << std::endl;
-  std::cout << X_23_sym << std::endl;
-  std::cout << X_34_sym << std::endl;
-  std::cout << X_45_sym << std::endl;
-  std::cout << X_56_sym << std::endl;
-
   std::cout << "X_13\n" << X_13_sym << std::endl;
   const auto X_16_sym = X_13_sym * X_34_sym * X_45_sym * X_56_sym;
   const auto X_06_sym  = X_01_sym * X_16_sym;
-  const auto X_05_sym = X_01_sym * X_13_sym * X_34_sym * X_45_sym;
-  const auto X_03_sym = X_01_sym * X_13_sym;
-  const auto X_04_sym = X_03_sym * X_34_sym;
-  std::cout << "X_16\n";
-  printPose(X_16_sym);
   std::cout <<"X_06\n";
   printPose(X_06_sym);
-  std::cout <<"X_05\n";
-  printPose(X_05_sym);
-  std::cout << "X_03\n";
-  printPose(X_03_sym);
-  std::cout << "X_04\n";
-  printPose(X_04_sym);
+}
+
+TEST_F(IRB140Test, inverse_kinematics_test) {
+  std::vector<Eigen::Matrix<double, 6, 1>> q_all;
+  const int num_joint_sample = 2;
+  Eigen::Matrix<double, 6, num_joint_sample> q_sample;
+  for (int i = 0; i < 6; ++i) {
+    q_sample.row(i) = Eigen::Matrix<double, 1, num_joint_sample>::LinSpaced(analytical_kinematics.robot()->joint_limit_min(i), analytical_kinematics.robot()->joint_limit_max(i));
+  }
+  auto cache = analytical_kinematics.robot()->CreateKinematicsCache();
+  for (int i0 = 0; i0 < num_joint_sample; ++i0) {
+    for (int i1 = 0; i1 < num_joint_sample; ++i1) {
+      for (int i2 = 0; i2 < num_joint_sample; ++i2) {
+        for (int i3 = 0; i3 < num_joint_sample; ++i3) {
+          for (int i4 = 0; i4 < num_joint_sample; ++i4) {
+            for (int i5 = 0; i5 < num_joint_sample; ++i5) {
+              Eigen::Matrix<double, 6, 1> q;
+              q(0) = q_sample(0, i0);
+              q(1) = q_sample(1, i1);
+              q(2) = q_sample(2, i2);
+              q(3) = q_sample(3, i3);
+              q(4) = q_sample(4, i4);
+              q(5) = q_sample(5, i5);
+
+              std::cout<<"q\n" << q << std::endl;
+              cache.initialize(q);
+              analytical_kinematics.robot()->doKinematics(cache);
+              Isometry3d link6_pose = analytical_kinematics.robot()->CalcBodyPoseInWorldFrame(cache, *(analytical_kinematics.robot()->FindBody("link_6")));
+              Isometry3d link4_pose = analytical_kinematics.robot()->CalcBodyPoseInWorldFrame(cache, *(analytical_kinematics.robot()->FindBody("link_4")));
+
+              const auto& q_all = analytical_kinematics.inverse_kinematics(link6_pose);
+              EXPECT_GE(q_all.size(), 1);
+              for (const auto& q_ik : q_all) {
+                EXPECT_TRUE((q_ik.array() >= analytical_kinematics.robot()->joint_limit_min.array()).all());
+                EXPECT_TRUE((q_ik.array() <= analytical_kinematics.robot()->joint_limit_max.array()).all());
+                cache.initialize(q_ik);
+                analytical_kinematics.robot()->doKinematics(cache);
+                Isometry3d link4_pose_ik = analytical_kinematics.robot()->CalcBodyPoseInWorldFrame(cache, *(analytical_kinematics.robot()->FindBody("link_4")));
+                CompareIsometry3d(link4_pose, link4_pose_ik);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 }
 }  // namespace
 }  // namespace IRB140
