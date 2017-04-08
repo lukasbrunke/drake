@@ -3,8 +3,8 @@
 \begin{document}
 Joint 1 connects base link (link 0) and link 1, by rotating about -y axis of the joint frame by angle $\theta_1$. The transform from link 1 to link 0 is
 \begin{align}
-\leftidx{^0}X^1 = \begin{bmatrix}c_1& 0 & s_1 & 0\\
-                                -s_1& 0 & c_1 & 0\\
+\leftidx{^0}X^1 = \begin{bmatrix}c_1& 0 & -s_1 & 0\\
+                                s_1& 0 & c_1 & 0\\
                                   0 & -1&  0  & l_0\\
                                   0 & 0 &  0  & 1\end{bmatrix}
 \end{align}
@@ -64,9 +64,18 @@ Joint 6 connects link 6 and link 5, by rotating about x axis of the joint frame 
 \end{align}
 where $c_6=\cos\theta_6, s_6=\sin\theta_6$.
 
+
+In end effector pose $\leftidx{^0}X^6$ can be written as
+\begin{align}
+	\leftidx{^0}p^6 = \begin{bmatrix}
+		c_1  (l_{1x} + l_2 s_2 + l_3  c_{23} + l_4  c_{23})\\
+		s_1  (l_{1x} + l_2 s_2 + l_3  c_{23} + l_4  c_{23})\\
+		l_0 + l_{1y} + l_2 c_2 - l_3  s_{23} - l_4  s_{23}
+	\end{bmatrix}
+\end{align}
 We first notice that $\leftidx{^0}X^6$ has the property
 \begin{align}
-	\tan\theta_1 = \arctan2(-\leftidx{^0}p^6_y, \leftidx{^0}p^6_x)
+	\tan\theta_1 = \arctan2(\leftidx{^0}p^6_y, \leftidx{^0}p^6_x)
 \end{align}
 
 If we define

@@ -28,7 +28,9 @@ IRB140AnalyticalKinematics::IRB140AnalyticalKinematics()
       l1_y_var_("l1y"),
       l2_var_("l2"),
       l3_var_("l3"),
-      l4_var_("l4") {
+      l4_var_("l4"),
+      c23_var_("c23"),
+      s23_var_("s23") {
   const std::string model_path = drake::GetDrakePath() + "/examples/IRB140/urdf/irb_140_shift.urdf";
   parsers::urdf::AddModelInstanceFromUrdfFile(
       model_path,
@@ -42,61 +44,18 @@ IRB140AnalyticalKinematics::IRB140AnalyticalKinematics()
   }
 }
 
-Isometry3d IRB140AnalyticalKinematics::X_01(double theta) const {
-  Isometry3d X;
-  Eigen::Matrix3d R_0J = Eigen::AngleAxisd(-M_PI_2, Eigen::Vector3d(1, 0, 0)).toRotationMatrix();
-  X.linear() = R_0J * Eigen::AngleAxisd(theta, Eigen::Vector3d(0, -1, 0)).toRotationMatrix();
-  X.translation() = Eigen::Vector3d(0, 0, l0_);
-  return X;
-}
-
-Isometry3d IRB140AnalyticalKinematics::X_12(double theta) const {
-  Isometry3d X;
-  X.linear() = Eigen::AngleAxisd(theta, Eigen::Vector3d(0, 0, 1)).toRotationMatrix();
-  X.translation() = Eigen::Vector3d(l1_x_, -l1_y_, 0);
-  return X;
-}
-
-Isometry3d IRB140AnalyticalKinematics::X_23(double theta) const {
-  Isometry3d X;
-  X.linear() = Eigen::AngleAxisd(theta, Eigen::Vector3d(0, 0, 1)).toRotationMatrix();
-  X.translation() = Eigen::Vector3d(0, -l2_, 0);
-  return X;
-}
-
-Isometry3d IRB140AnalyticalKinematics::X_34(double theta) const {
-  Isometry3d X;
-  X.linear() = Eigen::AngleAxisd(theta, Eigen::Vector3d(1, 0, 0)).toRotationMatrix();
-  X.translation() = Eigen::Vector3d(l3_, 0, 0);
-  return X;
-}
-
-Isometry3d IRB140AnalyticalKinematics::X_45(double theta) const {
-  Isometry3d X;
-  X.linear() = Eigen::AngleAxisd(theta, Eigen::Vector3d(0, 0, -1)).toRotationMatrix();
-  X.translation() = Eigen::Vector3d(l4_, 0, 0);
-  return X;
-}
-
-Isometry3d IRB140AnalyticalKinematics::X_56(double theta) const {
-  Isometry3d X;
-  X.linear() = Eigen::AngleAxisd(theta, Eigen::Vector3d(1, 0, 0)).toRotationMatrix();
-  X.translation() = Eigen::Vector3d::Zero();
-  return X;
-}
-
-Matrix<Expression, 4, 4> IRB140AnalyticalKinematics::X_01_sym() const {
+Matrix<Expression, 4, 4> IRB140AnalyticalKinematics::X_01() const {
   Matrix<Expression, 4, 4> X;
   // clang-format off
-  X << c_[0], 0, s_[0], 0,
-       -s_[0], 0, c_[0], 0,
+  X << c_[0], 0, -s_[0], 0,
+       s_[0], 0, c_[0], 0,
        0, -1, 0, l0_var_,
        0, 0, 0, 1;
   // clang-format on
   return X;
 }
 
-Matrix<Expression, 4, 4> IRB140AnalyticalKinematics::X_12_sym() const {
+Matrix<Expression, 4, 4> IRB140AnalyticalKinematics::X_12() const {
   Matrix<Expression, 4, 4> X;
   // clang-format off
   X << c_[1], -s_[1], 0, l1_x_var_,
@@ -107,7 +66,7 @@ Matrix<Expression, 4, 4> IRB140AnalyticalKinematics::X_12_sym() const {
   return X;
 }
 
-Matrix<Expression, 4, 4> IRB140AnalyticalKinematics::X_23_sym() const {
+Matrix<Expression, 4, 4> IRB140AnalyticalKinematics::X_23() const {
   Matrix<Expression, 4, 4> X;
   // clang-format off
   X << c_[2], -s_[2], 0, 0,
@@ -118,7 +77,16 @@ Matrix<Expression, 4, 4> IRB140AnalyticalKinematics::X_23_sym() const {
   return X;
 }
 
-Matrix<Expression, 4, 4> IRB140AnalyticalKinematics::X_34_sym() const {
+Matrix<Expression, 4, 4> IRB140AnalyticalKinematics::X_13() const {
+  Eigen::Matrix<symbolic::Expression, 4, 4> X;
+  X << c23_var_, -s23_var_, 0, l1_x_var_ + s_[1] * l2_var_,
+       s23_var_, c23_var_, 0, -l1_y_var_ - c_[1] * l2_var_,
+      0, 0, 1, 0,
+      0, 0, 0, 1;
+  return X;
+};
+
+Matrix<Expression, 4, 4> IRB140AnalyticalKinematics::X_34() const {
   Matrix<Expression, 4, 4> X;
   // clang-format off
   X << 1, 0, 0, l3_var_,
@@ -129,7 +97,7 @@ Matrix<Expression, 4, 4> IRB140AnalyticalKinematics::X_34_sym() const {
   return X;
 }
 
-Matrix<Expression, 4, 4> IRB140AnalyticalKinematics::X_45_sym() const {
+Matrix<Expression, 4, 4> IRB140AnalyticalKinematics::X_45() const {
   Matrix<Expression, 4, 4> X;
   // clang-format off
   X << c_[4], s_[4], 0, l4_var_,
@@ -140,7 +108,7 @@ Matrix<Expression, 4, 4> IRB140AnalyticalKinematics::X_45_sym() const {
   return X;
 };
 
-Matrix<Expression, 4, 4> IRB140AnalyticalKinematics::X_56_sym() const {
+Matrix<Expression, 4, 4> IRB140AnalyticalKinematics::X_56() const {
   Matrix<Expression, 4, 4> X;
   // clang-format off
   X << 1, 0, 0, 0,
@@ -151,8 +119,90 @@ Matrix<Expression, 4, 4> IRB140AnalyticalKinematics::X_56_sym() const {
   return X;
 };
 
+Eigen::Isometry3d EvalIsometry3dFromExpression(const Eigen::Matrix<symbolic::Expression, 4, 4>& X_sym, const symbolic::Environment& env) {
+  Eigen::Matrix3d R;
+  Eigen::Vector3d t;
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 3; ++j) {
+      R(i, j) = X_sym(i, j).Evaluate(env);
+    }
+    t(i) = X_sym(i, 3).Evaluate(env);
+  }
+  Eigen::Isometry3d X_val;
+  X_val.translation() = t;
+  X_val.linear() = R;
+  return X_val;
+}
+
+Eigen::Isometry3d IRB140AnalyticalKinematics::X_01(double theta) const {
+  symbolic::Environment env;
+  env.insert(l0_var_, l0_);
+  env.insert(c_[0], std::cos(theta));
+  env.insert(s_[0], std::sin(theta));
+  const auto& X_sym = X_01();
+  return EvalIsometry3dFromExpression(X_sym, env);
+}
+
+Eigen::Isometry3d IRB140AnalyticalKinematics::X_12(double theta) const {
+  symbolic::Environment env;
+  env.insert(l1_x_var_, l1_x_);
+  env.insert(l1_y_var_, l1_y_);
+  env.insert(c_[1], std::cos(theta));
+  env.insert(s_[1], std::sin(theta));
+  const auto& X_sym = X_12();
+  return EvalIsometry3dFromExpression(X_sym, env);
+}
+
+Eigen::Isometry3d IRB140AnalyticalKinematics::X_23(double theta) const {
+  symbolic::Environment env;
+  env.insert(l2_var_, l2_);
+  env.insert(c_[2], std::cos(theta));
+  env.insert(s_[2], std::sin(theta));
+  const auto& X_sym = X_23();
+  return EvalIsometry3dFromExpression(X_sym, env);
+}
+
+Eigen::Isometry3d IRB140AnalyticalKinematics::X_13(double theta2, double theta3) const {
+  symbolic::Environment env;
+  env.insert(c23_var_, std::cos(theta2 + theta3));
+  env.insert(s23_var_, std::sin(theta2 + theta3));
+  env.insert(c_[1], std::cos(theta2));
+  env.insert(s_[1], std::sin(theta2));
+  env.insert(l1_x_var_, l1_x_);
+  env.insert(l1_y_var_, l1_y_);
+  env.insert(l2_var_, l2_);
+  const auto& X_sym = X_13();
+  return EvalIsometry3dFromExpression(X_sym, env);
+}
+
+Eigen::Isometry3d IRB140AnalyticalKinematics::X_34(double theta) const {
+  symbolic::Environment env;
+  env.insert(l3_var_, l3_);
+  env.insert(c_[3], std::cos(theta));
+  env.insert(s_[3], std::sin(theta));
+  const auto& X_sym = X_34();
+  return EvalIsometry3dFromExpression(X_sym, env);
+}
+
+Eigen::Isometry3d IRB140AnalyticalKinematics::X_45(double theta) const {
+  symbolic::Environment env;
+  env.insert(l4_var_, l4_);
+  env.insert(c_[4], std::cos(theta));
+  env.insert(s_[4], std::sin(theta));
+  const auto& X_sym = X_45();
+  return EvalIsometry3dFromExpression(X_sym, env);
+}
+
+Eigen::Isometry3d IRB140AnalyticalKinematics::X_56(double theta) const {
+  symbolic::Environment env;
+  env.insert(c_[5], std::cos(theta));
+  env.insert(s_[5], std::sin(theta));
+  const auto& X_sym = X_56();
+  return EvalIsometry3dFromExpression(X_sym, env);
+}
+
 std::vector<double> IRB140AnalyticalKinematics::q1(const Eigen::Isometry3d& link6_pose) {
-  double theta = std::atan2(-link6_pose.translation()(1), link6_pose.translation()(0));
+  double theta = std::atan2(link6_pose.translation()(1), link6_pose.translation()(0));
   std::vector<double> q1_all;
   for (int i = -2; i <= 2; ++i) {
     if (theta + M_PI * i >= robot_->joint_limit_min(0) && theta + M_PI * i <= robot_->joint_limit_max(0)) {
