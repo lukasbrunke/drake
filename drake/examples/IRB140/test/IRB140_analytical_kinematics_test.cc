@@ -81,6 +81,9 @@ TEST_F(IRB140Test, link_forward_kinematics) {
   const auto X_23 = analytical_kinematics.X_23(q(2));
   CompareIsometry3d(X_PC[2], X_23, 1e-5);
 
+  const auto X_13 = analytical_kinematics.X_13(q(1), q(2));
+  CompareIsometry3d(X_PC[1] * X_PC[2], X_13, 1e-5);
+
   const auto X_34 = analytical_kinematics.X_34(q(3));
   CompareIsometry3d(X_PC[3], X_34, 1E-5);
 
@@ -90,21 +93,14 @@ TEST_F(IRB140Test, link_forward_kinematics) {
   const auto X_56 = analytical_kinematics.X_56(q(5));
   CompareIsometry3d(X_PC[5], X_56, 1E-5);
 
-  const auto X_01_sym = analytical_kinematics.X_01_sym();
-  const auto X_12_sym = analytical_kinematics.X_12_sym();
-  const auto X_23_sym = analytical_kinematics.X_23_sym();
-  const auto X_34_sym = analytical_kinematics.X_34_sym();
-  const auto X_45_sym = analytical_kinematics.X_45_sym();
-  const auto X_56_sym = analytical_kinematics.X_56_sym();
-  symbolic::Variable c23("c23");
-  symbolic::Variable s23("s23");
-  Eigen::Matrix<symbolic::Expression, 4, 4> X_13_sym;
-  X_13_sym << c23, -s23, 0, analytical_kinematics.l1_x_var_ + analytical_kinematics.s_[1] * analytical_kinematics.l2_var_,
-              s23, c23, 0, -analytical_kinematics.l1_y_var_ - analytical_kinematics.c_[1] * analytical_kinematics.l2_var_,
-              0, 0, 1, 0,
-              0, 0, 0, 1;
+  const auto X_01_sym = analytical_kinematics.X_01();
+  const auto X_12_sym = analytical_kinematics.X_12();
+  const auto X_23_sym = analytical_kinematics.X_23();
+  const auto X_13_sym = analytical_kinematics.X_13();
+  const auto X_34_sym = analytical_kinematics.X_34();
+  const auto X_45_sym = analytical_kinematics.X_45();
+  const auto X_56_sym = analytical_kinematics.X_56();
 
-  std::cout << "X_13\n" << X_13_sym << std::endl;
   const auto X_16_sym = X_13_sym * X_34_sym * X_45_sym * X_56_sym;
   const auto X_06_sym  = X_01_sym * X_16_sym;
   std::cout <<"X_06\n";
