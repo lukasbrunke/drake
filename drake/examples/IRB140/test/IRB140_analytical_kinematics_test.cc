@@ -11,9 +11,12 @@ namespace examples {
 namespace IRB140 {
 namespace {
 
-void CompareIsometry3d(const Eigen::Isometry3d& X1, const Eigen::Isometry3d& X2, double tol = 1E-10) {
+bool CompareIsometry3d(const Eigen::Isometry3d& X1, const Eigen::Isometry3d& X2, double tol = 1E-10) {
+  bool orientation_match = CompareMatrices(X1.linear(), X2.linear(), tol, MatrixCompareType::absolute);
   EXPECT_TRUE(CompareMatrices(X1.linear(), X2.linear(), tol, MatrixCompareType::absolute));
+  bool position_match = CompareMatrices(X1.translation(), X2.translation(), tol, MatrixCompareType::absolute);
   EXPECT_TRUE(CompareMatrices(X1.translation(), X2.translation(), tol, MatrixCompareType::absolute));
+  return position_match && orientation_match;
 }
 
 class IRB140Test : public ::testing::Test {
@@ -110,10 +113,10 @@ TEST_F(IRB140Test, link_forward_kinematics) {
 
 TEST_F(IRB140Test, inverse_kinematics_test) {
   std::vector<Eigen::Matrix<double, 6, 1>> q_all;
-  const int num_joint_sample = 2;
+  const int num_joint_sample = 10;
   Eigen::Matrix<double, 6, num_joint_sample> q_sample;
   for (int i = 0; i < 6; ++i) {
-    q_sample.row(i) = Eigen::Matrix<double, 1, num_joint_sample>::LinSpaced(analytical_kinematics.robot()->joint_limit_min(i), analytical_kinematics.robot()->joint_limit_max(i));
+    q_sample.row(i) = Eigen::Matrix<double, 1, num_joint_sample>::LinSpaced(analytical_kinematics.robot()->joint_limit_min(i) + 1E-6, analytical_kinematics.robot()->joint_limit_max(i) - 1E-6);
   }
   auto cache = analytical_kinematics.robot()->CreateKinematicsCache();
   for (int i0 = 0; i0 < num_joint_sample; ++i0) {
@@ -130,21 +133,28 @@ TEST_F(IRB140Test, inverse_kinematics_test) {
               q(4) = q_sample(4, i4);
               q(5) = q_sample(5, i5);
 
-              std::cout<<"q\n" << q << std::endl;
               cache.initialize(q);
               analytical_kinematics.robot()->doKinematics(cache);
-              Isometry3d link6_pose = analytical_kinematics.robot()->CalcBodyPoseInWorldFrame(cache, *(analytical_kinematics.robot()->FindBody("link_6")));
-              Isometry3d link4_pose = analytical_kinematics.robot()->CalcBodyPoseInWorldFrame(cache, *(analytical_kinematics.robot()->FindBody("link_4")));
+              const Isometry3d link6_pose = analytical_kinematics.robot()->CalcBodyPoseInWorldFrame(cache, *(analytical_kinematics.robot()->FindBody("link_6")));
 
               const auto& q_all = analytical_kinematics.inverse_kinematics(link6_pose);
               EXPECT_GE(q_all.size(), 1);
+              if (q_all.size() == 0) {
+                std::cout << "q\n" << q << std::endl;
+                analytical_kinematics.inverse_kinematics(link6_pose);
+              }
               for (const auto& q_ik : q_all) {
                 EXPECT_TRUE((q_ik.array() >= analytical_kinematics.robot()->joint_limit_min.array()).all());
                 EXPECT_TRUE((q_ik.array() <= analytical_kinematics.robot()->joint_limit_max.array()).all());
                 cache.initialize(q_ik);
                 analytical_kinematics.robot()->doKinematics(cache);
-                Isometry3d link4_pose_ik = analytical_kinematics.robot()->CalcBodyPoseInWorldFrame(cache, *(analytical_kinematics.robot()->FindBody("link_4")));
-                CompareIsometry3d(link4_pose, link4_pose_ik);
+                const Isometry3d link6_pose_ik = analytical_kinematics.robot()->CalcBodyPoseInWorldFrame(cache, *(analytical_kinematics.robot()->FindBody("link_6")));
+                EXPECT_TRUE(CompareMatrices(link6_pose.translation(), link6_pose_ik.translation(), 1E-5, MatrixCompareType::absolute));
+                if (!CompareMatrices(link6_pose.translation(), link6_pose_ik.translation(), 1E-5, MatrixCompareType::absolute)) {
+                  std::cout << "q\n" << q << std::endl;
+                  std::cout << "q_ik\n" << q_ik << std::endl;
+                  analytical_kinematics.inverse_kinematics(link6_pose);
+                }
               }
             }
           }

@@ -153,27 +153,35 @@ Matrix<Expression, 4, 4> IRB140AnalyticalKinematics::X_56_sym() const {
 
 std::vector<double> IRB140AnalyticalKinematics::q1(const Eigen::Isometry3d& link6_pose) {
   double theta = std::atan2(-link6_pose.translation()(1), link6_pose.translation()(0));
-  if (theta >= robot_->joint_limit_min(0) && theta <= robot_->joint_limit_max(0)) {
-    return std::vector<double>(1, theta);
+  std::vector<double> q1_all;
+  for (int i = -2; i <= 2; ++i) {
+    if (theta + M_PI * i >= robot_->joint_limit_min(0) && theta + M_PI * i <= robot_->joint_limit_max(0)) {
+      q1_all.push_back(theta + M_PI * i);
+    }
   }
-  return std::vector<double>();
+  return q1_all;
 }
 
-std::pair<double, double> compute_q2_q3(double q2_plus_q3, double a0, double b0, double l2, double l3, double l4) {
+std::vector<std::pair<double, double>> compute_q2_q3(double q2_plus_q3, double a0, double b0, double l2, double l3, double l4, double q2_lb, double q2_ub, double q3_lb, double q3_ub) {
   double sin_q3 = (b0 * std::cos(q2_plus_q3) - a0 * std::sin(q2_plus_q3) - l3 - l4) / -l2;
   double cos_q3 = (a0 * std::cos(q2_plus_q3) + b0 * std::sin(q2_plus_q3)) / l2;
+  std::vector<std::pair<double, double>> q2q3_all;
   double q3 = std::atan2(sin_q3, cos_q3);
-  if (std::abs(std::sin(q3) - sin_q3) > 1E-10 || std::abs(std::cos(q3) - cos_q3) > 1E-10) {
-    return std::pair<double, double>();
-  }
   double q2 = q2_plus_q3 - q3;
-  return std::make_pair(q2, q3);
+  for (int i = -1; i <= 1; ++i) {
+    double q2_shift = q2 + 2 * M_PI * i;
+    double q3_shift = q3 - 2 * M_PI * i;
+    if (q2_shift >= q2_lb && q2_shift <= q2_ub && q3_shift >= q3_lb && q3_shift <= q3_ub) {
+      q2q3_all.push_back(std::make_pair(q2_shift, q3_shift));
+    }
+  }
+  return q2q3_all;
 };
 
 std::vector<std::pair<double, double>> IRB140AnalyticalKinematics::q23(const Eigen::Isometry3d& link6_pose, double q1) {
   std::vector<std::pair<double, double>> q23_all;
   double a0 = link6_pose.translation()(2) - l0_ - l1_y_;
-  double b0 = link6_pose.translation()(2) / std::cos(q1) - l1_x_;
+  double b0 = link6_pose.translation()(0) / std::cos(q1) - l1_x_;
   // The angle q2 + q3 can be computed from
   // b0 * cos(q2 + q3) -a0 * sin(q2 + q3) = c0
   // where c0 = (a0^2 + b0^2 + (l3 + l4)^2 - l2^2) / (2 * l3 + 2 * l4)
@@ -190,10 +198,24 @@ std::vector<std::pair<double, double>> IRB140AnalyticalKinematics::q23(const Eig
     q23_plus_phi0.push_back(-2 * M_PI + q23_plus_phi0[0]);
     for (double q23_plus_phi0_val : q23_plus_phi0) {
       double q2_plus_q3 = q23_plus_phi0_val - phi0;
-      const std::pair<double, double> q23 = compute_q2_q3(q2_plus_q3, a0, b0, l2_, l3_, l4_);
-      if (q23.first >= robot_->joint_limit_min(1) && q23.first <= robot_->joint_limit_max(1) &&
-          q23.second >= robot_->joint_limit_min(2) && q23.second <= robot_->joint_limit_max(2)) {
-        q23_all.push_back(q23);
+      double q2_lb = robot_->joint_limit_min(1);
+      double q2_ub = robot_->joint_limit_max(1);
+      double q3_lb = robot_->joint_limit_min(2);
+      double q3_ub = robot_->joint_limit_max(2);
+      if (q2_plus_q3 >= q2_lb + q3_lb && q2_plus_q3 <= q2_ub + q3_ub) {
+        const auto &q23_candidate = compute_q2_q3(q2_plus_q3,
+                                                  a0,
+                                                  b0,
+                                                  l2_,
+                                                  l3_,
+                                                  l4_,
+                                                  q2_lb,
+                                                  q2_ub,
+                                                  q3_lb,
+                                                  q3_ub);
+        for (const auto &q23 : q23_candidate) {
+          q23_all.push_back(q23);
+        }
       }
     }
   }
