@@ -44,14 +44,7 @@ void printPose(const Eigen::Matrix<symbolic::Expression, 4, 4>& pose) {
   }
 }
 
-TEST_F(IRB140Test, link_forward_kinematics) {
-  const auto& joint_lb = analytical_kinematics.robot()->joint_limit_min;
-  const auto& joint_ub = analytical_kinematics.robot()->joint_limit_max;
-  Eigen::Matrix<double, 6, 1> q = joint_lb;
-  for (int i = 0; i < 6; ++i) {
-    q(i) += (joint_ub(i) - joint_lb(i)) * (i + 1) / 10.0;
-  }
-
+void TestForwardKinematics(const IRB140AnalyticalKinematics& analytical_kinematics, const Eigen::Matrix<double, 6, 1>& q) {
   auto cache = analytical_kinematics.robot()->CreateKinematicsCache();
   cache.initialize(q);
   analytical_kinematics.robot()->doKinematics(cache);
@@ -93,6 +86,11 @@ TEST_F(IRB140Test, link_forward_kinematics) {
   const auto X_56 = analytical_kinematics.X_56(q(5));
   CompareIsometry3d(X_PC[5], X_56, 1E-5);
 
+  const auto X_06 = analytical_kinematics.X_06(q);
+  CompareIsometry3d(X_06, X_WB[6], 1E-5);
+}
+
+TEST_F(IRB140Test, link_forward_kinematics) {
   const auto X_01_sym = analytical_kinematics.X_01();
   const auto X_12_sym = analytical_kinematics.X_12();
   const auto X_23_sym = analytical_kinematics.X_23();
@@ -105,6 +103,34 @@ TEST_F(IRB140Test, link_forward_kinematics) {
   const auto X_06_sym  = X_01_sym * X_16_sym;
   std::cout <<"X_06\n";
   printPose(X_06_sym);
+
+  const int num_joint_sample = 3;
+  Eigen::Matrix<double, 6, num_joint_sample> q_sample;
+  for (int i = 0; i < 6; ++i) {
+    q_sample.row(i) = Eigen::Matrix<double, 1, num_joint_sample>::LinSpaced(analytical_kinematics.robot()->joint_limit_min(i) + 1E-4, analytical_kinematics.robot()->joint_limit_max(i) - 1E-4);
+  }
+  auto cache = analytical_kinematics.robot()->CreateKinematicsCache();
+
+  for (int i0 = 0; i0 < num_joint_sample; ++i0) {
+    for (int i1 = 0; i1 < num_joint_sample; ++i1) {
+      for (int i2 = 0; i2 < num_joint_sample; ++i2) {
+        for (int i3 = 0; i3 < num_joint_sample; ++i3) {
+          for (int i4 = 0; i4 < num_joint_sample; ++i4) {
+            for (int i5 = 0; i5 < num_joint_sample; ++i5) {
+              Eigen::Matrix<double, 6, 1> q;
+              q(0) = q_sample(0, i0);
+              q(1) = q_sample(1, i1);
+              q(2) = q_sample(2, i2);
+              q(3) = q_sample(3, i3);
+              q(4) = q_sample(4, i4);
+              q(5) = q_sample(5, i5);
+              TestForwardKinematics(analytical_kinematics, q);
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 TEST_F(IRB140Test, inverse_kinematics_test) {
@@ -112,9 +138,12 @@ TEST_F(IRB140Test, inverse_kinematics_test) {
   const int num_joint_sample = 10;
   Eigen::Matrix<double, 6, num_joint_sample> q_sample;
   for (int i = 0; i < 6; ++i) {
-    q_sample.row(i) = Eigen::Matrix<double, 1, num_joint_sample>::LinSpaced(analytical_kinematics.robot()->joint_limit_min(i) + 1E-6, analytical_kinematics.robot()->joint_limit_max(i) - 1E-6);
+    q_sample.row(i) = Eigen::Matrix<double, 1, num_joint_sample>::LinSpaced(analytical_kinematics.robot()->joint_limit_min(i) + 1E-4, analytical_kinematics.robot()->joint_limit_max(i) - 1E-4);
   }
   auto cache = analytical_kinematics.robot()->CreateKinematicsCache();
+  const Eigen::Matrix<double, 6, 1> q_lb = analytical_kinematics.robot()->joint_limit_min;
+  const Eigen::Matrix<double, 6, 1> q_ub = analytical_kinematics.robot()->joint_limit_max;
+
   for (int i0 = 0; i0 < num_joint_sample; ++i0) {
     for (int i1 = 0; i1 < num_joint_sample; ++i1) {
       for (int i2 = 0; i2 < num_joint_sample; ++i2) {
@@ -137,11 +166,20 @@ TEST_F(IRB140Test, inverse_kinematics_test) {
               EXPECT_GE(q_all.size(), 1);
               if (q_all.size() == 0) {
                 std::cout << "q\n" << q << std::endl;
+                const auto& X_06 = analytical_kinematics.X_06(q);
+                CompareIsometry3d(X_06, link6_pose, 1e-5);
                 analytical_kinematics.inverse_kinematics(link6_pose);
               }
+
               for (const auto& q_ik : q_all) {
-                EXPECT_TRUE((q_ik.array() >= analytical_kinematics.robot()->joint_limit_min.array()).all());
-                EXPECT_TRUE((q_ik.array() <= analytical_kinematics.robot()->joint_limit_max.array()).all());
+                EXPECT_TRUE((q_ik.head<3>().array() >= q_lb.head<3>().array()).all());
+                EXPECT_TRUE((q_ik.head<3>().array() <= q_ub.head<3>().array()).all());
+                if (!(q_ik.head<3>().array() >= q_lb.head<3>().array()).all()) {
+                  std::cout << q_ik.head<3>() - q_lb.head<3>() << std::endl;
+                }
+                if (!(q_ik.head<3>().array() <= q_ub.head<3>().array()).all()) {
+                  std::cout << q_ub.head<3>() - q_ik.head<3>() << std::endl;
+                }
                 cache.initialize(q_ik);
                 analytical_kinematics.robot()->doKinematics(cache);
                 const Isometry3d link6_pose_ik = analytical_kinematics.robot()->CalcBodyPoseInWorldFrame(cache, *(analytical_kinematics.robot()->FindBody("link_6")));

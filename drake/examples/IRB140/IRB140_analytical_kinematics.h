@@ -25,11 +25,13 @@ class IRB140AnalyticalKinematics {
 
   RigidBodyTreed* robot() const {return robot_.get();}
 
-  std::vector<Eigen::Matrix<double, 6, 1>> inverse_kinematics(const Eigen::Isometry3d& link6_pose);
+  std::vector<Eigen::Matrix<double, 6, 1>> inverse_kinematics(const Eigen::Isometry3d& link6_pose) const;
 
-  std::vector<double> q1(const Eigen::Isometry3d& link6_pose);
-
-  std::vector<std::pair<double, double>> q23(const Eigen::Isometry3d& link6_pose, double q1);
+  std::vector<double> q1(const Eigen::Isometry3d& link6_pose) const;
+  std::vector<double> q2(const Eigen::Isometry3d& link6_pose, double q1) const;
+  std::vector<double> q3(const Eigen::Isometry3d& link6_pose, double q1, double q2) const;
+  std::vector<double> q5(const Eigen::Isometry3d& link6_pose, double q1, double q2, double q3) const;
+  //std::vector<std::pair<double, double>> q23(const Eigen::Isometry3d& link6_pose, double q1);
 
   Eigen::Matrix<symbolic::Expression, 4, 4> X_01() const;
   Eigen::Matrix<symbolic::Expression, 4, 4> X_12() const;
@@ -46,6 +48,7 @@ class IRB140AnalyticalKinematics {
   Eigen::Isometry3d X_34(double theta) const;
   Eigen::Isometry3d X_45(double theta) const;
   Eigen::Isometry3d X_56(double theta) const;
+  Eigen::Isometry3d X_06(const Eigen::Matrix<double, 6, 1>& q) const;
 
  private:
   std::unique_ptr<RigidBodyTreed> robot_;
