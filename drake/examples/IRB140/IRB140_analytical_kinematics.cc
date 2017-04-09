@@ -201,17 +201,75 @@ Eigen::Isometry3d IRB140AnalyticalKinematics::X_56(double theta) const {
   return EvalIsometry3dFromExpression(X_sym, env);
 }
 
-std::vector<double> IRB140AnalyticalKinematics::q1(const Eigen::Isometry3d& link6_pose) {
+Eigen::Isometry3d IRB140AnalyticalKinematics::X_06(const Eigen::Matrix<double, 6, 1>& q) const {
+  return X_01(q(0)) * X_12(q(1)) * X_23(q(2)) * X_34(q(3)) * X_45(q(4)) * X_56(q(5));
+}
+
+std::vector<double> IRB140AnalyticalKinematics::q1(const Eigen::Isometry3d& link6_pose) const {
   double theta = std::atan2(link6_pose.translation()(1), link6_pose.translation()(0));
   std::vector<double> q1_all;
   for (int i = -2; i <= 2; ++i) {
-    if (theta + M_PI * i >= robot_->joint_limit_min(0) && theta + M_PI * i <= robot_->joint_limit_max(0)) {
-      q1_all.push_back(theta + M_PI * i);
+    double q1_val = theta + M_PI * i;
+    if ( q1_val >= robot_->joint_limit_min(0) && q1_val <= robot_->joint_limit_max(0)) {
+      q1_all.push_back(q1_val);
     }
   }
   return q1_all;
 }
 
+std::vector<double> IRB140AnalyticalKinematics::q2(const Eigen::Isometry3d& link6_pose, double q1) const {
+  std::vector<double> q2_all;
+  double a0 = link6_pose.translation()(2) - l0_ - l1_y_;
+  double b0;
+  if (std::abs(std::cos(q1)) > 0.1) {
+    b0 = link6_pose.translation()(0) / std::cos(q1) - l1_x_;
+  } else {
+    b0 = link6_pose.translation()(1) / std::sin(q1) - l1_x_;
+  }
+  // a0 * cos(q2) + b0 * sin(q2) = c0;
+  double c0 = (a0 * a0 + b0 * b0 + l2_ * l2_ - std::pow(l3_ + l4_, 2.0)) / (2 * l2_);
+  double sin_q2_plus_phi = c0 / std::sqrt(a0 * a0 + b0 * b0);
+  if (std::abs(sin_q2_plus_phi) > 1) {
+    return q2_all;
+  }
+  double phi = std::atan2(a0, b0);
+  double q2_plus_phi = std::asin(sin_q2_plus_phi);
+  for (int i = -1; i <= 1; ++i) {
+    double q2_val = q2_plus_phi - phi + 2 * M_PI * i;
+    if (q2_val >= robot_->joint_limit_min(1) && q2_val <= robot_->joint_limit_max(1)) {
+      q2_all.push_back(q2_val);
+    }
+    q2_val = M_PI - q2_plus_phi - phi + 2 * M_PI * i;
+    if (q2_val >= robot_->joint_limit_min(1) && q2_val <= robot_->joint_limit_max(1)) {
+      q2_all.push_back(q2_val);
+    }
+  }
+  return q2_all;
+}
+
+std::vector<double> IRB140AnalyticalKinematics::q3(const Eigen::Isometry3d& link6_pose,
+                                                   double q1,
+                                                   double q2) const {
+  std::vector<double> q3_all;
+  double a0 = link6_pose.translation()(2) - l0_ - l1_y_;
+  double b0;
+  if (std::abs(std::cos(q1)) > 0.1) {
+    b0 = link6_pose.translation()(0) / std::cos(q1) - l1_x_;
+  } else {
+    b0 = link6_pose.translation()(1) / std::sin(q1) - l1_x_;
+  }
+  double cos_q23 = (b0 - l2_ * std::sin(q2)) / (l3_ + l4_);
+  double sin_q23 = (a0 - l2_ * std::cos(q2)) / -(l3_ + l4_);
+  double q2_plus_q3 = atan2(sin_q23, cos_q23);
+  for (int i = -1; i <= 1; ++i) {
+    double q3_val = q2_plus_q3 - q2 + 2 * M_PI * i;
+    if (q3_val >= robot_->joint_limit_min(2) && q3_val <= robot_->joint_limit_max(2)) {
+      q3_all.push_back(q3_val);
+    }
+  }
+  return q3_all;
+}
+/*
 std::vector<std::pair<double, double>> compute_q2_q3(double q2_plus_q3, double a0, double b0, double l2, double l3, double l4, double q2_lb, double q2_ub, double q3_lb, double q3_ub) {
   double sin_q3 = (b0 * std::cos(q2_plus_q3) - a0 * std::sin(q2_plus_q3) - l3 - l4) / -l2;
   double cos_q3 = (a0 * std::cos(q2_plus_q3) + b0 * std::sin(q2_plus_q3)) / l2;
@@ -270,9 +328,9 @@ std::vector<std::pair<double, double>> IRB140AnalyticalKinematics::q23(const Eig
     }
   }
   return q23_all;
-};
+};*/
 
-std::vector<Eigen::Matrix<double, 6, 1>> IRB140AnalyticalKinematics::inverse_kinematics(const Eigen::Isometry3d& link6_pose) {
+std::vector<Eigen::Matrix<double, 6, 1>> IRB140AnalyticalKinematics::inverse_kinematics(const Eigen::Isometry3d& link6_pose) const {
   std::queue<Eigen::Matrix<double, 6, 1>> q_all;
   const auto& q1_all = q1(link6_pose);
   for (const auto& q1_val : q1_all) {
@@ -281,6 +339,28 @@ std::vector<Eigen::Matrix<double, 6, 1>> IRB140AnalyticalKinematics::inverse_kin
     q_all.push(q);
   }
 
+  int q_all_size = q_all.size();
+  for (int i = 0; i < q_all_size; ++i) {
+    auto q = q_all.front();
+    q_all.pop();
+    const auto& q2_all = q2(link6_pose, q(0));
+    for (const double q2_val : q2_all) {
+      q(1) = q2_val;
+      q_all.push(q);
+    }
+  }
+
+  q_all_size = q_all.size();
+  for (int i = 0; i < q_all_size; ++i) {
+    auto q = q_all.front();
+    q_all.pop();
+    const auto& q3_all = q3(link6_pose, q(0), q(1));
+    for (const double q3_val : q3_all) {
+      q(2) = q3_val;
+      q_all.push(q);
+    }
+  }
+/*
   int q_all_size = q_all.size();
   for (int i = 0; i < q_all_size; ++i) {
     Eigen::Matrix<double, 6, 1> q = q_all.front();
@@ -292,7 +372,7 @@ std::vector<Eigen::Matrix<double, 6, 1>> IRB140AnalyticalKinematics::inverse_kin
       q_all.push(q);
     }
   }
-
+*/
   std::vector<Eigen::Matrix<double, 6, 1>> q_all_vec;
   q_all_vec.reserve(q_all.size());
   while (!q_all.empty()) {
