@@ -83,15 +83,32 @@ If we define
 	a_0 = \leftidx{^0}p^6_z - l_0 - l_{1y}\\
 	b_0 = \frac{\leftidx{^0}p^6_x}{c_1}-l_{1x}
 \end{align}
+We then get
+\begin{align}
+	a_0 = l_2c_2 - (l_3 + l_4)s_{23}\\
+	b_0 = l_2s_2+(l_3 + l_4)c_{23}
+\end{align}
 
-We then get 
+whichi leads to
 \begin{align}
-	b_0c_{23}-a_0s_{23} = \frac{a_0^2 + b_0^2 + (l_3 + l_4)^2 - l_2^2}{2(l_3 + l_4)}
+	a_0c_2+b_0s_2=l_2-(l_3+l_4)s_3\\
+	b_0c_2-a_0s_2 = (l_3+l_4)c_3
 \end{align}
-We can thus compute $\theta_2 + \theta_3$. Then from
+and
 \begin{align}
-	s_3 = \frac{b_0c_{23}-a_0s_{23}-l_3 - l_4}{-l_2}\\
-	c_3 = \frac{a_0c_{23} + b_0s_{23}}{l_2}
+	a_0c_2+b_0s_2 = \frac{a_0^2 + b_0^2 - l_2^2 - (l_3 + l_4)^2}{2l_2}
 \end{align}
-we can then compute $\theta_3$, and thus $\theta_2$.
+We can compute $\theta_2$ from this equation, and $\theta_3$ from equations above, once $\theta_2$ is known.
+
+The orientation of link 6 satisfies
+\begin{align}
+	\leftidx{^0}R^6(1,1) = &c_1(c_{23}c_5 + s_{23}c_5s_5) + s_1s_4s_5\\
+	\leftidx{^0}R^6(2,1) = &-c_1s_4s_5 + s_1(c_{23}c_5 + s_{23}c_4s_5)\\
+	\leftidx{^0}R^6(3,1) = &c_{23}c_4s_5 - s_{23}c_5
+\end{align}
+
+We get
+\begin{align}
+	c_5 = c_1c_{23}\leftidx{^0}R^6(1,1) + s_1c_{23}\leftidx{^0}R^6(2,1)-s_{23}\leftidx{^0}R^6(3,1)
+\end{align}
 \end{document}
