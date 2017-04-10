@@ -269,6 +269,172 @@ std::vector<double> IRB140AnalyticalKinematics::q3(const Eigen::Isometry3d& link
   }
   return q3_all;
 }
+std::vector<Eigen::Vector3d> IRB140AnalyticalKinematics::q456(const Eigen::Isometry3d& link6_pose, double q1, double q2, double q3) const {
+  std::vector<Eigen::Vector3d> q456_all;
+  double R11 = link6_pose.linear()(0, 0);
+  double R21 = link6_pose.linear()(1, 0);
+  double R31 = link6_pose.linear()(2, 0);
+  double R12 = link6_pose.linear()(0, 1);
+  double R22 = link6_pose.linear()(1, 1);
+  double R32 = link6_pose.linear()(2, 1);
+  double R13 = link6_pose.linear()(0, 2);
+  double R23 = link6_pose.linear()(1, 2);
+  double R33 = link6_pose.linear()(2, 2);
+  double c1 = std::cos(q1);
+  double c23 = std::cos(q2 + q3);
+  double s1 = std::sin(q1);
+  double s23 = std::sin(q2 + q3);
+  double c5 = c1 * c23 * R11 + s1 * c23 * R21 - s23 * R31;
+  if (std::abs(c5) > 1) {
+    return q456_all;
+  }
+  double c4_times_s5;
+  double s4_times_s5 = s1 * R11 - c1 * R21;
+  if (std::abs(c23) > 1E-3) {
+    c4_times_s5 = (R31 + s23 * c5) / c23;
+  } else {
+    c4_times_s5 = (c1 * R11 + s1 * R21 - c23 * c5) / s23;
+  }
+  if (std::abs(std::abs(c5) - 1) > 1E-3) {
+    // s5 is not 0
+    std::array<double, 2> s5 = {{std::sqrt(1 - c5 * c5), -std::sqrt(1 - c5 * c5)}};
+    for (int i = 0; i < 2; ++i) {
+      double c4 = c4_times_s5 / s5[i];
+      double s4 = s4_times_s5 / s5[i];
+      if (std::abs(c4) > 1 || std::abs(s4) > 1) {
+        continue;
+      }
+      double theta4 = std::atan2(s4, c4);
+      double theta5 = std::atan2(s5[i], c5);
+      // Now solve theta6
+      double s6, c6;
+      // A6 * [s6;c6] = b6;
+      Eigen::Matrix2d A6;
+      Eigen::Vector2d b6;
+      if (std::abs(c23) > 1E-3) {
+        // Use R32 and R33 to compute theta6
+        A6 << c23 * s4, -c23 * c4 * c5 - s23 * s5[i],
+             c23 * c4 * c5 + s23 * s5[i], c23 * s4;
+        b6 << R32, R33;
+      } else {
+        // Use R12 and R13 to compute theta6
+        A6 << c1 * s23 * s4 - s1 * c4, c1 * (c23 * s5[i] - s23 * c4 * c5) - s1 * s4 * c5,
+             -c1 * (c23 * s5[i] - s23 * c4 * c5) + s1 * s4 * c5, c1 * s23 * s4 - s1 * c4;
+        b6 << R12, R13;
+        if (std::abs(A6.determinant()) < 1E-3) {
+          // Use R22 and R23 to compute theta6
+          A6 << c1 * c4 + s1 * s23 * s4, c1 * s4 * c5 + s1 * (c23 * s5[i] - s23 * c4 * c5),
+                -c1 * s4 * c5 - s1 * (c23 * s5[i] - s23 * c4 * c5), c1 * c4 + s1 * s23 * s4;
+          b6 << R22, R23;
+        }
+      }
+      Eigen::Vector2d sin_cos_q6 = A6.colPivHouseholderQr().solve(b6);
+      s6 = sin_cos_q6(0);
+      c6 = sin_cos_q6(1);
+      if (std::abs(s6) > 1 || std::abs(c6) > 1) {
+        continue;
+      }
+      double theta6 = std::atan2(s6, c6);
+      for (int i4 = -1; i4 <= 1; ++i4) {
+        double q4_val = theta4 + 2 * M_PI * i4;
+        if (q4_val < robot_->joint_limit_min(3) || q4_val > robot_->joint_limit_max(3)) {
+          continue;
+        }
+        for (int i5 = -1; i5 <= 1; ++i5) {
+          double q5_val = theta5 + 2 * M_PI * i5;
+          if (q5_val < robot_->joint_limit_min(4) || q5_val > robot_->joint_limit_max(4)) {
+            continue;
+          }
+          for (int i6 = -1; i6 <= 1; ++i6) {
+            double q6_val = theta6 + 2 * M_PI * i6;
+            if (q6_val < robot_->joint_limit_min(5) || q6_val > robot_->joint_limit_max(5)) {
+              continue;
+            }
+            q456_all.push_back(Eigen::Vector3d(q4_val, q5_val, q6_val));
+          }
+        }
+      }
+    }
+
+  }
+  return q456_all;
+}
+
+std::vector<double> IRB140AnalyticalKinematics::q5(const Eigen::Isometry3d &link6_pose,
+                                                   double q1,
+                                                   double q2,
+                                                   double q3) const {
+  double R11 = link6_pose.linear()(0, 0);
+  double R21 = link6_pose.linear()(1, 0);
+  double R31 = link6_pose.linear()(2, 0);
+  double c1 = std::cos(q1);
+  double c23 = std::cos(q2 + q3);
+  double s1 = std::sin(q1);
+  double s23 = std::sin(q2 + q3);
+  double cos_q5 = c1 * c23 * R11 + s1 * c23 * R21 - s23 * R31;
+  std::vector<double> q5_all;
+  if (std::abs(cos_q5) <= 1) {
+    double theta = std::acos(cos_q5);
+    for (int i = -1; i <= 1; ++i) {
+      double q5_val = theta + 2 * M_PI * i;
+      if (q5_val >= robot_->joint_limit_min(4)
+          && q5_val <= robot_->joint_limit_max(4)) {
+        q5_all.push_back(q5_val);
+      }
+      q5_val = -theta + 2 * M_PI * i;
+      if (q5_val >= robot_->joint_limit_min(4)
+          && q5_val <= robot_->joint_limit_max(4)) {
+        q5_all.push_back(q5_val);
+      }
+    }
+  }
+  return q5_all;
+}
+
+std::vector<double> IRB140AnalyticalKinematics::q4(const Eigen::Isometry3d &link6_pose,
+                                                   double q1,
+                                                   double q2,
+                                                   double q3,
+                                                   double q5) const {
+  std::vector<double> q4_all;
+  double R11 = link6_pose.linear()(0, 0);
+  double R21 = link6_pose.linear()(1, 0);
+  double R31 = link6_pose.linear()(2, 0);
+  double c5 = std::cos(q5);
+  double s5 = std::sin(q5);
+  double c23 = std::cos(q2 + q3);
+  double s23 = std::sin(q2 + q3);
+  double c1 = std::cos(q1);
+  double s1 = std::sin(q1);
+  double cos_q4{0};
+  double sin_q4{0};
+  if (std::abs(s5) > 1E-3) {
+    if (std::abs(c23) > 1E-3) {
+      cos_q4 = (R31 + s23 * c5) / (c23 * s5);
+      if (std::abs(s1) > 1E-3) {
+        sin_q4 = (R11 - c1 * c23 * c5 - c1 * s23 * cos_q4 * s5) / (s1 * s5);
+      } else {
+        sin_q4 = (R21 - s1 * c23 * c5 - s1 * s23 * cos_q4 * s5) / (-c1 * c5);
+      }
+    } else {
+      Eigen::Matrix2d A;
+      A << c1 * s23 * s5, s1 * s5,
+          s1 * s23 * s5, -c1 * s5;
+      Eigen::Vector2d b(R11 - c1 * c23 * c5, R21 - s1 * c23 * c5);
+      Eigen::Vector2d cos_sin_q4 = A.colPivHouseholderQr().solve(b);
+      cos_q4 = cos_sin_q4(0);
+      sin_q4 = cos_sin_q4(1);
+    }
+  }
+  double theta4 = std::atan2(sin_q4, cos_q4);
+  for (int i = -1; i <= 1; ++i) {
+    double q4_val = theta4 + 2 * M_PI * i;
+    if (q4_val >= robot_->joint_limit_min(3) && q4_val <= robot_->joint_limit_max(3)) {
+      q4_all.push_back(q4_val);
+    }
+  }
+  return q4_all;
+}
 /*
 std::vector<std::pair<double, double>> compute_q2_q3(double q2_plus_q3, double a0, double b0, double l2, double l3, double l4, double q2_lb, double q2_ub, double q3_lb, double q3_ub) {
   double sin_q3 = (b0 * std::cos(q2_plus_q3) - a0 * std::sin(q2_plus_q3) - l3 - l4) / -l2;
@@ -357,6 +523,19 @@ std::vector<Eigen::Matrix<double, 6, 1>> IRB140AnalyticalKinematics::inverse_kin
     const auto& q3_all = q3(link6_pose, q(0), q(1));
     for (const double q3_val : q3_all) {
       q(2) = q3_val;
+      q_all.push(q);
+    }
+  }
+
+  q_all_size = q_all.size();
+  for (int i = 0; i < q_all_size; ++i) {
+    auto q = q_all.front();
+    q_all.pop();
+    const auto& q456_all = q456(link6_pose, q(0), q(1), q(2));
+    for (const auto& q456_val : q456_all) {
+      q(3) = q456_val(0);
+      q(4) = q456_val(1);
+      q(5) = q456_val(2);
       q_all.push(q);
     }
   }
