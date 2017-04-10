@@ -172,23 +172,24 @@ TEST_F(IRB140Test, inverse_kinematics_test) {
               }
 
               for (const auto& q_ik : q_all) {
-                EXPECT_TRUE((q_ik.head<3>().array() >= q_lb.head<3>().array()).all());
-                EXPECT_TRUE((q_ik.head<3>().array() <= q_ub.head<3>().array()).all());
-                if (!(q_ik.head<3>().array() >= q_lb.head<3>().array()).all()) {
-                  std::cout << q_ik.head<3>() - q_lb.head<3>() << std::endl;
+                EXPECT_TRUE((q_ik.array() >= q_lb.array()).all());
+                EXPECT_TRUE((q_ik.array() <= q_ub.array()).all());
+                if (!(q_ik.array() >= q_lb.array()).all()) {
+                  std::cout << q_ik - q_lb << std::endl;
                 }
-                if (!(q_ik.head<3>().array() <= q_ub.head<3>().array()).all()) {
-                  std::cout << q_ub.head<3>() - q_ik.head<3>() << std::endl;
+                if (!(q_ik.array() <= q_ub.array()).all()) {
+                  std::cout << q_ub - q_ik << std::endl;
                 }
                 cache.initialize(q_ik);
                 analytical_kinematics.robot()->doKinematics(cache);
                 const Isometry3d link6_pose_ik = analytical_kinematics.robot()->CalcBodyPoseInWorldFrame(cache, *(analytical_kinematics.robot()->FindBody("link_6")));
-                EXPECT_TRUE(CompareMatrices(link6_pose.translation(), link6_pose_ik.translation(), 1E-5, MatrixCompareType::absolute));
-                if (!CompareMatrices(link6_pose.translation(), link6_pose_ik.translation(), 1E-5, MatrixCompareType::absolute)) {
+                CompareIsometry3d(link6_pose_ik, link6_pose, 1E-5);
+                if (!CompareIsometry3d(link6_pose_ik, link6_pose, 1E-5)) {
                   std::cout << "q\n" << q << std::endl;
                   std::cout << "q_ik\n" << q_ik << std::endl;
                   analytical_kinematics.inverse_kinematics(link6_pose);
                 }
+
               }
             }
           }
