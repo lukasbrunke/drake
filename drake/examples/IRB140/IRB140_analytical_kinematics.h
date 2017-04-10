@@ -30,10 +30,7 @@ class IRB140AnalyticalKinematics {
   std::vector<double> q1(const Eigen::Isometry3d& link6_pose) const;
   std::vector<double> q2(const Eigen::Isometry3d& link6_pose, double q1) const;
   std::vector<double> q3(const Eigen::Isometry3d& link6_pose, double q1, double q2) const;
-  std::vector<double> q4(const Eigen::Isometry3d& link6_pose, double q1, double q2, double q3, double q5) const;
-  std::vector<double> q5(const Eigen::Isometry3d& link6_pose, double q1, double q2, double q3) const;
   std::vector<Eigen::Vector3d> q456(const Eigen::Isometry3d& link6_pose, double q1, double q2, double q3) const;
-    //std::vector<std::pair<double, double>> q23(const Eigen::Isometry3d& link6_pose, double q1);
 
   Eigen::Matrix<symbolic::Expression, 4, 4> X_01() const;
   Eigen::Matrix<symbolic::Expression, 4, 4> X_12() const;
