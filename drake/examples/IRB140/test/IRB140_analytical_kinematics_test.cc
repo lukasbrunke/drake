@@ -133,16 +133,61 @@ TEST_F(IRB140Test, link_forward_kinematics) {
   }
 }
 
+void TestInverseKinematics(const IRB140AnalyticalKinematics& analytical_kinematics, const Eigen::Matrix<double, 6, 1>& q) {
+  const Eigen::Matrix<double, 6, 1>
+      q_lb = analytical_kinematics.robot()->joint_limit_min;
+  const Eigen::Matrix<double, 6, 1>
+      q_ub = analytical_kinematics.robot()->joint_limit_max;
+  auto cache = analytical_kinematics.robot()->CreateKinematicsCache();
+  cache.initialize(q);
+  analytical_kinematics.robot()->doKinematics(cache);
+  const Isometry3d link6_pose =
+      analytical_kinematics.robot()->CalcBodyPoseInWorldFrame(cache,
+                                                              *(analytical_kinematics.robot()->FindBody(
+                                                                  "link_6")));
+
+  const auto &q_all = analytical_kinematics.inverse_kinematics(link6_pose);
+  EXPECT_GE(q_all.size(), 1);
+  if (q_all.size() == 0) {
+    std::cout << "q\n" << q << std::endl;
+    const auto &X_06 = analytical_kinematics.X_06(q);
+    CompareIsometry3d(X_06, link6_pose, 1e-5);
+    analytical_kinematics.inverse_kinematics(link6_pose);
+  }
+
+  for (const auto &q_ik : q_all) {
+    EXPECT_TRUE((q_ik.array() >= q_lb.array()).all());
+    EXPECT_TRUE((q_ik.array() <= q_ub.array()).all());
+    if (!(q_ik.array() >= q_lb.array()).all()) {
+      std::cout << q_ik - q_lb << std::endl;
+    }
+    if (!(q_ik.array() <= q_ub.array()).all()) {
+      std::cout << q_ub - q_ik << std::endl;
+    }
+    cache.initialize(q_ik);
+    analytical_kinematics.robot()->doKinematics(cache);
+    const Isometry3d link6_pose_ik =
+        analytical_kinematics.robot()->CalcBodyPoseInWorldFrame(cache,
+                                                                *(analytical_kinematics.robot()->FindBody(
+                                                                    "link_6")));
+    CompareIsometry3d(link6_pose_ik, link6_pose, 1E-5);
+    if (!CompareIsometry3d(link6_pose_ik, link6_pose, 1E-5)) {
+      std::cout << "q\n" << q << std::endl;
+      std::cout << "q_ik\n" << q_ik << std::endl;
+      analytical_kinematics.inverse_kinematics(link6_pose);
+    }
+  }
+}
+/*
 TEST_F(IRB140Test, inverse_kinematics_test) {
   std::vector<Eigen::Matrix<double, 6, 1>> q_all;
   const int num_joint_sample = 10;
   Eigen::Matrix<double, 6, num_joint_sample> q_sample;
   for (int i = 0; i < 6; ++i) {
-    q_sample.row(i) = Eigen::Matrix<double, 1, num_joint_sample>::LinSpaced(analytical_kinematics.robot()->joint_limit_min(i) + 1E-4, analytical_kinematics.robot()->joint_limit_max(i) - 1E-4);
+    q_sample.row(i) = Eigen::Matrix<double, 1, num_joint_sample>::LinSpaced(
+        analytical_kinematics.robot()->joint_limit_min(i) + 1E-4,
+        analytical_kinematics.robot()->joint_limit_max(i) - 1E-4);
   }
-  auto cache = analytical_kinematics.robot()->CreateKinematicsCache();
-  const Eigen::Matrix<double, 6, 1> q_lb = analytical_kinematics.robot()->joint_limit_min;
-  const Eigen::Matrix<double, 6, 1> q_ub = analytical_kinematics.robot()->joint_limit_max;
 
   for (int i0 = 0; i0 < num_joint_sample; ++i0) {
     for (int i1 = 0; i1 < num_joint_sample; ++i1) {
@@ -158,45 +203,21 @@ TEST_F(IRB140Test, inverse_kinematics_test) {
               q(4) = q_sample(4, i4);
               q(5) = q_sample(5, i5);
 
-              cache.initialize(q);
-              analytical_kinematics.robot()->doKinematics(cache);
-              const Isometry3d link6_pose = analytical_kinematics.robot()->CalcBodyPoseInWorldFrame(cache, *(analytical_kinematics.robot()->FindBody("link_6")));
-
-              const auto& q_all = analytical_kinematics.inverse_kinematics(link6_pose);
-              EXPECT_GE(q_all.size(), 1);
-              if (q_all.size() == 0) {
-                std::cout << "q\n" << q << std::endl;
-                const auto& X_06 = analytical_kinematics.X_06(q);
-                CompareIsometry3d(X_06, link6_pose, 1e-5);
-                analytical_kinematics.inverse_kinematics(link6_pose);
-              }
-
-              for (const auto& q_ik : q_all) {
-                EXPECT_TRUE((q_ik.array() >= q_lb.array()).all());
-                EXPECT_TRUE((q_ik.array() <= q_ub.array()).all());
-                if (!(q_ik.array() >= q_lb.array()).all()) {
-                  std::cout << q_ik - q_lb << std::endl;
-                }
-                if (!(q_ik.array() <= q_ub.array()).all()) {
-                  std::cout << q_ub - q_ik << std::endl;
-                }
-                cache.initialize(q_ik);
-                analytical_kinematics.robot()->doKinematics(cache);
-                const Isometry3d link6_pose_ik = analytical_kinematics.robot()->CalcBodyPoseInWorldFrame(cache, *(analytical_kinematics.robot()->FindBody("link_6")));
-                CompareIsometry3d(link6_pose_ik, link6_pose, 1E-5);
-                if (!CompareIsometry3d(link6_pose_ik, link6_pose, 1E-5)) {
-                  std::cout << "q\n" << q << std::endl;
-                  std::cout << "q_ik\n" << q_ik << std::endl;
-                  analytical_kinematics.inverse_kinematics(link6_pose);
-                }
-
-              }
+              TestInverseKinematics(analytical_kinematics, q);
             }
           }
         }
       }
     }
   }
+}*/
+
+
+TEST_F(IRB140Test, inverse_kinematics_corner_test) {
+  // Degenerate case q = 0
+  Eigen::Matrix<double, 6, 1> q;
+  q.setZero();
+  TestInverseKinematics(analytical_kinematics, q);
 }
 }  // namespace
 }  // namespace IRB140
