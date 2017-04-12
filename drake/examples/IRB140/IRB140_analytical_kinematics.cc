@@ -269,6 +269,20 @@ std::vector<double> IRB140AnalyticalKinematics::q3(const Eigen::Isometry3d& link
   }
   return q3_all;
 }
+
+void add_q456_fun(double q4_val, double q6_val, double q5, RigidBodyTreed* robot, std::vector<Eigen::Vector3d>* q456_all) {
+  if (q4_val >= robot->joint_limit_min(3) && q4_val <= robot->joint_limit_max(3)) {
+    if (q6_val >= robot->joint_limit_min(5) && q6_val <= robot->joint_limit_max(5)) {
+      for (int i = -1; i <= 1; ++i) {
+        double q5_val = q5 + 2 * M_PI * i;
+        if (q5_val >= robot->joint_limit_min(4) && q5_val <= robot->joint_limit_max(4)) {
+          q456_all->emplace_back(q4_val, q5_val, q6_val);
+        }
+      }
+    }
+  }
+
+}
 std::vector<Eigen::Vector3d> IRB140AnalyticalKinematics::q456(const Eigen::Isometry3d& link6_pose, double q1, double q2, double q3) const {
   std::vector<Eigen::Vector3d> q456_all;
   double R11 = link6_pose.linear()(0, 0);
@@ -375,6 +389,13 @@ std::vector<Eigen::Vector3d> IRB140AnalyticalKinematics::q456(const Eigen::Isome
       double sin_q4_plus_q6 = sin_cos_q4_plus_q6(0);
       double cos_q4_plus_q6 = sin_cos_q4_plus_q6(1);
       double q4_plus_q6 = std::atan2(sin_q4_plus_q6, cos_q4_plus_q6);
+      for (int i = -1; i <= 1; ++i) {
+        double q4_plus_q6_val = q4_plus_q6 + 2 * M_PI * i;
+        double q4_val = robot_->joint_limit_min(3);
+        add_q456_fun(q4_val, q4_plus_q6_val - q4_val, 0, robot_.get(), &q456_all);
+        q4_val = robot_->joint_limit_max(3);
+        add_q456_fun(q4_val, q4_plus_q6_val - q4_val, 0, robot_.get(), &q456_all);
+      }
     } else {
       // c5 = -1, s5 = 0, we can only compute q4 - q6;
       // A * [sin(q4-q6); cos(q4-q6)] = b
@@ -393,6 +414,14 @@ std::vector<Eigen::Vector3d> IRB140AnalyticalKinematics::q456(const Eigen::Isome
       double sin_q4_minus_q6 = sin_cos_q4_minus_16(0);
       double cos_q4_minus_q6 = sin_cos_q4_minus_16(1);
       double q4_minus_q6 = std::atan2(sin_q4_minus_q6, cos_q4_minus_q6);
+      for (int i = -1; i <= 1; ++i) {
+        double q4_minus_q6_val = q4_minus_q6 + 2 * M_PI * i;
+        double q4_val = robot_->joint_limit_min(3);
+        add_q456_fun(q4_val, -q4_minus_q6_val + q4_val, M_PI, robot_.get(), &q456_all);
+        q4_val = robot_->joint_limit_max(3);
+        add_q456_fun(q4_val, -q4_minus_q6_val + q4_val, M_PI, robot_.get(), &q456_all);
+      }
+
     }
   }
   return q456_all;
