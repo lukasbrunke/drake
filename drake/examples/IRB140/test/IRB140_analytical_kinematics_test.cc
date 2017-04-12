@@ -133,7 +133,7 @@ TEST_F(IRB140Test, link_forward_kinematics) {
   }
 }
 
-void TestInverseKinematics(const IRB140AnalyticalKinematics& analytical_kinematics, const Eigen::Matrix<double, 6, 1>& q) {
+void TestInverseKinematics(const IRB140AnalyticalKinematics& analytical_kinematics, const Eigen::Matrix<double, 6, 1>& q, double tol = 1E-5) {
   const Eigen::Matrix<double, 6, 1>
       q_lb = analytical_kinematics.robot()->joint_limit_min;
   const Eigen::Matrix<double, 6, 1>
@@ -151,7 +151,7 @@ void TestInverseKinematics(const IRB140AnalyticalKinematics& analytical_kinemati
   if (q_all.size() == 0) {
     std::cout << "q\n" << q << std::endl;
     const auto &X_06 = analytical_kinematics.X_06(q);
-    CompareIsometry3d(X_06, link6_pose, 1e-5);
+    CompareIsometry3d(X_06, link6_pose, tol);
     analytical_kinematics.inverse_kinematics(link6_pose);
   }
 
@@ -170,15 +170,15 @@ void TestInverseKinematics(const IRB140AnalyticalKinematics& analytical_kinemati
         analytical_kinematics.robot()->CalcBodyPoseInWorldFrame(cache,
                                                                 *(analytical_kinematics.robot()->FindBody(
                                                                     "link_6")));
-    CompareIsometry3d(link6_pose_ik, link6_pose, 1E-5);
-    if (!CompareIsometry3d(link6_pose_ik, link6_pose, 1E-5)) {
+    CompareIsometry3d(link6_pose_ik, link6_pose, tol);
+    if (!CompareIsometry3d(link6_pose_ik, link6_pose, tol)) {
       std::cout << "q\n" << q << std::endl;
       std::cout << "q_ik\n" << q_ik << std::endl;
       analytical_kinematics.inverse_kinematics(link6_pose);
     }
   }
 }
-/*
+
 TEST_F(IRB140Test, inverse_kinematics_test) {
   std::vector<Eigen::Matrix<double, 6, 1>> q_all;
   const int num_joint_sample = 10;
@@ -210,7 +210,7 @@ TEST_F(IRB140Test, inverse_kinematics_test) {
       }
     }
   }
-}*/
+}
 
 
 TEST_F(IRB140Test, inverse_kinematics_corner_test) {
@@ -218,6 +218,17 @@ TEST_F(IRB140Test, inverse_kinematics_corner_test) {
   Eigen::Matrix<double, 6, 1> q;
   q.setZero();
   TestInverseKinematics(analytical_kinematics, q);
+
+  // Degenerate case, q5 = 0
+  q << 0.1, -0.2, -0.6, 0.3, 0, 0.2;
+  DRAKE_DEMAND((q.array() >= analytical_kinematics.robot()->joint_limit_min.array()).all());
+  DRAKE_DEMAND((q.array() <= analytical_kinematics.robot()->joint_limit_max.array()).all());
+  TestInverseKinematics(analytical_kinematics, q, 1E-4);
+
+  q << -0.3, 0.6, 0.2, 1.2, 0, -1.2;
+  DRAKE_DEMAND((q.array() >= analytical_kinematics.robot()->joint_limit_min.array()).all());
+  DRAKE_DEMAND((q.array() <= analytical_kinematics.robot()->joint_limit_max.array()).all());
+  TestInverseKinematics(analytical_kinematics, q, 1E-4);
 }
 }  // namespace
 }  // namespace IRB140
