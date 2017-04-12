@@ -1,5 +1,9 @@
 #include "drake/solvers/test/mathematical_program_test_util.h"
 
+#include "drake/solvers/gurobi_solver.h"
+#include "drake/solvers/mosek_solver.h"
+#include "drake/solvers/snopt_solver.h"
+
 namespace drake {
 namespace solvers {
 namespace test {
@@ -12,9 +16,9 @@ void CheckSolver(const MathematicalProgram& prog,
 }
 
 void RunSolver(MathematicalProgram* prog,
-               const MathematicalProgramSolverInterface& solver) {
-  if (solver.available()) {
-    SolutionResult result = solver.Solve(*prog);
+               MathematicalProgramSolverInterface* solver) {
+  if (solver->available()) {
+    SolutionResult result = solver->Solve(*prog);
     SolverType solver_type;
     int solver_status;
     prog->GetSolverResult(&solver_type, &solver_status);

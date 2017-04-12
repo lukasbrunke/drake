@@ -36,7 +36,7 @@ INSTANTIATE_TEST_CASE_P(
 GTEST_TEST(QPtest, TestUnitBallExample) {
   IpoptSolver solver;
   if (solver.available()) {
-    TestQPonUnitBallExample(solver);
+    TestQPonUnitBallExample(&solver);
   }
 }
 }  // namespace test

@@ -354,7 +354,7 @@ void QuadraticProgram4::CheckSolution(SolverType solver_type) const {
   ExpectSolutionCostAccurate(*prog(), tol);
 }
 
-void TestQPonUnitBallExample(const MathematicalProgramSolverInterface& solver) {
+void TestQPonUnitBallExample(MathematicalProgramSolverInterface* solver) {
   MathematicalProgram prog;
   auto x = prog.NewContinuousVariables(2);
 
@@ -395,7 +395,7 @@ void TestQPonUnitBallExample(const MathematicalProgramSolverInterface& solver) {
           (x_desired(0) + x_desired(1) + 1.0) / 2.0;
     }
 
-    if (solver.solver_type() == SolverType::kSnopt) {
+    if (solver->solver_type() == SolverType::kSnopt) {
       prog.SetInitialGuessForAllVariables(Eigen::Vector2d::Zero());
     }
     RunSolver(&prog, solver);

@@ -58,7 +58,7 @@ OptimizationProgram::OptimizationProgram(CostForm cost_form,
 void OptimizationProgram::RunProblem(
     MathematicalProgramSolverInterface* solver) {
   if (solver->available()) {
-    RunSolver(prog_.get(), *solver);
+    RunSolver(prog_.get(), solver);
     CheckSolution(solver->solver_type());
   }
 }

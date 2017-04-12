@@ -486,8 +486,6 @@ class GurobiSolverImpl {
       const Eigen::VectorXd& lower_bound = constraint->lower_bound();
       const Eigen::VectorXd& upper_bound = constraint->upper_bound();
 
-  GRBenv* env = nullptr;
-  GRBloadenv(&env, nullptr);
       for (int k = 0; k < static_cast<int>(binding.GetNumElements()); ++k) {
         const int idx = prog.FindDecisionVariableIndex(binding.variables()(k));
         xlow[idx] = std::max(lower_bound(k), xlow[idx]);
@@ -538,88 +536,10 @@ class GurobiSolverImpl {
 
     DRAKE_ASSERT(HasCorrectNumberOfVariables(grb_model_, is_new_variable_.size()));
 
-  // Our second order cone constraints imposes A*x+b lies within the (rotated)
-  // Lorentz cone. Unfortunately Gurobi only supports a vector z lying within
-  // the (rotated) Lorentz cone. So we create new variable z, with the
-  // constraint z - A*x = b and z being within the (rotated) Lorentz cone.
-  // Here lorentz_cone_new_varaible_indices and
-  // rotated_lorentz_cone_new_variable_indices
-  // record the indices of the newly created variable z in the Gurobi program.
-  std::vector<std::vector<int>> lorentz_cone_new_variable_indices;
-  AddSecondOrderConeVariables(
-      prog.lorentz_cone_constraints(), &is_new_variable, &num_gurobi_vars,
-      &lorentz_cone_new_variable_indices, &gurobi_var_type, &xlow, &xupp);
-
-  std::vector<std::vector<int>> rotated_lorentz_cone_new_variable_indices;
-  AddSecondOrderConeVariables(prog.rotated_lorentz_cone_constraints(),
-                              &is_new_variable, &num_gurobi_vars,
-                              &rotated_lorentz_cone_new_variable_indices,
-                              &gurobi_var_type, &xlow, &xupp);
-
-  GRBmodel* model = nullptr;
-  GRBnewmodel(env, &model, "gurobi_model", num_gurobi_vars, nullptr, &xlow[0],
-              &xupp[0], gurobi_var_type.data(), nullptr);
-
-  int error = 0;
-  // TODO(naveenoid) : This needs access externally.
-  double sparseness_threshold = 1e-14;
-  error = AddCosts(model, prog, sparseness_threshold);
-  DRAKE_DEMAND(!error);
-
-  error = ProcessLinearConstraints(model, prog, sparseness_threshold);
-  DRAKE_DEMAND(!error);
-
-  // Add Lorentz cone constraints.
-  error = AddSecondOrderConeConstraints(
-      prog, prog.lorentz_cone_constraints(), sparseness_threshold,
-      lorentz_cone_new_variable_indices, model);
-  DRAKE_DEMAND(!error);
-
-  // Add rotated Lorentz cone constraints.
-  error = AddSecondOrderConeConstraints(
-      prog, prog.rotated_lorentz_cone_constraints(), sparseness_threshold,
-      rotated_lorentz_cone_new_variable_indices, model);
-  DRAKE_DEMAND(!error);
-
-  DRAKE_ASSERT(HasCorrectNumberOfVariables(model, is_new_variable.size()));
-
-  // The new model gets a copy of the Gurobi environment, so when we set
-  // parameters, we have to be sure to set them on the model's environment,
-  // not the global gurobi environment.
-  // See: FAQ #11: http://www.gurobi.com/support/faqs
-  // Note that it is not necessary to free this environment; rather,
-  // we just have to call GRBfreemodel(model).
-  GRBenv* model_env = GRBgetenv(model);
-  DRAKE_DEMAND(model_env);
-
-  // Corresponds to no console or file logging (this is the default, which
-  // can be overridden by parameters set in the MathematicalProgram).
-  GRBsetintparam(model_env, GRB_INT_PAR_OUTPUTFLAG, 0);
-
-  for (const auto it : prog.GetSolverOptionsDouble(SolverType::kGurobi)) {
-    error = GRBsetdblparam(model_env, it.first.c_str(), it.second);
-    DRAKE_DEMAND(!error);
-  }
-
-  for (const auto it : prog.GetSolverOptionsInt(SolverType::kGurobi)) {
-    error = GRBsetintparam(model_env, it.first.c_str(), it.second);
-    DRAKE_DEMAND(!error);
-  }
-
-  for (int i = 0; i < static_cast<int>(prog.num_vars()); ++i) {
-    if (!std::isnan(prog.initial_guess()(i))) {
-      error = GRBsetdblattrelement(model, "Start",
-                                   i, prog.initial_guess()(i));
-      DRAKE_DEMAND(!error);
-    }
-  }
-
-  error = GRBoptimize(model);
     for (const auto it : prog.GetSolverOptionsDouble(SolverType::kGurobi)) {
       error = GRBsetdblparam(grb_env_, it.first.c_str(), it.second);
       DRAKE_DEMAND(!error);
     }
-
 
     for (const auto it : prog.GetSolverOptionsInt(SolverType::kGurobi)) {
       error = GRBsetintparam(grb_env_, it.first.c_str(), it.second);
@@ -627,17 +547,6 @@ class GurobiSolverImpl {
     }
   }
 
-    for (const auto it : prog.GetSolverOptionsDouble(SolverType::kGurobi)) {
-      error = GRBsetdblparam(grb_env_, it.first.c_str(), it.second);
-      DRAKE_DEMAND(!error);
-    }
-
-
-    for (const auto it : prog.GetSolverOptionsInt(SolverType::kGurobi)) {
-      error = GRBsetintparam(grb_env_, it.first.c_str(), it.second);
-      DRAKE_DEMAND(!error);
-    }
-  }
 
   ~GurobiSolverImpl() {
     GRBfreemodel(grb_model_);
@@ -649,21 +558,6 @@ class GurobiSolverImpl {
 
     SolutionResult result = SolutionResult::kUnknownError;
 
-    if (optimstatus != GRB_OPTIMAL && optimstatus != GRB_SUBOPTIMAL) {
-      switch (optimstatus) {
-        case GRB_INF_OR_UNBD : {
-          result = SolutionResult::kInfeasible_Or_Unbounded;
-          break;
-        }
-        case GRB_UNBOUNDED : {
-          result = SolutionResult::kUnbounded;
-          break;
-        }
-        case GRB_INFEASIBLE : {
-          result = SolutionResult::kInfeasibleConstraints;
-          break;
-        }
-      }
     // If any error exists so far, it's from calling GRBoptimize.
     // TODO(naveenoid) : Properly handle gurobi specific error.
     // message.
@@ -705,12 +599,11 @@ class GurobiSolverImpl {
         }
         prog_->SetDecisionVariableValues(prog_sol_vector);
       }
-      prog.SetDecisionVariableValues(prog_sol_vector);
 
       // Obtain optimal cost
       double optimal_cost = std::numeric_limits<double>::quiet_NaN();
-      GRBgetdblattr(model, GRB_DBL_ATTR_OBJVAL, &optimal_cost);
-      prog.SetOptimalCost(optimal_cost);
+      GRBgetdblattr(grb_model_, GRB_DBL_ATTR_OBJVAL, &optimal_cost);
+      prog_->SetOptimalCost(optimal_cost);
     }
 
     prog_->SetSolverResult(SolverType::kGurobi, error);
