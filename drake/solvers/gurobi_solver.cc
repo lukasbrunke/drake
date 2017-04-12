@@ -535,8 +535,16 @@ class GurobiSolverImpl {
     DRAKE_DEMAND(!error);
 
     DRAKE_ASSERT(HasCorrectNumberOfVariables(grb_model_, is_new_variable_.size()));
+  }
 
 
+  ~GurobiSolverImpl() {
+    GRBfreemodel(grb_model_);
+    GRBfreeenv(grb_env_);
+  }
+
+  SolutionResult Solve() {
+    int error = 0;
     // The new model gets a copy of the Gurobi environment, so when we set
     // parameters, we have to be sure to set them on the model's environment,
     // not the global gurobi environment.
@@ -550,33 +558,25 @@ class GurobiSolverImpl {
     // can be overridden by parameters set in the MathematicalProgram).
     GRBsetintparam(model_env, GRB_INT_PAR_OUTPUTFLAG, 0);
 
-    for (const auto it : prog.GetSolverOptionsDouble(SolverType::kGurobi)) {
+    for (const auto it : prog_->GetSolverOptionsDouble(SolverType::kGurobi)) {
       error = GRBsetdblparam(model_env, it.first.c_str(), it.second);
       DRAKE_DEMAND(!error);
     }
 
-    for (const auto it : prog.GetSolverOptionsInt(SolverType::kGurobi)) {
+    for (const auto it : prog_->GetSolverOptionsInt(SolverType::kGurobi)) {
       error = GRBsetintparam(model_env, it.first.c_str(), it.second);
       DRAKE_DEMAND(!error);
     }
 
-    for (int i = 0; i < static_cast<int>(prog.num_vars()); ++i) {
-      if (!std::isnan(prog.initial_guess()(i))) {
+    for (int i = 0; i < static_cast<int>(prog_->num_vars()); ++i) {
+      if (!std::isnan(prog_->initial_guess()(i))) {
         error = GRBsetdblattrelement(grb_model_, "Start",
-                                     i, prog.initial_guess()(i));
+                                     i, prog_->initial_guess()(i));
         DRAKE_DEMAND(!error);
       }
     }
-  }
 
-
-  ~GurobiSolverImpl() {
-    GRBfreemodel(grb_model_);
-    GRBfreeenv(grb_env_);
-  }
-
-  SolutionResult Solve() {
-    int error = GRBoptimize(grb_model_);
+    error = GRBoptimize(grb_model_);
 
     SolutionResult result = SolutionResult::kUnknownError;
 
