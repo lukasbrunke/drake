@@ -178,7 +178,7 @@ void TestInverseKinematics(const IRB140AnalyticalKinematics& analytical_kinemati
     }
   }
 }
-
+/*
 TEST_F(IRB140Test, inverse_kinematics_test) {
   std::vector<Eigen::Matrix<double, 6, 1>> q_all;
   const int num_joint_sample = 10;
@@ -210,7 +210,7 @@ TEST_F(IRB140Test, inverse_kinematics_test) {
       }
     }
   }
-}
+} */
 
 
 TEST_F(IRB140Test, inverse_kinematics_corner_test) {
@@ -229,6 +229,14 @@ TEST_F(IRB140Test, inverse_kinematics_corner_test) {
   DRAKE_DEMAND((q.array() >= analytical_kinematics.robot()->joint_limit_min.array()).all());
   DRAKE_DEMAND((q.array() <= analytical_kinematics.robot()->joint_limit_max.array()).all());
   TestInverseKinematics(analytical_kinematics, q, 1E-4);
+}
+
+TEST_F(IRB140Test, inverse_kinematics_infeasible_test) {
+  Eigen::Isometry3d link6_pose;
+  link6_pose.translation() << 1.0, 1.0, -0.2;
+  link6_pose.linear() = Eigen::Matrix3d::Identity();
+  const auto& q_ik = analytical_kinematics.inverse_kinematics(link6_pose);
+  EXPECT_EQ(q_ik.size(), 0);
 }
 }  // namespace
 }  // namespace IRB140
