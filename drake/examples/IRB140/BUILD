@@ -6,6 +6,7 @@ load(
     "//tools:drake.bzl",
     "drake_cc_library",
     "drake_cc_googletest",
+    "drake_cc_binary",
 )
 
 package(default_visibility = ["//visibility:public"])
@@ -29,6 +30,15 @@ drake_cc_googletest(
     deps = [
         ":IRB140_analytical_kinematics",
         "//drake/common:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_binary(
+    name = "analytical_vs_global_ik_test",
+    srcs = ["test/analytical_vs_global_ik_test.cc"],
+    deps = [
+        ":IRB140_analytical_kinematics",
+        "//drake/multibody:global_inverse_kinematics",
     ],
 )
 
