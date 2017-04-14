@@ -4,14 +4,12 @@
 #include <iostream>
 #include <fstream>
 #include <string>
-#include <gtest/gtest.h>
 
 using Eigen::Isometry3d;
 
 namespace drake {
 namespace examples {
 namespace IRB140 {
-namespace 
 class DUT {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(DUT)
@@ -47,12 +45,28 @@ class DUT {
   multibody::GlobalInverseKinematics global_ik_;
 };
 
+void DoMain(int argc, char* argv[]) {
+  if (argc != 3) {
+    throw std::runtime_error("Usage is <infile> rotation_enum.\n");
+  }
 
-}  // namespace IRB140
-}  // namespace examples
-}  // namespace drake
+  std::string file_name(argv[1]);
+  int rotation_enum = atoi(argv[2]);
+  Eigen::AngleAxisd link6_angleaxis;
+  switch (rotation_enum) {
+    case 0 : {
+      link6_angleaxis = Eigen::AngleAxisd(0, Eigen::Vector3d(1, 0, 0));
+      break;
+    }
+    case 1 : {
+      link6_angleaxis = Eigen::AngleAxisd(M_PI, Eigen::Vector3d(1, 0, 0));
+      break;
+    }
+    default : {
+      throw std::runtime_error("Unsupported rotation.\n");
+    }
+  }
 
-void DoMain(const std::string& file_name, const Eigen::Matrix3d& link6_rotmat) {
   Eigen::Vector3d box_size(1, 1, 1);
   Eigen::Vector3d box_center(0.5, 0, 0.4);
   const int kNumPtsPerAxis = 11;
@@ -62,13 +76,13 @@ void DoMain(const std::string& file_name, const Eigen::Matrix3d& link6_rotmat) {
   }
   std::fstream output_file;
   output_file.open(file_name, std::ios::app | std::ios::out);
-  drake::DUT dut;
+  DUT dut;
   for (int i = 0; i < kNumPtsPerAxis; ++i) {
     for (int j = 0; j < kNumPtsPerAxis; ++j) {
       for (int k = 0; k < kNumPtsPerAxis; ++k) {
         Eigen::Vector3d link6_pos(SamplesPerAxis(0, i), SamplesPerAxis(1, j), SamplesPerAxis(2, k));
         Eigen::Isometry3d link6_pose;
-        link6_pose.linear() = link6_rotmat;
+        link6_pose.linear() = link6_angleaxis.toRotationMatrix();
         link6_pose.translation() = link6_pos;
         const auto& ik_status = dut.SolveIK(link6_pose, &output_file);
         if (ik_status.first == solvers::SolutionResult::kSolutionFound &&
@@ -82,27 +96,13 @@ void DoMain(const std::string& file_name, const Eigen::Matrix3d& link6_rotmat) {
   output_file.close();
 }
 
+}  // namespace IRB140
+}  // namespace examples
+}  // namespace drake
+
+
+
 int main(int argc, char* argv[]) {
-  if (argc != 3) {
-    throw std::runtime_error("Usage is <infile> rotation_enum.\n");
-  } else {
-    std::string file_name(argv[1]);
-    int rotation_enum = atoi(argv[2]);
-    Eigen::AngleAxisd link6_angleaxis;
-    switch (rotation_enum) {
-      case 0 : {
-        link6_angleaxis = Eigen::AngleAxisd(0, Eigen::Vector3d(1, 0, 0));
-        break;
-      }
-      case 1 : {
-        link6_angleaxis = Eigen::AngleAxisd(M_PI, Eigen::Vector3d(1, 0, 0));
-        break;
-      }
-      default : {
-        throw std::runtime_error("Unsupported rotation.\n");
-      }
-    }
-    drake::examples::IRB140::DoMain(file_name, link6_angleaxis.toRotationMatrix());
-    return 0;
-  }
+  drake::examples::IRB140::DoMain(argc, argv);
+  return 0;
 }
