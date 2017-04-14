@@ -39,6 +39,7 @@ drake_cc_binary(
     deps = [
         ":IRB140_analytical_kinematics",
         "//drake/multibody:global_inverse_kinematics",
+        "//drake/multibody:inverse_kinematics",
     ],
 )
 
