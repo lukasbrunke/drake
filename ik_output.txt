@@ -15,6 +15,9 @@ q_nonlinear_ik:
 global_ik_status: 0
 q_global:
   -1.5708   1.85756 -0.564333   1.57076  -1.57098  -1.29481
+nonlinear_ik_resolve_status: 0
+q_nonlinear_ik_resolve:
+nan nan nan nan nan nan
 
 position:
    0 -0.5  0.4
@@ -37,6 +40,9 @@ q_nonlinear_ik:
 global_ik_status: 0
 q_global:
  -1.5708 0.488745 0.309304 -1.57101   1.5708  2.34815
+nonlinear_ik_resolve_status: 0
+q_nonlinear_ik_resolve:
+nan nan nan nan nan nan
 
 position:
    0 -0.5  0.9
@@ -59,6 +65,9 @@ q_nonlinear_ik:
 global_ik_status: 0
 q_global:
  -1.5708 0.395859 -1.04482  1.57085 -1.57108 0.650385
+nonlinear_ik_resolve_status: 0
+q_nonlinear_ik_resolve:
+nan nan nan nan nan nan
 
 position:
    0    0 -0.1
@@ -72,6 +81,9 @@ q_nonlinear_ik:
 global_ik_status: -2
 q_global:
 0 0 0 0 0 0
+nonlinear_ik_resolve_status: 0
+q_nonlinear_ik_resolve:
+nan nan nan nan nan nan
 
 position:
   0   0 0.4
@@ -85,6 +97,9 @@ q_nonlinear_ik:
 global_ik_status: 0
 q_global:
   2.81804  0.770517   1.81742 -0.448632    -0.647  -1.23162
+nonlinear_ik_resolve_status: 13
+q_nonlinear_ik_resolve:
+    3.14159   0.0846682    0.872665 4.91147e-05     -2.0944    -1.57074
 
 position:
   0   0 0.9
@@ -116,6 +131,9 @@ q_nonlinear_ik:
 global_ik_status: 0
 q_global:
   -3.10704   0.612294   -2.98615 -0.0180302   0.764897   -1.51802
+nonlinear_ik_resolve_status: 13
+q_nonlinear_ik_resolve:
+  -3.11748   0.625297   -3.02729 -0.0352036   0.741274   -1.54375
 
 position:
    0  0.5 -0.1
@@ -133,6 +151,9 @@ q_nonlinear_ik:
 global_ik_status: 0
 q_global:
   1.61144   1.84842 -0.554236   1.61772    1.5708   1.29677
+nonlinear_ik_resolve_status: 0
+q_nonlinear_ik_resolve:
+nan nan nan nan nan nan
 
 position:
   0 0.5 0.4
@@ -155,6 +176,9 @@ q_nonlinear_ik:
 global_ik_status: 0
 q_global:
   1.5708 0.492169 0.302181 -1.57083 -1.57079 -2.35275
+nonlinear_ik_resolve_status: 0
+q_nonlinear_ik_resolve:
+nan nan nan nan nan nan
 
 position:
   0 0.5 0.9
@@ -177,6 +201,9 @@ q_nonlinear_ik:
 global_ik_status: 0
 q_global:
    1.5708  0.388913  -1.03487    1.5708    1.5708 -0.647692
+nonlinear_ik_resolve_status: 0
+q_nonlinear_ik_resolve:
+nan nan nan nan nan nan
 
 position:
  0.5 -0.5 -0.1
@@ -190,6 +217,9 @@ q_nonlinear_ik:
 global_ik_status: -2
 q_global:
 0 0 0 0 0 0
+nonlinear_ik_resolve_status: 0
+q_nonlinear_ik_resolve:
+nan nan nan nan nan nan
 
 position:
  0.5 -0.5  0.4
@@ -208,6 +238,9 @@ q_nonlinear_ik:
 global_ik_status: 0
 q_global:
 -0.786282   1.03572 -0.677966  -1.26971  0.853484   2.69023
+nonlinear_ik_resolve_status: 0
+q_nonlinear_ik_resolve:
+nan nan nan nan nan nan
 
 position:
  0.5 -0.5  0.9
@@ -221,6 +254,9 @@ q_nonlinear_ik:
 global_ik_status: -2
 q_global:
 0 0 0 0 0 0
+nonlinear_ik_resolve_status: 0
+q_nonlinear_ik_resolve:
+nan nan nan nan nan nan
 
 position:
  0.5    0 -0.1
@@ -234,6 +270,9 @@ q_nonlinear_ik:
 global_ik_status: 0
 q_global:
 0.0392065   1.84926 -0.563337 0.0751546   1.30892   1.52577
+nonlinear_ik_resolve_status: 0
+q_nonlinear_ik_resolve:
+nan nan nan nan nan nan
 
 position:
 0.5   0 0.4
@@ -265,6 +304,9 @@ q_nonlinear_ik:
 global_ik_status: 0
 q_global:
 2.31266e-05    0.501599    0.303731    0.053861    0.802914     1.51179
+nonlinear_ik_resolve_status: 0
+q_nonlinear_ik_resolve:
+nan nan nan nan nan nan
 
 position:
 0.5   0 0.9
@@ -290,6 +332,9 @@ q_nonlinear_ik:
 global_ik_status: 0
 q_global:
 2.55698e-05    0.945612    -2.11898   0.0314063    -1.18659     1.53635
+nonlinear_ik_resolve_status: 0
+q_nonlinear_ik_resolve:
+nan nan nan nan nan nan
 
 position:
  0.5  0.5 -0.1
@@ -303,6 +348,9 @@ q_nonlinear_ik:
 global_ik_status: -2
 q_global:
 0 0 0 0 0 0
+nonlinear_ik_resolve_status: 0
+q_nonlinear_ik_resolve:
+nan nan nan nan nan nan
 
 position:
 0.5 0.5 0.4
@@ -321,6 +369,9 @@ q_nonlinear_ik:
 global_ik_status: 0
 q_global:
  0.798351   1.02741 -0.664714  -1.98401 -0.845972  -2.52744
+nonlinear_ik_resolve_status: 0
+q_nonlinear_ik_resolve:
+nan nan nan nan nan nan
 
 position:
 0.5 0.5 0.9
@@ -334,6 +385,9 @@ q_nonlinear_ik:
 global_ik_status: -2
 q_global:
 0 0 0 0 0 0
+nonlinear_ik_resolve_status: 0
+q_nonlinear_ik_resolve:
+nan nan nan nan nan nan
 
 position:
    1 -0.5 -0.1
@@ -347,6 +401,9 @@ q_nonlinear_ik:
 global_ik_status: -2
 q_global:
 0 0 0 0 0 0
+nonlinear_ik_resolve_status: 0
+q_nonlinear_ik_resolve:
+nan nan nan nan nan nan
 
 position:
    1 -0.5  0.4
@@ -360,6 +417,9 @@ q_nonlinear_ik:
 global_ik_status: -2
 q_global:
 0 0 0 0 0 0
+nonlinear_ik_resolve_status: 0
+q_nonlinear_ik_resolve:
+nan nan nan nan nan nan
 
 position:
    1 -0.5  0.9
@@ -373,6 +433,9 @@ q_nonlinear_ik:
 global_ik_status: -2
 q_global:
 0 0 0 0 0 0
+nonlinear_ik_resolve_status: 0
+q_nonlinear_ik_resolve:
+nan nan nan nan nan nan
 
 position:
    1    0 -0.1
@@ -386,6 +449,9 @@ q_nonlinear_ik:
 global_ik_status: -2
 q_global:
 0 0 0 0 0 0
+nonlinear_ik_resolve_status: 0
+q_nonlinear_ik_resolve:
+nan nan nan nan nan nan
 
 position:
   1   0 0.4
@@ -399,6 +465,9 @@ q_nonlinear_ik:
 global_ik_status: -2
 q_global:
 0 0 0 0 0 0
+nonlinear_ik_resolve_status: 0
+q_nonlinear_ik_resolve:
+nan nan nan nan nan nan
 
 position:
   1   0 0.9
@@ -412,6 +481,9 @@ q_nonlinear_ik:
 global_ik_status: -2
 q_global:
 0 0 0 0 0 0
+nonlinear_ik_resolve_status: 0
+q_nonlinear_ik_resolve:
+nan nan nan nan nan nan
 
 position:
    1  0.5 -0.1
@@ -425,6 +497,9 @@ q_nonlinear_ik:
 global_ik_status: -2
 q_global:
 0 0 0 0 0 0
+nonlinear_ik_resolve_status: 0
+q_nonlinear_ik_resolve:
+nan nan nan nan nan nan
 
 position:
   1 0.5 0.4
@@ -438,6 +513,9 @@ q_nonlinear_ik:
 global_ik_status: -2
 q_global:
 0 0 0 0 0 0
+nonlinear_ik_resolve_status: 0
+q_nonlinear_ik_resolve:
+nan nan nan nan nan nan
 
 position:
   1 0.5 0.9
@@ -451,3 +529,6 @@ q_nonlinear_ik:
 global_ik_status: -2
 q_global:
 0 0 0 0 0 0
+nonlinear_ik_resolve_status: 0
+q_nonlinear_ik_resolve:
+nan nan nan nan nan nan
