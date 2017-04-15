@@ -178,8 +178,17 @@ void TestInverseKinematics(const IRB140AnalyticalKinematics& analytical_kinemati
     }
   }
 }
-/*
 TEST_F(IRB140Test, inverse_kinematics_test) {
+  std::vector<Eigen::Isometry3d> link6_pose_all;
+  Eigen::Isometry3d link6_pose;
+  link6_pose.linear() = Eigen::Matrix3d::Identity();
+  link6_pose.translation() = Eigen::Vector3d(0, 0, 0.9);
+  link6_pose_all.push_back(link6_pose);
+
+  for (const auto& ee_pose : )
+}
+/*
+TEST_F(IRB140Test, inverse_kinematics_exhaustive_test) {
   std::vector<Eigen::Matrix<double, 6, 1>> q_all;
   const int num_joint_sample = 10;
   Eigen::Matrix<double, 6, num_joint_sample> q_sample;
