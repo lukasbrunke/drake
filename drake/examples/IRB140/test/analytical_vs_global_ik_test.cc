@@ -1,12 +1,12 @@
-#include <iostream>
 #include <fstream>
+#include <iostream>
 #include <string>
 
 #include "drake/examples/IRB140/IRB140_analytical_kinematics.h"
-#include "drake/multibody/global_inverse_kinematics.h"
-#include "drake/solvers/gurobi_solver.h"
-#include "drake/multibody/rigid_body_ik.h"
 #include "drake/multibody/constraint/rigid_body_constraint.h"
+#include "drake/multibody/global_inverse_kinematics.h"
+#include "drake/multibody/rigid_body_ik.h"
+#include "drake/solvers/gurobi_solver.h"
 
 using Eigen::Isometry3d;
 
@@ -21,18 +21,21 @@ class DUT {
       : analytical_ik_(),
         global_ik_(*(analytical_ik_.robot()), 2),
         ee_idx_(analytical_ik_.robot()->FindBodyIndex("link_6")),
-        global_ik_pos_cnstr_(global_ik_.AddWorldPositionConstraint(ee_idx_, Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero())),
-        ee_orient_(ee_orient)
-  {
+        global_ik_pos_cnstr_(global_ik_.AddWorldPositionConstraint(
+            ee_idx_, Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero(),
+            Eigen::Vector3d::Zero())),
+        ee_orient_(ee_orient) {
     // Fix the end effector body orientation
     const auto& ee_rotmat = global_ik_.body_rotation_matrix(ee_idx_);
     const Eigen::Matrix3d ee_rotmat_des = ee_orient.toRotationMatrix();
     for (int i = 0; i < 3; ++i) {
-      global_ik_.AddBoundingBoxConstraint(ee_rotmat_des.col(i), ee_rotmat_des.col(i), ee_rotmat.col(i));
+      global_ik_.AddBoundingBoxConstraint(
+          ee_rotmat_des.col(i), ee_rotmat_des.col(i), ee_rotmat.col(i));
     }
   }
 
-  std::pair<solvers::SolutionResult, solvers::SolutionResult> SolveIK(const Eigen::Vector3d& link6_pos, std::fstream* output_file) {
+  std::pair<solvers::SolutionResult, solvers::SolutionResult> SolveIK(
+      const Eigen::Vector3d& link6_pos, std::fstream* output_file) {
     std::pair<solvers::SolutionResult, solvers::SolutionResult> ik_status;
     // Solve IK analytically
     Eigen::Isometry3d link6_pose;
@@ -46,15 +49,28 @@ class DUT {
     }
 
     // Solve IK using nonlinear IK
-    WorldPositionConstraint nl_ik_pos_cnstr(analytical_ik_.robot(), ee_idx_, Eigen::Vector3d::Zero(), link6_pos, link6_pos);
-    WorldQuatConstraint nl_ik_quat_cnstr(analytical_ik_.robot(), ee_idx_, Eigen::Vector4d(ee_orient_.w(), ee_orient_.x(), ee_orient_.y(), ee_orient_.z()), 0);
+    WorldPositionConstraint nl_ik_pos_cnstr(analytical_ik_.robot(), ee_idx_,
+                                            Eigen::Vector3d::Zero(), link6_pos,
+                                            link6_pos);
+    WorldQuatConstraint nl_ik_quat_cnstr(
+        analytical_ik_.robot(), ee_idx_,
+        Eigen::Vector4d(ee_orient_.w(), ee_orient_.x(), ee_orient_.y(),
+                        ee_orient_.z()),
+        0);
     int nl_ik_info;
     std::vector<std::string> infeasible_constraint;
     Eigen::VectorXd q_nl_ik_guess = Eigen::Matrix<double, 6, 1>::Zero();
-    std::array<RigidBodyConstraint*, 2> nl_ik_cnstr = {{&nl_ik_pos_cnstr, &nl_ik_quat_cnstr}};
+    std::array<RigidBodyConstraint*, 2> nl_ik_cnstr = {
+        {&nl_ik_pos_cnstr, &nl_ik_quat_cnstr}};
     IKoptions ik_options(analytical_ik_.robot());
     Eigen::VectorXd q_nl_ik(6);
-    inverseKin(analytical_ik_.robot(), q_nl_ik_guess, q_nl_ik_guess, 2, nl_ik_cnstr.data(), ik_options, &q_nl_ik, &nl_ik_info, &infeasible_constraint);
+    inverseKin(analytical_ik_.robot(), q_nl_ik_guess, q_nl_ik_guess, 2,
+               nl_ik_cnstr.data(), ik_options, &q_nl_ik, &nl_ik_info,
+               &infeasible_constraint);
+    Eigen::VectorXd q_nl_ik_resolve(6);
+    int nl_ik_resolve_info;
+    nl_ik_resolve_info = 0;
+    q_nl_ik_resolve = Eigen::Matrix<double, 6, 1>::Constant(NAN);
 
     // Solve IK using global IK
     global_ik_pos_cnstr_.constraint()->UpdateLowerBound(link6_pos);
@@ -66,13 +82,24 @@ class DUT {
     q_global.setZero();
     if (global_ik_status == solvers::SolutionResult::kSolutionFound) {
       q_global = global_ik_.ReconstructGeneralizedPositionSolution();
+      if (nl_ik_info != 1) {
+        // Resolve nonlinear IK if it was not solved before. This time use the
+        // global IK solution as the initial guess.
+        Eigen::VectorXd q_global_dynamic = q_global;
+        inverseKin(analytical_ik_.robot(), q_global_dynamic, q_global_dynamic,
+                   2, nl_ik_cnstr.data(), ik_options, &q_nl_ik_resolve,
+                   &nl_ik_resolve_info, &infeasible_constraint);
+      }
     }
 
     // Now print to file.
     if (output_file->is_open()) {
       (*output_file) << "\nposition:\n" << link6_pos.transpose() << std::endl;
-      (*output_file) << "orientation (quaternion):\n" << ee_orient_.w() << " " << ee_orient_.x() << " " << ee_orient_.y() << " " << ee_orient_.z() << std::endl;
-      (*output_file) << "analytical_ik_status: " << ik_status.first << std::endl;
+      (*output_file) << "orientation (quaternion):\n"
+                     << ee_orient_.w() << " " << ee_orient_.x() << " "
+                     << ee_orient_.y() << " " << ee_orient_.z() << std::endl;
+      (*output_file) << "analytical_ik_status: " << ik_status.first
+                     << std::endl;
       (*output_file) << "q_analytical:\n";
       for (const auto& qi_analytical : q_analytical) {
         (*output_file) << qi_analytical.transpose() << std::endl;
@@ -83,6 +110,11 @@ class DUT {
 
       (*output_file) << "global_ik_status: " << ik_status.second << std::endl;
       (*output_file) << "q_global:\n" << q_global.transpose() << std::endl;
+
+      (*output_file) << "nonlinear_ik_resolve_status: " << nl_ik_resolve_info
+                     << std::endl;
+      (*output_file) << "q_nonlinear_ik_resolve:\n"
+                     << q_nl_ik_resolve.transpose() << std::endl;
     } else {
       throw std::runtime_error("file is not open.\n");
     }
@@ -106,25 +138,35 @@ void DoMain(int argc, char* argv[]) {
   int rotation_enum = atoi(argv[2]);
   Eigen::AngleAxisd link6_angleaxis;
   switch (rotation_enum) {
-    case 0 : {
+    case 0: {
       link6_angleaxis = Eigen::AngleAxisd(0, Eigen::Vector3d(1, 0, 0));
       break;
     }
-    case 1 : {
+    case 1: {
       link6_angleaxis = Eigen::AngleAxisd(M_PI, Eigen::Vector3d(1, 0, 0));
       break;
     }
-    default : {
-      throw std::runtime_error("Unsupported rotation.\n");
+    default: { throw std::runtime_error("Unsupported rotation.\n"); }
+  }
+
+  // Remove the file if it exists
+  std::ifstream file(file_name);
+  if (file) {
+    if (remove(file_name.c_str()) != 0) {
+      throw std::runtime_error("Error deleting file " + file_name);
     }
   }
+  file.close();
 
   Eigen::Vector3d box_size(1, 1, 1);
   Eigen::Vector3d box_center(0.5, 0, 0.4);
-  const int kNumPtsPerAxis = 3;
+  const int kNumPtsPerAxis = 21;
   Eigen::Matrix<double, 3, kNumPtsPerAxis> SamplesPerAxis;
   for (int axis = 0; axis < 3; ++axis) {
-    SamplesPerAxis.row(axis) = Eigen::Matrix<double, 1, kNumPtsPerAxis>::LinSpaced(box_center(axis) - box_size(axis) / 2, box_center(axis) + box_size(axis) / 2);
+    SamplesPerAxis.row(axis) =
+        Eigen::Matrix<double, 1, kNumPtsPerAxis>::LinSpaced(
+            box_center(axis) - box_size(axis) / 2,
+            box_center(axis) + box_size(axis) / 2);
   }
   std::fstream output_file;
   output_file.open(file_name, std::ios::app | std::ios::out);
@@ -134,15 +176,19 @@ void DoMain(int argc, char* argv[]) {
   for (int i = 0; i < kNumPtsPerAxis; ++i) {
     for (int j = 0; j < kNumPtsPerAxis; ++j) {
       for (int k = 0; k < kNumPtsPerAxis; ++k) {
-        Eigen::Vector3d link6_pos(SamplesPerAxis(0, i), SamplesPerAxis(1, j), SamplesPerAxis(2, k));
+        Eigen::Vector3d link6_pos(SamplesPerAxis(0, i), SamplesPerAxis(1, j),
+                                  SamplesPerAxis(2, k));
         Eigen::Isometry3d link6_pose;
         link6_pose.linear() = link6_angleaxis.toRotationMatrix();
         link6_pose.translation() = link6_pos;
         const auto& ik_status = dut.SolveIK(link6_pos, &output_file);
         if (ik_status.first == solvers::SolutionResult::kSolutionFound &&
-            (ik_status.second == solvers::SolutionResult::kInfeasible_Or_Unbounded
-                || ik_status.second == solvers::SolutionResult::kInfeasibleConstraints)) {
-          std::cout << "global IK is infeasible, but analytical IK is feasible.\n";
+            (ik_status.second ==
+                 solvers::SolutionResult::kInfeasible_Or_Unbounded ||
+             ik_status.second ==
+                 solvers::SolutionResult::kInfeasibleConstraints)) {
+          std::cout
+              << "global IK is infeasible, but analytical IK is feasible.\n";
         }
       }
     }
@@ -153,8 +199,6 @@ void DoMain(int argc, char* argv[]) {
 }  // namespace IRB140
 }  // namespace examples
 }  // namespace drake
-
-
 
 int main(int argc, char* argv[]) {
   drake::examples::IRB140::DoMain(argc, argv);
