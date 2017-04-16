@@ -173,9 +173,14 @@ void DoMain(int argc, char* argv[]) {
 
   Eigen::Quaterniond link6_quat(link6_angleaxis);
   DUT dut(link6_quat);
+  int sample_count = 0;
   for (int i = 0; i < kNumPtsPerAxis; ++i) {
     for (int j = 0; j < kNumPtsPerAxis; ++j) {
       for (int k = 0; k < kNumPtsPerAxis; ++k) {
+        if (sample_count <= 1951) {
+          ++sample_count;
+          continue;
+        }
         Eigen::Vector3d link6_pos(SamplesPerAxis(0, i), SamplesPerAxis(1, j),
                                   SamplesPerAxis(2, k));
         Eigen::Isometry3d link6_pose;
@@ -190,6 +195,7 @@ void DoMain(int argc, char* argv[]) {
           std::cout
               << "global IK is infeasible, but analytical IK is feasible.\n";
         }
+        ++sample_count;
       }
     }
   }
