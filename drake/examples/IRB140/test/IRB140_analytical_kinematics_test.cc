@@ -185,7 +185,16 @@ TEST_F(IRB140Test, inverse_kinematics_test) {
   link6_pose.translation() = Eigen::Vector3d(0, 0, 0.9);
   link6_pose_all.push_back(link6_pose);
 
-  for (const auto& ee_pose : )
+  KinematicsCache<double> cache = analytical_kinematics.robot()->CreateKinematicsCache();
+  for (const auto& ee_pose : link6_pose_all) {
+    const auto& q_all = analytical_kinematics.inverse_kinematics(ee_pose);
+    for (const auto& q : q_all) {
+      cache.initialize(q);
+      analytical_kinematics.robot()->doKinematics(cache);
+      const auto& ee_pose_fk = analytical_kinematics.robot()->CalcBodyPoseInWorldFrame(cache, *(analytical_kinematics.robot()->FindBody("link_6")));
+      CompareIsometry3d(ee_pose_fk, ee_pose, 1E-5);
+    }
+  }
 }
 /*
 TEST_F(IRB140Test, inverse_kinematics_exhaustive_test) {
