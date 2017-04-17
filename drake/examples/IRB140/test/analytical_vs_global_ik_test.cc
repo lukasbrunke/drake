@@ -168,6 +168,7 @@ void DoMain(int argc, char* argv[]) {
             box_center(axis) - box_size(axis) / 2,
             box_center(axis) + box_size(axis) / 2);
   }
+
   std::fstream output_file;
   output_file.open(file_name, std::ios::app | std::ios::out);
 
@@ -177,10 +178,6 @@ void DoMain(int argc, char* argv[]) {
   for (int i = 0; i < kNumPtsPerAxis; ++i) {
     for (int j = 0; j < kNumPtsPerAxis; ++j) {
       for (int k = 0; k < kNumPtsPerAxis; ++k) {
-        if (sample_count <= 1951) {
-          ++sample_count;
-          continue;
-        }
         Eigen::Vector3d link6_pos(SamplesPerAxis(0, i), SamplesPerAxis(1, j),
                                   SamplesPerAxis(2, k));
         Eigen::Isometry3d link6_pose;
@@ -195,6 +192,7 @@ void DoMain(int argc, char* argv[]) {
           std::cout
               << "global IK is infeasible, but analytical IK is feasible.\n";
         }
+        std::cout << "sample count: " << sample_count << std::endl;
         ++sample_count;
       }
     }
