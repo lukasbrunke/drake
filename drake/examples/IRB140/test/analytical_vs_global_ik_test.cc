@@ -13,6 +13,91 @@ using Eigen::Isometry3d;
 namespace drake {
 namespace examples {
 namespace IRB140 {
+class IKresult {
+ public:
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(IKresult)
+
+  IKresult() {}
+
+  Eigen::Isometry3d& ee_pose() {return ee_pose_;}
+
+  const Eigen::Isometry3d& ee_pose() const {return ee_pose_;}
+
+  solvers::SolutionResult& analytical_ik_status() {return analytical_ik_status_;}
+
+  const solvers::SolutionResult& analytical_ik_status() const {return analytical_ik_status_;}
+
+  solvers::SolutionResult& global_ik_status() {return global_ik_status_;}
+
+  const solvers::SolutionResult& global_ik_status() const {return global_ik_status_;}
+
+  int& nl_ik_status() {return nl_ik_status_;}
+
+  const int& nl_ik_status() const {return nl_ik_status_;}
+
+  int& nl_ik_resolve_status() {return nl_ik_resolve_status_;}
+
+  const int& nl_ik_status_resolve_status() const {return nl_ik_resolve_status_;}
+
+  std::vector<Eigen::Matrix<double, 6, 1>>& q_analytical_ik() {return q_analytical_ik_;}
+
+  const std::vector<Eigen::Matrix<double, 6, 1>>& q_analytical_ik() const {return q_analytical_ik_;}
+
+  Eigen::Matrix<double, 6, 1>& q_global_ik() {return q_global_ik_;}
+
+  const Eigen::Matrix<double, 6, 1>& q_global_ik() const {return q_global_ik_;}
+
+  Eigen::Matrix<double, 6, 1>& q_nl_ik() {return q_nl_ik_;}
+
+  const Eigen::Matrix<double, 6, 1>& q_nl_ik() const {return q_nl_ik_;}
+
+  Eigen::Matrix<double, 6, 1>& q_nl_ik_resolve() {return q_nl_ik_resolve_;}
+
+  const Eigen::Matrix<double, 6, 1>& q_nl_ik_resolve() const {return q_nl_ik_resolve_;}
+
+  void printToFile(std::fstream* output_file) const {
+    // Now print to file.
+    if (output_file->is_open()) {
+      Eigen::Vector3d link6_pos = ee_pose_.translation();
+      Eigen::Quaterniond ee_orient(ee_pose_.linear());
+      (*output_file) << "\nposition:\n" << link6_pos.transpose() << std::endl;
+      (*output_file) << "orientation (quaternion):\n"
+                     << ee_orient.w() << " " << ee_orient.x() << " "
+                     << ee_orient.y() << " " << ee_orient.z() << std::endl;
+      (*output_file) << "analytical_ik_status: " << analytical_ik_status_
+                     << std::endl;
+      (*output_file) << "q_analytical:\n";
+      for (const auto& qi_analytical : q_analytical_ik_) {
+        (*output_file) << qi_analytical.transpose() << std::endl;
+      }
+
+      (*output_file) << "nonlinear_ik_status: " << nl_ik_status_ << std::endl;
+      (*output_file) << "q_nonlinear_ik:\n" << q_nl_ik_.transpose() << std::endl;
+
+      (*output_file) << "global_ik_status: " << global_ik_status_ << std::endl;
+      (*output_file) << "q_global:\n" << q_global_ik_.transpose() << std::endl;
+
+      (*output_file) << "nonlinear_ik_resolve_status: " << nl_ik_resolve_status_
+                     << std::endl;
+      (*output_file) << "q_nonlinear_ik_resolve:\n"
+                     << q_nl_ik_resolve_.transpose() << std::endl;
+    } else {
+      throw std::runtime_error("file is not open.\n");
+    }
+  }
+
+ private:
+  Eigen::Isometry3d ee_pose_;
+  solvers::SolutionResult analytical_ik_status_;
+  solvers::SolutionResult global_ik_status_;
+  int nl_ik_status_;
+  int nl_ik_resolve_status_;
+  std::vector<Eigen::Matrix<double, 6, 1>> q_analytical_ik_;
+  Eigen::Matrix<double, 6, 1> q_global_ik_;
+  Eigen::Matrix<double, 6, 1> q_nl_ik_;
+  Eigen::Matrix<double, 6, 1> q_nl_ik_resolve_;
+};
+
 class DUT {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(DUT)
@@ -92,32 +177,20 @@ class DUT {
       }
     }
 
-    // Now print to file.
-    if (output_file->is_open()) {
-      (*output_file) << "\nposition:\n" << link6_pos.transpose() << std::endl;
-      (*output_file) << "orientation (quaternion):\n"
-                     << ee_orient_.w() << " " << ee_orient_.x() << " "
-                     << ee_orient_.y() << " " << ee_orient_.z() << std::endl;
-      (*output_file) << "analytical_ik_status: " << ik_status.first
-                     << std::endl;
-      (*output_file) << "q_analytical:\n";
-      for (const auto& qi_analytical : q_analytical) {
-        (*output_file) << qi_analytical.transpose() << std::endl;
-      }
+    // For print out.
+    IKresult ik_result;
+    ik_result.analytical_ik_status() = ik_status.first;
+    ik_result.global_ik_status() = global_ik_status;
+    ik_result.nl_ik_status() = nl_ik_info;
+    ik_result.nl_ik_resolve_status() = nl_ik_resolve_info;
+    ik_result.q_analytical_ik() = q_analytical;
+    ik_result.q_global_ik() = q_global;
+    ik_result.q_nl_ik = q_nl_ik;
+    ik_result.q_nl_ik_resolve = q_nl_ik_resolve;
+    ik_result.ee_pose().linear() = ee_orient_.toRotationMatrix();
+    ik_result.ee_pose().translation() = link6_pos;
+    ik_result.printToFile(output_file);
 
-      (*output_file) << "nonlinear_ik_status: " << nl_ik_info << std::endl;
-      (*output_file) << "q_nonlinear_ik:\n" << q_nl_ik.transpose() << std::endl;
-
-      (*output_file) << "global_ik_status: " << ik_status.second << std::endl;
-      (*output_file) << "q_global:\n" << q_global.transpose() << std::endl;
-
-      (*output_file) << "nonlinear_ik_resolve_status: " << nl_ik_resolve_info
-                     << std::endl;
-      (*output_file) << "q_nonlinear_ik_resolve:\n"
-                     << q_nl_ik_resolve.transpose() << std::endl;
-    } else {
-      throw std::runtime_error("file is not open.\n");
-    }
     return ik_status;
   }
 
