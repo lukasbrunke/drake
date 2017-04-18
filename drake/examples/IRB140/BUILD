@@ -24,20 +24,34 @@ drake_cc_library(
     ],
 )
 
+drake_cc_library(
+    name = "IRB140_common",
+    testonly = 1,
+    srcs = ["test/irb140_common.cc"],
+    hdrs = ["test/irb140_common.h"],
+    deps = [
+        "@gtest//:main",
+        "//drake/common:eigen_matrix_compare",
+    ],
+)
+
 drake_cc_googletest(
     name = "IRB140_analytical_kinematics_test",
     srcs = ["test/IRB140_analytical_kinematics_test.cc"],
     deps = [
         ":IRB140_analytical_kinematics",
+        ":IRB140_common",
         "//drake/common:eigen_matrix_compare",
     ],
 )
 
 drake_cc_binary(
     name = "analytical_vs_global_ik_test",
+    testonly = 1,
     srcs = ["test/analytical_vs_global_ik_test.cc"],
     deps = [
         ":IRB140_analytical_kinematics",
+        ":IRB140_common",
         "//drake/multibody:global_inverse_kinematics",
         "//drake/multibody:inverse_kinematics",
     ],
