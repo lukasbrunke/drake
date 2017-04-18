@@ -5,6 +5,7 @@
 #include <iterator>
 
 #include "drake/examples/IRB140/IRB140_analytical_kinematics.h"
+#include "drake/examples/IRB140/test/irb140_common.h"
 #include "drake/multibody/constraint/rigid_body_constraint.h"
 #include "drake/multibody/global_inverse_kinematics.h"
 #include "drake/multibody/rigid_body_ik.h"
@@ -414,7 +415,10 @@ void DebugOutputFile(int argc, char* argv[]) {
   for (const auto& ik_result : ik_results) {
     if (ik_result.analytical_ik_status() == solvers::SolutionResult::kSolutionFound
         && ik_result.global_ik_status() != ik_result.analytical_ik_status()) {
-      ik_result.printToFile(&output_file);
+      // ik_result.printToFile(&output_file);
+
+      // First make sure analytical IK is correct.
+
     }
   }
   output_file.close();
