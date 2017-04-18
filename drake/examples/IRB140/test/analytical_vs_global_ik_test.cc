@@ -123,18 +123,38 @@ class DUT {
     }
   }
 
-  std::pair<solvers::SolutionResult, solvers::SolutionResult> SolveIK(
+  RigidBodyTreed* robot() const {return analytical_ik_.robot();}
+
+  void SolveGlobalIK(const Eigen::Vector3d &link6_pos, IKresult *ik_result) {
+    global_ik_pos_cnstr_.constraint()->UpdateLowerBound(link6_pos);
+    global_ik_pos_cnstr_.constraint()->UpdateUpperBound(link6_pos);
+    solvers::GurobiSolver gurobi_solver;
+    solvers::MosekSolver mosek_solver;
+    global_ik_.SetSolverOption(solvers::SolverType::kGurobi, "OutputFlag", 1);
+    solvers::SolutionResult global_ik_status = gurobi_solver.Solve(global_ik_);
+    global_ik_status = mosek_solver.Solve(global_ik_);
+    Eigen::Matrix<double, 6, 1> q_global;
+    q_global.setZero();
+    if (global_ik_status == solvers::SolutionResult::kSolutionFound) {
+      q_global = global_ik_.ReconstructGeneralizedPositionSolution();
+    }
+    ik_result->global_ik_status() = global_ik_status;
+    ik_result->q_global_ik() = q_global;
+  }
+
+  void SolveIK(
       const Eigen::Vector3d& link6_pos, std::fstream* output_file) {
-    std::pair<solvers::SolutionResult, solvers::SolutionResult> ik_status;
+    IKresult ik_result;
+
     // Solve IK analytically
     Eigen::Isometry3d link6_pose;
     link6_pose.linear() = ee_orient_.toRotationMatrix();
     link6_pose.translation() = link6_pos;
     const auto& q_analytical = analytical_ik_.inverse_kinematics(link6_pose);
     if (q_analytical.size() > 0) {
-      ik_status.first = solvers::SolutionResult::kSolutionFound;
+      ik_result.analytical_ik_status() = solvers::SolutionResult::kSolutionFound;
     } else {
-      ik_status.first = solvers::SolutionResult::kInfeasibleConstraints;
+      ik_result.analytical_ik_status() = solvers::SolutionResult::kInfeasibleConstraints;
     }
 
     // Solve IK using nonlinear IK
@@ -162,40 +182,36 @@ class DUT {
     q_nl_ik_resolve = Eigen::Matrix<double, 6, 1>::Constant(NAN);
 
     // Solve IK using global IK
-    global_ik_pos_cnstr_.constraint()->UpdateLowerBound(link6_pos);
-    global_ik_pos_cnstr_.constraint()->UpdateUpperBound(link6_pos);
-    solvers::GurobiSolver gurobi_solver;
-    solvers::SolutionResult global_ik_status = gurobi_solver.Solve(global_ik_);
-    ik_status.second = global_ik_status;
-    Eigen::Matrix<double, 6, 1> q_global;
-    q_global.setZero();
-    if (global_ik_status == solvers::SolutionResult::kSolutionFound) {
-      q_global = global_ik_.ReconstructGeneralizedPositionSolution();
+    SolveGlobalIK(link6_pos, &ik_result);
+    if (ik_result.global_ik_status() == solvers::SolutionResult::kSolutionFound) {
       if (nl_ik_info != 1) {
         // Resolve nonlinear IK if it was not solved before. This time use the
         // global IK solution as the initial guess.
-        Eigen::VectorXd q_global_dynamic = q_global;
+        Eigen::VectorXd q_global_dynamic = ik_result.q_global_ik();
         inverseKin(analytical_ik_.robot(), q_global_dynamic, q_global_dynamic,
                    2, nl_ik_cnstr.data(), ik_options, &q_nl_ik_resolve,
                    &nl_ik_resolve_info, &infeasible_constraint);
       }
     }
 
+    if (ik_result.analytical_ik_status() == solvers::SolutionResult::kSolutionFound &&
+        (ik_result.global_ik_status() ==
+            solvers::SolutionResult::kInfeasible_Or_Unbounded ||
+            ik_result.global_ik_status() ==
+                solvers::SolutionResult::kInfeasibleConstraints)) {
+      std::cout
+          << "global IK is infeasible, but analytical IK is feasible.\n";
+    }
+
     // For print out.
-    IKresult ik_result;
-    ik_result.analytical_ik_status() = ik_status.first;
-    ik_result.global_ik_status() = global_ik_status;
     ik_result.nl_ik_status() = nl_ik_info;
     ik_result.nl_ik_resolve_status() = nl_ik_resolve_info;
     ik_result.q_analytical_ik() = q_analytical;
-    ik_result.q_global_ik() = q_global;
     ik_result.q_nl_ik() = q_nl_ik;
     ik_result.q_nl_ik_resolve() = q_nl_ik_resolve;
     ik_result.ee_pose().linear() = ee_orient_.toRotationMatrix();
     ik_result.ee_pose().translation() = link6_pos;
     ik_result.printToFile(output_file);
-
-    return ik_status;
   }
 
  private:
@@ -264,15 +280,7 @@ void DoMain(int argc, char* argv[]) {
         Eigen::Isometry3d link6_pose;
         link6_pose.linear() = link6_angleaxis.toRotationMatrix();
         link6_pose.translation() = link6_pos;
-        const auto& ik_status = dut.SolveIK(link6_pos, &output_file);
-        if (ik_status.first == solvers::SolutionResult::kSolutionFound &&
-            (ik_status.second ==
-                 solvers::SolutionResult::kInfeasible_Or_Unbounded ||
-             ik_status.second ==
-                 solvers::SolutionResult::kInfeasibleConstraints)) {
-          std::cout
-              << "global IK is infeasible, but analytical IK is feasible.\n";
-        }
+        dut.SolveIK(link6_pos, &output_file);
         std::cout << "sample count: " << sample_count << std::endl;
         ++sample_count;
       }
@@ -414,19 +422,14 @@ void DebugOutputFile(int argc, char* argv[]) {
   RemoveFileIfExist(out_file_name);
   std::fstream output_file;
   output_file.open(out_file_name, std::ios::app | std::ios::out);
-  // Only find the case that analytical ik is feasible, but global IK is infeasible
-  IRB140AnalyticalKinematics analytical_ik;
-  RigidBodyTreed* robot = analytical_ik.robot();
-  KinematicsCache<double> cache = robot->CreateKinematicsCache();
-  int ee_idx = robot->FindBodyIndex("link_6");
 
-  Eigen::Matrix3d ee_rotmat = ik_results[0].ee_pose().linear();
-  multibody::GlobalInverseKinematics global_ik(*robot);
-  solvers::Binding<solvers::LinearConstraint> global_ik_pos_cnstr = global_ik.AddWorldPositionConstraint(ee_idx, Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());
-  for (int i = 0; i < 3; ++i) {
-    global_ik.AddBoundingBoxConstraint(ee_rotmat.col(i), ee_rotmat.col(i), global_ik.body_rotation_matrix(ee_idx).col(i));
-  }
-  for (const auto& ik_result : ik_results) {
+  Eigen::Quaterniond link6_quat(ik_results[0].ee_pose().linear());
+  DUT dut(link6_quat);
+  // Only find the case that analytical ik is feasible, but global IK is infeasible
+  RigidBodyTreed* robot = dut.robot();
+  KinematicsCache<double> cache = robot->CreateKinematicsCache();
+
+  for (auto& ik_result : ik_results) {
     if (ik_result.analytical_ik_status() == solvers::SolutionResult::kSolutionFound
         && ik_result.global_ik_status() != ik_result.analytical_ik_status()) {
       // ik_result.printToFile(&output_file);
@@ -443,13 +446,8 @@ void DebugOutputFile(int argc, char* argv[]) {
       CompareIsometry3d(link_pose[5], ik_result.ee_pose(), 1E-5);
 
       // Now solve global IK
-      global_ik_pos_cnstr.constraint()->UpdateLowerBound(ik_result.ee_pose().translation());
-      global_ik_pos_cnstr.constraint()->UpdateUpperBound(ik_result.ee_pose().translation());
-      solvers::MosekSolver mosek_solver;
-      solvers::GurobiSolver gurobi_solver;
-      solvers::SolutionResult global_ik_result = gurobi_solver.Solve(global_ik);
-      global_ik_result = mosek_solver.Solve(global_ik);
-      std::cout << global_ik_result;
+      dut.SolveGlobalIK(ik_result.ee_pose().translation(), &ik_result);
+      ik_result.printToFile(&output_file);
     }
   }
   output_file.close();
