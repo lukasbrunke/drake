@@ -1,6 +1,8 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <sstream>
+#include <iterator>
 
 #include "drake/examples/IRB140/IRB140_analytical_kinematics.h"
 #include "drake/multibody/constraint/rigid_body_constraint.h"
@@ -15,8 +17,6 @@ namespace examples {
 namespace IRB140 {
 class IKresult {
  public:
-  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(IKresult)
-
   IKresult() {}
 
   Eigen::Isometry3d& ee_pose() {return ee_pose_;}
@@ -185,8 +185,8 @@ class DUT {
     ik_result.nl_ik_resolve_status() = nl_ik_resolve_info;
     ik_result.q_analytical_ik() = q_analytical;
     ik_result.q_global_ik() = q_global;
-    ik_result.q_nl_ik = q_nl_ik;
-    ik_result.q_nl_ik_resolve = q_nl_ik_resolve;
+    ik_result.q_nl_ik() = q_nl_ik;
+    ik_result.q_nl_ik_resolve() = q_nl_ik_resolve;
     ik_result.ee_pose().linear() = ee_orient_.toRotationMatrix();
     ik_result.ee_pose().translation() = link6_pos;
     ik_result.printToFile(output_file);
@@ -201,6 +201,16 @@ class DUT {
   solvers::Binding<solvers::LinearConstraint> global_ik_pos_cnstr_;
   Eigen::Quaterniond ee_orient_;
 };
+
+void RemoveFileIfExist(const std::string& file_name) {
+  std::ifstream file(file_name);
+  if (file) {
+    if (remove(file_name.c_str()) != 0) {
+      throw std::runtime_error("Error deleting file " + file_name);
+    }
+  }
+  file.close();
+}
 
 void DoMain(int argc, char* argv[]) {
   if (argc != 3) {
@@ -223,13 +233,7 @@ void DoMain(int argc, char* argv[]) {
   }
 
   // Remove the file if it exists
-  std::ifstream file(file_name);
-  if (file) {
-    if (remove(file_name.c_str()) != 0) {
-      throw std::runtime_error("Error deleting file " + file_name);
-    }
-  }
-  file.close();
+  RemoveFileIfExist(file_name);
 
   Eigen::Vector3d box_size(1, 1, 1);
   Eigen::Vector3d box_center(0.5, 0, 0.4);
@@ -273,11 +277,154 @@ void DoMain(int argc, char* argv[]) {
   output_file.close();
 }
 
+std::vector<std::string> BreakLineBySpaces(const std::string& line) {
+  std::istringstream iss(line);
+  std::vector<std::string> strings{std::istream_iterator<std::string>{iss},
+                                   std::istream_iterator<std::string>{}};
+  return strings;
+}
+
+void ReadOutputFile(std::ifstream& file, std::vector<IKresult>* ik_results) {
+  std::string line;
+  if (file.is_open()) {
+    while (getline(file, line)) {
+      IKresult ik_result;
+      getline(file, line);
+      if (line == "position:") {
+        getline(file, line);
+        // Parse the position
+        const auto pos_str = BreakLineBySpaces(line);
+        for (int i = 0; i < 3; ++i) {
+          ik_result.ee_pose().translation()(i) = std::atof(pos_str[i].c_str());
+        }
+      } else {
+        throw std::runtime_error("oops");
+      }
+
+      getline(file, line);
+      if (line == "orientation (quaternion):") {
+        getline(file, line);
+        // parse the orientation
+        const auto quat_str = BreakLineBySpaces(line);
+        Eigen::Quaterniond quat(std::atof(quat_str[0].c_str()), std::atof(quat_str[1].c_str()), std::atof(quat_str[2].c_str()), std::atof(quat_str[3].c_str()));
+        ik_result.ee_pose().linear() = quat.toRotationMatrix();
+      } else {
+        throw std::runtime_error("oops");
+      }
+
+      getline(file, line);
+      const auto analytical_ik_status_str = BreakLineBySpaces(line);
+      if (analytical_ik_status_str[0] == "analytical_ik_status:") {
+        ik_result.analytical_ik_status() = static_cast<solvers::SolutionResult>(std::atoi(analytical_ik_status_str[1].c_str()));
+      } else {
+        throw std::runtime_error("oops");
+      }
+
+      getline(file, line);
+      if (line == "q_analytical:") {
+        while (getline(file, line)) {
+          const auto q_analytical_ik_str = BreakLineBySpaces(line);
+          if (q_analytical_ik_str[0] == "nonlinear_ik_status:") {
+            ik_result.nl_ik_status() = std::atoi(q_analytical_ik_str[1].c_str());
+            break;
+          } else {
+            Eigen::Matrix<double, 6, 1> q_analytical_ik;
+            for (int i = 0; i < 6; ++i) {
+              q_analytical_ik(i) = std::atof(q_analytical_ik_str[i].c_str());
+            }
+            ik_result.q_analytical_ik().push_back(q_analytical_ik);
+          }
+        }
+      } else {
+        throw std::runtime_error("oops");
+      }
+
+      getline(file, line);
+      if (line == "q_nonlinear_ik:") {
+        getline(file, line);
+        const auto q_nl_ik_str = BreakLineBySpaces(line);
+        for (int i = 0; i < 6; ++i) {
+          ik_result.q_nl_ik()(i) = std::atof(q_nl_ik_str[i].c_str());
+        }
+      } else {
+        throw std::runtime_error("oops");
+      }
+
+      getline(file, line);
+      const auto global_ik_status_str = BreakLineBySpaces(line);
+      if (global_ik_status_str[0] == "global_ik_status:") {
+        ik_result.global_ik_status() = static_cast<solvers::SolutionResult>(std::atoi(global_ik_status_str[1].c_str()));
+      } else {
+        throw std::runtime_error("oops");
+      }
+
+      getline(file, line);
+      if (line == "q_global:") {
+        getline(file, line);
+        const auto q_global_ik_str = BreakLineBySpaces(line);
+        for (int i = 0; i < 6; ++i) {
+          ik_result.q_global_ik()(i) = std::atof(q_global_ik_str[i].c_str());
+        }
+      } else {
+        throw std::runtime_error("oops");
+      }
+
+      getline(file, line);
+      const auto nl_ik_resolve_status_str = BreakLineBySpaces(line);
+      if (nl_ik_resolve_status_str[0] == "nonlinear_ik_resolve_status:") {
+        ik_result.nl_ik_resolve_status() = std::atoi(nl_ik_resolve_status_str[1].c_str());
+      } else {
+        throw std::runtime_error("oops");
+      }
+
+      getline(file, line);
+      if (line == "q_nonlinear_ik_resolve:") {
+        getline(file, line);
+        const auto q_nl_ik_resolve_str = BreakLineBySpaces(line);
+        for (int i = 0; i < 6; ++i) {
+          ik_result.q_nl_ik_resolve()(i) = std::atof(q_nl_ik_resolve_str[i].c_str());
+        }
+      } else {
+        throw std::runtime_error("oops");
+      }
+
+      ik_results->push_back(ik_result);
+    }
+  }
+
+}
+void DebugOutputFile(int argc, char* argv[]) {
+  if (argc != 4) {
+    throw std::runtime_error("Usage is <infile>. num_pts_per_axis <outfile>");
+  }
+  std::string in_file_name(argv[1]);
+  int num_pts_per_axis = atoi(argv[2]);
+  std::string out_file_name(argv[3]);
+  std::vector<IKresult> ik_results;
+  ik_results.reserve(num_pts_per_axis * num_pts_per_axis * num_pts_per_axis);
+
+  std::ifstream in_file(in_file_name);
+  ReadOutputFile(in_file, &ik_results);
+  in_file.close();
+
+  RemoveFileIfExist(out_file_name);
+  std::fstream output_file;
+  output_file.open(out_file_name, std::ios::app | std::ios::out);
+  // Only find the case that analytical ik is feasible, but global IK is infeasible
+  for (const auto& ik_result : ik_results) {
+    if (ik_result.analytical_ik_status() == solvers::SolutionResult::kSolutionFound
+        && ik_result.global_ik_status() != ik_result.analytical_ik_status()) {
+      ik_result.printToFile(&output_file);
+    }
+  }
+  output_file.close();
+}
 }  // namespace IRB140
 }  // namespace examples
 }  // namespace drake
 
 int main(int argc, char* argv[]) {
-  drake::examples::IRB140::DoMain(argc, argv);
+  //drake::examples::IRB140::DoMain(argc, argv);
+  drake::examples::IRB140::DebugOutputFile(argc, argv);
   return 0;
 }
