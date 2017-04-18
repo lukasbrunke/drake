@@ -2,6 +2,22 @@ from director import lcmUtils
 import pickle
 import bot_core as lcmbotcore
 
+# receive lcm message and draw data
+def receiveMessage(msg):
+    folderName = 'my data'
+
+    # remove the folder completely
+    om.removeFromObjectModel(om.findObjectByName(folderName))
+
+    #create a folder
+    folder = om.getOrCreateContainer(folderName)
+
+    # unpack message
+    data = pickle.loads(msg.data)
+
+    d = DebugData()
+    
+
 def publishData():
     data = "ik_output.txt"
     msg = lcmbotcore.raw_t()
