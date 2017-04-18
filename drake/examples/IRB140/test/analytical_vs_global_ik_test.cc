@@ -4,12 +4,15 @@
 #include <sstream>
 #include <iterator>
 
+#include <gtest/gtest.h>
+
 #include "drake/examples/IRB140/IRB140_analytical_kinematics.h"
 #include "drake/examples/IRB140/test/irb140_common.h"
 #include "drake/multibody/constraint/rigid_body_constraint.h"
 #include "drake/multibody/global_inverse_kinematics.h"
 #include "drake/multibody/rigid_body_ik.h"
 #include "drake/solvers/gurobi_solver.h"
+#include "drake/solvers/mosek_solver.h"
 
 using Eigen::Isometry3d;
 
@@ -412,13 +415,41 @@ void DebugOutputFile(int argc, char* argv[]) {
   std::fstream output_file;
   output_file.open(out_file_name, std::ios::app | std::ios::out);
   // Only find the case that analytical ik is feasible, but global IK is infeasible
+  IRB140AnalyticalKinematics analytical_ik;
+  RigidBodyTreed* robot = analytical_ik.robot();
+  KinematicsCache<double> cache = robot->CreateKinematicsCache();
+  int ee_idx = robot->FindBodyIndex("link_6");
+
+  Eigen::Matrix3d ee_rotmat = ik_results[0].ee_pose().linear();
+  multibody::GlobalInverseKinematics global_ik(*robot);
+  solvers::Binding<solvers::LinearConstraint> global_ik_pos_cnstr = global_ik.AddWorldPositionConstraint(ee_idx, Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());
+  for (int i = 0; i < 3; ++i) {
+    global_ik.AddBoundingBoxConstraint(ee_rotmat.col(i), ee_rotmat.col(i), global_ik.body_rotation_matrix(ee_idx).col(i));
+  }
   for (const auto& ik_result : ik_results) {
     if (ik_result.analytical_ik_status() == solvers::SolutionResult::kSolutionFound
         && ik_result.global_ik_status() != ik_result.analytical_ik_status()) {
       // ik_result.printToFile(&output_file);
 
       // First make sure analytical IK is correct.
+      EXPECT_TRUE((ik_result.q_analytical_ik()[0].array() >= robot->joint_limit_min.array()).all());
+      EXPECT_TRUE((ik_result.q_analytical_ik()[0].array() <= robot->joint_limit_max.array()).all());
+      cache.initialize(ik_result.q_analytical_ik()[0]);
+      robot->doKinematics(cache);
+      std::array<Eigen::Isometry3d, 6> link_pose;
+      for (int i = 0; i < 6; ++i) {
+        link_pose[i] = robot->CalcBodyPoseInWorldFrame(cache, *(robot->FindBody("link_" + std::to_string(i + 1))));
+      }
+      CompareIsometry3d(link_pose[5], ik_result.ee_pose(), 1E-5);
 
+      // Now solve global IK
+      global_ik_pos_cnstr.constraint()->UpdateLowerBound(ik_result.ee_pose().translation());
+      global_ik_pos_cnstr.constraint()->UpdateUpperBound(ik_result.ee_pose().translation());
+      solvers::MosekSolver mosek_solver;
+      solvers::GurobiSolver gurobi_solver;
+      solvers::SolutionResult global_ik_result = gurobi_solver.Solve(global_ik);
+      global_ik_result = mosek_solver.Solve(global_ik);
+      std::cout << global_ik_result;
     }
   }
   output_file.close();
