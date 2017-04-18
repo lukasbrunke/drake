@@ -130,9 +130,9 @@ class DUT {
     global_ik_pos_cnstr_.constraint()->UpdateUpperBound(link6_pos);
     solvers::GurobiSolver gurobi_solver;
     solvers::MosekSolver mosek_solver;
-    global_ik_.SetSolverOption(solvers::SolverType::kGurobi, "OutputFlag", 1);
-    solvers::SolutionResult global_ik_status = gurobi_solver.Solve(global_ik_);
-    global_ik_status = mosek_solver.Solve(global_ik_);
+    //global_ik_.SetSolverOption(solvers::SolverType::kGurobi, "OutputFlag", 1);
+    //solvers::SolutionResult global_ik_status = gurobi_solver.Solve(global_ik_);
+    solvers::SolutionResult global_ik_status = mosek_solver.Solve(global_ik_);
     Eigen::Matrix<double, 6, 1> q_global;
     q_global.setZero();
     if (global_ik_status == solvers::SolutionResult::kSolutionFound) {
@@ -406,12 +406,13 @@ void ReadOutputFile(std::ifstream& file, std::vector<IKresult>* ik_results) {
 
 }
 void DebugOutputFile(int argc, char* argv[]) {
-  if (argc != 4) {
-    throw std::runtime_error("Usage is <infile>. num_pts_per_axis <outfile>");
+  if (argc != 5) {
+    throw std::runtime_error("Usage is <infile>. num_pts_per_axis <outfile1> <outfile2>");
   }
   std::string in_file_name(argv[1]);
   int num_pts_per_axis = atoi(argv[2]);
-  std::string out_file_name(argv[3]);
+  std::string out_file_name1(argv[3]);
+  std::string out_file_name2(argv[4]);
   std::vector<IKresult> ik_results;
   ik_results.reserve(num_pts_per_axis * num_pts_per_axis * num_pts_per_axis);
 
@@ -419,9 +420,13 @@ void DebugOutputFile(int argc, char* argv[]) {
   ReadOutputFile(in_file, &ik_results);
   in_file.close();
 
-  RemoveFileIfExist(out_file_name);
-  std::fstream output_file;
-  output_file.open(out_file_name, std::ios::app | std::ios::out);
+  RemoveFileIfExist(out_file_name1);
+  std::fstream output_file1;
+  output_file1.open(out_file_name1, std::ios::app | std::ios::out);
+
+  RemoveFileIfExist(out_file_name2);
+  std::fstream output_file2;
+  output_file2.open(out_file_name2, std::ios::app | std::ios::out);
 
   Eigen::Quaterniond link6_quat(ik_results[0].ee_pose().linear());
   DUT dut(link6_quat);
@@ -447,10 +452,12 @@ void DebugOutputFile(int argc, char* argv[]) {
 
       // Now solve global IK
       dut.SolveGlobalIK(ik_result.ee_pose().translation(), &ik_result);
-      ik_result.printToFile(&output_file);
+      ik_result.printToFile(&output_file1);
     }
+    ik_result.printToFile(&output_file2);
   }
-  output_file.close();
+  output_file1.close();
+  output_file2.close();
 }
 }  // namespace IRB140
 }  // namespace examples
