@@ -24,7 +24,7 @@ def receiveMessage(msg):
     d2 = DebugData()
     d3 = DebugData()
     
-    file = open('/home/hongkai/drake-distro/ik_output21_1.txt','r')
+    file = open('/home/hongkai/drake-distro/ik_output21_0_recompute.txt','r')
 
     lines = file.readlines()
 
@@ -46,7 +46,7 @@ def receiveMessage(msg):
             global_ik_status_str = line.split()
             global_ik_status = int(global_ik_status_str[1])
         elif line.startswith("q_nonlinear_ik_resolve:"):
-            if (analytical_ik_status == 0 or nonlinear_ik_status == 0) and (global_ik_status == 0):
+            if (analytical_ik_status == 0 or nonlinear_ik_status == 1) and (global_ik_status == 0):
                 # Analytical IK and global IK both find solution
                 d1.addSphere(pos, radius = 0.006, color = [0, 1, 0])
             elif (analytical_ik_status == -2 and global_ik_status == -2):
