@@ -205,6 +205,16 @@ Eigen::Isometry3d IRB140AnalyticalKinematics::X_06(const Eigen::Matrix<double, 6
   return X_01(q(0)) * X_12(q(1)) * X_23(q(2)) * X_34(q(3)) * X_45(q(4)) * X_56(q(5));
 }
 
+// If the abs value of x is small than 1 + tol, then set x to std::max(std::min(1, x), -1)
+// else, leave x what it is
+double clapToPlusMinusOneRange(double x, double tol = 1E-6) {
+  if (std::abs(x) < 1 + 1E-6) {
+    return std::max(std::min(x, 1.0), -1.0);
+  } else {
+    return x;
+  }
+}
+
 std::vector<double> IRB140AnalyticalKinematics::q1(const Eigen::Isometry3d& link6_pose) const {
   double theta = std::atan2(link6_pose.translation()(1), link6_pose.translation()(0));
   std::vector<double> q1_all;
@@ -315,6 +325,8 @@ std::vector<Eigen::Vector3d> IRB140AnalyticalKinematics::q456(const Eigen::Isome
     for (int i = 0; i < 2; ++i) {
       double c4 = c4_times_s5 / s5[i];
       double s4 = s4_times_s5 / s5[i];
+      c4 = clapToPlusMinusOneRange(c4);
+      s4 = clapToPlusMinusOneRange(s4);
       if (std::abs(c4) > 1 || std::abs(s4) > 1) {
         continue;
       }
@@ -345,6 +357,8 @@ std::vector<Eigen::Vector3d> IRB140AnalyticalKinematics::q456(const Eigen::Isome
       Eigen::Vector2d sin_cos_q6 = A6.colPivHouseholderQr().solve(b6);
       s6 = sin_cos_q6(0);
       c6 = sin_cos_q6(1);
+      s6 = clapToPlusMinusOneRange(s6);
+      c6 = clapToPlusMinusOneRange(c6);
       if (std::abs(s6) > 1 || std::abs(c6) > 1) {
         continue;
       }

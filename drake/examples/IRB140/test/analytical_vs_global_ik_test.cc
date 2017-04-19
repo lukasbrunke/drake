@@ -125,6 +125,19 @@ class DUT {
 
   RigidBodyTreed* robot() const {return analytical_ik_.robot();}
 
+  void SolveAnalyticalIK(const Eigen::Vector3d& link6_pos, IKresult* ik_result) {
+    // Solve IK analytically
+    Eigen::Isometry3d link6_pose;
+    link6_pose.linear() = ee_orient_.toRotationMatrix();
+    link6_pose.translation() = link6_pos;
+    ik_result->q_analytical_ik() = analytical_ik_.inverse_kinematics(link6_pose);
+    if (ik_result->q_analytical_ik().size() > 0) {
+      ik_result->analytical_ik_status() = solvers::SolutionResult::kSolutionFound;
+    } else {
+      ik_result->analytical_ik_status() = solvers::SolutionResult::kInfeasibleConstraints;
+    }
+  }
+
   void SolveGlobalIK(const Eigen::Vector3d &link6_pos, IKresult *ik_result) {
     global_ik_pos_cnstr_.constraint()->UpdateLowerBound(link6_pos);
     global_ik_pos_cnstr_.constraint()->UpdateUpperBound(link6_pos);
@@ -145,17 +158,9 @@ class DUT {
   void SolveIK(
       const Eigen::Vector3d& link6_pos, std::fstream* output_file) {
     IKresult ik_result;
+    // Solve IK using analytical IK
+    SolveAnalyticalIK(link6_pos, &ik_result);
 
-    // Solve IK analytically
-    Eigen::Isometry3d link6_pose;
-    link6_pose.linear() = ee_orient_.toRotationMatrix();
-    link6_pose.translation() = link6_pos;
-    const auto& q_analytical = analytical_ik_.inverse_kinematics(link6_pose);
-    if (q_analytical.size() > 0) {
-      ik_result.analytical_ik_status() = solvers::SolutionResult::kSolutionFound;
-    } else {
-      ik_result.analytical_ik_status() = solvers::SolutionResult::kInfeasibleConstraints;
-    }
 
     // Solve IK using nonlinear IK
     WorldPositionConstraint nl_ik_pos_cnstr(analytical_ik_.robot(), ee_idx_,
@@ -206,7 +211,6 @@ class DUT {
     // For print out.
     ik_result.nl_ik_status() = nl_ik_info;
     ik_result.nl_ik_resolve_status() = nl_ik_resolve_info;
-    ik_result.q_analytical_ik() = q_analytical;
     ik_result.q_nl_ik() = q_nl_ik;
     ik_result.q_nl_ik_resolve() = q_nl_ik_resolve;
     ik_result.ee_pose().linear() = ee_orient_.toRotationMatrix();
@@ -439,7 +443,7 @@ void DebugOutputFile(int argc, char* argv[]) {
   KinematicsCache<double> cache = robot->CreateKinematicsCache();
 
   for (auto& ik_result : ik_results) {
-    if (ik_result.analytical_ik_status() == solvers::SolutionResult::kSolutionFound
+    /*if (ik_result.analytical_ik_status() == solvers::SolutionResult::kSolutionFound
         && ik_result.global_ik_status() != ik_result.analytical_ik_status()) {
       // ik_result.printToFile(&output_file);
 
@@ -457,6 +461,10 @@ void DebugOutputFile(int argc, char* argv[]) {
       // Now solve global IK
       dut.SolveGlobalIK(ik_result.ee_pose().translation(), &ik_result);
       ik_result.printToFile(&output_file1);
+    }*/
+    if (ik_result.analytical_ik_status() == solvers::SolutionResult::kInfeasibleConstraints
+        && ik_result.global_ik_status() == solvers::SolutionResult::kSolutionFound) {
+      dut.SolveAnalyticalIK(ik_result.ee_pose().translation(), &ik_result);
     }
     ik_result.printToFile(&output_file2);
   }
@@ -468,7 +476,7 @@ void DebugOutputFile(int argc, char* argv[]) {
 }  // namespace drake
 
 int main(int argc, char* argv[]) {
-  drake::examples::IRB140::DoMain(argc, argv);
-  //drake::examples::IRB140::DebugOutputFile(argc, argv);
+  //drake::examples::IRB140::DoMain(argc, argv);
+  drake::examples::IRB140::DebugOutputFile(argc, argv);
   return 0;
 }
