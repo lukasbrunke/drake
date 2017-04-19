@@ -131,8 +131,8 @@ class DUT {
     solvers::GurobiSolver gurobi_solver;
     solvers::MosekSolver mosek_solver;
     //global_ik_.SetSolverOption(solvers::SolverType::kGurobi, "OutputFlag", 1);
-    //solvers::SolutionResult global_ik_status = gurobi_solver.Solve(global_ik_);
-    solvers::SolutionResult global_ik_status = mosek_solver.Solve(global_ik_);
+    solvers::SolutionResult global_ik_status = gurobi_solver.Solve(global_ik_);
+    //solvers::SolutionResult global_ik_status = mosek_solver.Solve(global_ik_);
     Eigen::Matrix<double, 6, 1> q_global;
     q_global.setZero();
     if (global_ik_status == solvers::SolutionResult::kSolutionFound) {
@@ -247,6 +247,10 @@ void DoMain(int argc, char* argv[]) {
     }
     case 1: {
       link6_angleaxis = Eigen::AngleAxisd(M_PI, Eigen::Vector3d(1, 0, 0));
+      break;
+    }
+    case 2: {
+      link6_angleaxis = Eigen::AngleAxisd(M_PI_2, Eigen::Vector3d(0, 0, 1));
       break;
     }
     default: { throw std::runtime_error("Unsupported rotation.\n"); }
@@ -464,7 +468,7 @@ void DebugOutputFile(int argc, char* argv[]) {
 }  // namespace drake
 
 int main(int argc, char* argv[]) {
-  //drake::examples::IRB140::DoMain(argc, argv);
-  drake::examples::IRB140::DebugOutputFile(argc, argv);
+  drake::examples::IRB140::DoMain(argc, argv);
+  //drake::examples::IRB140::DebugOutputFile(argc, argv);
   return 0;
 }
