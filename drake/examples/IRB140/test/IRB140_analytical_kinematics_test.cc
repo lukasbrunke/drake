@@ -177,6 +177,9 @@ TEST_F(IRB140Test, inverse_kinematics_test) {
   link6_pose.linear() = Eigen::Matrix3d::Identity();
   link6_pose.translation() = Eigen::Vector3d(0, 0, 0.9);
   link6_pose_all.push_back(link6_pose);
+  link6_pose.linear() =  Eigen::Matrix3d::Identity();
+  link6_pose.translation() = Eigen::Vector3d(0.45, 0, 0.55);
+  link6_pose_all.push_back(link6_pose);
 
   KinematicsCache<double> cache = analytical_kinematics.robot()->CreateKinematicsCache();
   for (const auto& ee_pose : link6_pose_all) {
