@@ -23,6 +23,7 @@ def receiveMessage(msg):
     d1 = DebugData()
     d2 = DebugData()
     d3 = DebugData()
+    d4 = DebugData()
     
     file = open('/home/hongkai/drake-distro/ik_output21_0.txt','r')
 
@@ -53,12 +54,15 @@ def receiveMessage(msg):
                 d2.addSphere(pos, radius = 0.01, color = [0, 0, 1])
             elif (analytical_ik_status == -2 and global_ik_status == 0):
                 d3.addSphere(pos, radius = 0.01, color = [1, 0, 0])
+            elif analytical_ik_status == 0 and global_ik_status == -2:
+                d4.addSphere(pos, radius = 0.01, color = [0, 0, 0])
         line_number =  line_number + 1
 
     
     vis.showPolyData(d1.getPolyData(), 'reachable', parent=folder, colorByName='RGB255')
     vis.showPolyData(d2.getPolyData(), 'unreachable', parent=folder, colorByName='RGB255')
     vis.showPolyData(d3.getPolyData(), 'relaxation', parent=folder, colorByName='RGB255')
+    vis.showPolyData(d4.getPolyData(), 'problem', parent=folder, colorByName='RGB255')
 
 def publishData():
     data = 1
