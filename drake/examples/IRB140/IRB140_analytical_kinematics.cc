@@ -215,16 +215,23 @@ double clapToPlusMinusOneRange(double x, double tol = 1E-6) {
   }
 }
 
-std::vector<double> IRB140AnalyticalKinematics::q1(const Eigen::Isometry3d& link6_pose) const {
-  double theta = std::atan2(link6_pose.translation()(1), link6_pose.translation()(0));
-  std::vector<double> q1_all;
-  for (int i = -2; i <= 2; ++i) {
-    double q1_val = theta + M_PI * i;
-    if ( q1_val >= robot_->joint_limit_min(0) && q1_val <= robot_->joint_limit_max(0)) {
-      q1_all.push_back(q1_val);
+// Return all the angles in the form
+// θ + k * δ ∈ [theta_lb, theta_ub]
+std::vector<double> FindAllAnglesWithShift(double theta, double delta, double theta_lb, double theta_ub) {
+  std::vector<double> ret;
+  ret.reserve(std::ceil((theta_ub - theta_lb) / delta));
+  for (int i = std::floor((theta_lb - theta) / delta); i <= std::ceil((theta_ub - theta) / delta); ++i) {
+    double val = theta + i * delta;
+    if (val >= theta_lb && val <= theta_ub) {
+      ret.push_back(val);
     }
   }
-  return q1_all;
+  return ret;
+}
+
+std::vector<double> IRB140AnalyticalKinematics::q1(const Eigen::Isometry3d& link6_pose) const {
+  double theta = std::atan2(link6_pose.translation()(1), link6_pose.translation()(0));
+  return FindAllAnglesWithShift(theta, M_PI, robot_->joint_limit_min(0), robot_->joint_limit_max(0));
 }
 
 std::vector<double> IRB140AnalyticalKinematics::q2(const Eigen::Isometry3d& link6_pose, double q1) const {
@@ -244,23 +251,15 @@ std::vector<double> IRB140AnalyticalKinematics::q2(const Eigen::Isometry3d& link
   }
   double phi = std::atan2(a0, b0);
   double q2_plus_phi = std::asin(sin_q2_plus_phi);
-  for (int i = -1; i <= 1; ++i) {
-    double q2_val = q2_plus_phi - phi + 2 * M_PI * i;
-    if (q2_val >= robot_->joint_limit_min(1) && q2_val <= robot_->joint_limit_max(1)) {
-      q2_all.push_back(q2_val);
-    }
-    q2_val = M_PI - q2_plus_phi - phi + 2 * M_PI * i;
-    if (q2_val >= robot_->joint_limit_min(1) && q2_val <= robot_->joint_limit_max(1)) {
-      q2_all.push_back(q2_val);
-    }
-  }
+  q2_all = FindAllAnglesWithShift(q2_plus_phi - phi, 2 * M_PI, robot_->joint_limit_min(1), robot_->joint_limit_max(1));
+  const auto q2_candidate2 = FindAllAnglesWithShift(M_PI - q2_plus_phi - phi, 2 * M_PI, robot_->joint_limit_min(1), robot_->joint_limit_max(1));
+  q2_all.insert(q2_all.end(), q2_candidate2.begin(), q2_candidate2.end());
   return q2_all;
 }
 
 std::vector<double> IRB140AnalyticalKinematics::q3(const Eigen::Isometry3d& link6_pose,
                                                    double q1,
                                                    double q2) const {
-  std::vector<double> q3_all;
   double a0 = link6_pose.translation()(2) - l0_ - l1_y_;
   double b0;
   if (std::abs(std::cos(q1)) > 0.1) {
@@ -271,28 +270,21 @@ std::vector<double> IRB140AnalyticalKinematics::q3(const Eigen::Isometry3d& link
   double cos_q23 = (b0 - l2_ * std::sin(q2)) / (l3_ + l4_);
   double sin_q23 = (a0 - l2_ * std::cos(q2)) / -(l3_ + l4_);
   double q2_plus_q3 = atan2(sin_q23, cos_q23);
-  for (int i = -1; i <= 1; ++i) {
-    double q3_val = q2_plus_q3 - q2 + 2 * M_PI * i;
-    if (q3_val >= robot_->joint_limit_min(2) && q3_val <= robot_->joint_limit_max(2)) {
-      q3_all.push_back(q3_val);
-    }
-  }
-  return q3_all;
+  return FindAllAnglesWithShift(q2_plus_q3 - q2, 2 * M_PI, robot_->joint_limit_min(2), robot_->joint_limit_max(2));
 }
 
 void add_q456_fun(double q4_val, double q6_val, double q5, RigidBodyTreed* robot, std::vector<Eigen::Vector3d>* q456_all) {
   if (q4_val >= robot->joint_limit_min(3) && q4_val <= robot->joint_limit_max(3)) {
     if (q6_val >= robot->joint_limit_min(5) && q6_val <= robot->joint_limit_max(5)) {
-      for (int i = -1; i <= 1; ++i) {
-        double q5_val = q5 + 2 * M_PI * i;
-        if (q5_val >= robot->joint_limit_min(4) && q5_val <= robot->joint_limit_max(4)) {
-          q456_all->emplace_back(q4_val, q5_val, q6_val);
-        }
+      const auto q5_all = FindAllAnglesWithShift(q5, 2 * M_PI, robot->joint_limit_min(4), robot->joint_limit_max(4));
+      for (const double q5_val : q5_all) {
+        q456_all->emplace_back(q4_val, q5_val, q6_val);
       }
     }
   }
 
 }
+
 std::vector<Eigen::Vector3d> IRB140AnalyticalKinematics::q456(const Eigen::Isometry3d& link6_pose, double q1, double q2, double q3) const {
   std::vector<Eigen::Vector3d> q456_all;
   double R11 = link6_pose.linear()(0, 0);
@@ -309,6 +301,7 @@ std::vector<Eigen::Vector3d> IRB140AnalyticalKinematics::q456(const Eigen::Isome
   double s1 = std::sin(q1);
   double s23 = std::sin(q2 + q3);
   double c5 = c1 * c23 * R11 + s1 * c23 * R21 - s23 * R31;
+  c5 = clapToPlusMinusOneRange(c5);
   if (std::abs(c5) > 1) {
     return q456_all;
   }
@@ -363,22 +356,13 @@ std::vector<Eigen::Vector3d> IRB140AnalyticalKinematics::q456(const Eigen::Isome
         continue;
       }
       double theta6 = std::atan2(s6, c6);
-      for (int i4 = -1; i4 <= 1; ++i4) {
-        double q4_val = theta4 + 2 * M_PI * i4;
-        if (q4_val < robot_->joint_limit_min(3) || q4_val > robot_->joint_limit_max(3)) {
-          continue;
-        }
-        for (int i5 = -1; i5 <= 1; ++i5) {
-          double q5_val = theta5 + 2 * M_PI * i5;
-          if (q5_val < robot_->joint_limit_min(4) || q5_val > robot_->joint_limit_max(4)) {
-            continue;
-          }
-          for (int i6 = -1; i6 <= 1; ++i6) {
-            double q6_val = theta6 + 2 * M_PI * i6;
-            if (q6_val < robot_->joint_limit_min(5) || q6_val > robot_->joint_limit_max(5)) {
-              continue;
-            }
-            q456_all.push_back(Eigen::Vector3d(q4_val, q5_val, q6_val));
+      const auto q4_all = FindAllAnglesWithShift(theta4, 2 * M_PI, robot_->joint_limit_min(3), robot_->joint_limit_max(3));
+      const auto q5_all = FindAllAnglesWithShift(theta5, 2 * M_PI, robot_->joint_limit_min(4), robot_->joint_limit_max(4));
+      const auto q6_all = FindAllAnglesWithShift(theta6, 2 * M_PI, robot_->joint_limit_min(5), robot_->joint_limit_max(5));
+      for (const double q4_val : q4_all) {
+        for (const double q5_val : q5_all) {
+          for (const double q6_val : q6_all) {
+            q456_all.emplace_back(q4_val, q5_val, q6_val);
           }
         }
       }
@@ -403,12 +387,23 @@ std::vector<Eigen::Vector3d> IRB140AnalyticalKinematics::q456(const Eigen::Isome
       double sin_q4_plus_q6 = sin_cos_q4_plus_q6(0);
       double cos_q4_plus_q6 = sin_cos_q4_plus_q6(1);
       double q4_plus_q6 = std::atan2(sin_q4_plus_q6, cos_q4_plus_q6);
-      for (int i = -1; i <= 1; ++i) {
+      double q4_plus_q6_lb = robot()->joint_limit_min(3) + robot()->joint_limit_min(5);
+      double q4_plus_q6_ub = robot()->joint_limit_max(3) + robot()->joint_limit_max(5);
+      // q4_plus_q6 + 2 * M_PI * i should lie within [q4_plus_q6_lb, q4_plus_q6_ub]
+      for (int i = std::floor((q4_plus_q6_lb - q4_plus_q6) / (2 * M_PI)) ;
+           i <= std::ceil((q4_plus_q6_ub - q4_plus_q6) / (2 * M_PI)); ++i) {
         double q4_plus_q6_val = q4_plus_q6 + 2 * M_PI * i;
+        // The line q4 + q6 = val and the region
+        // q4 in [q4_lb, q4_ub], q6 in [q6_lb, q6_ub] must have intersection
+        // at the boundary of the region.
         double q4_val = robot_->joint_limit_min(3);
         add_q456_fun(q4_val, q4_plus_q6_val - q4_val, 0, robot_.get(), &q456_all);
         q4_val = robot_->joint_limit_max(3);
         add_q456_fun(q4_val, q4_plus_q6_val - q4_val, 0, robot_.get(), &q456_all);
+        double q6_val = robot_->joint_limit_min(5);
+        add_q456_fun(q4_plus_q6_val - q6_val, q6_val, 0, robot_.get(), &q456_all);
+        q6_val = robot_->joint_limit_max(5);
+        add_q456_fun(q4_plus_q6_val - q6_val, q6_val, 0, robot_.get(), &q456_all);
       }
     } else {
       // c5 = -1, s5 = 0, we can only compute q4 - q6;
@@ -428,12 +423,20 @@ std::vector<Eigen::Vector3d> IRB140AnalyticalKinematics::q456(const Eigen::Isome
       double sin_q4_minus_q6 = sin_cos_q4_minus_16(0);
       double cos_q4_minus_q6 = sin_cos_q4_minus_16(1);
       double q4_minus_q6 = std::atan2(sin_q4_minus_q6, cos_q4_minus_q6);
-      for (int i = -1; i <= 1; ++i) {
+      double q4_minus_q6_lb = robot_->joint_limit_min(3) - robot_->joint_limit_max(5);
+      double q4_minus_q6_ub = robot_->joint_limit_max(3) - robot_->joint_limit_min(5);
+      // q4_minus_q6 + 2 * M_PI * i should lie within [q4_minus_q6_lb, q4_minus_q6_ub]
+      for (int i = std::floor((q4_minus_q6_lb - q4_minus_q6) / (2 * M_PI));
+           i <= std::ceil((q4_minus_q6_ub - q4_minus_q6) / (2 * M_PI)); ++i) {
         double q4_minus_q6_val = q4_minus_q6 + 2 * M_PI * i;
         double q4_val = robot_->joint_limit_min(3);
         add_q456_fun(q4_val, -q4_minus_q6_val + q4_val, M_PI, robot_.get(), &q456_all);
         q4_val = robot_->joint_limit_max(3);
         add_q456_fun(q4_val, -q4_minus_q6_val + q4_val, M_PI, robot_.get(), &q456_all);
+        double q6_val = robot_->joint_limit_min(5);
+        add_q456_fun(q4_minus_q6_val + q6_val, q6_val, M_PI, robot_.get(), &q456_all);
+        q6_val = robot_->joint_limit_max(5);
+        add_q456_fun(q4_minus_q6_val + q6_val, q6_val, M_PI, robot_.get(), &q456_all);
       }
 
     }
