@@ -148,6 +148,9 @@ void TestInverseKinematics(const IRB140AnalyticalKinematics& analytical_kinemati
     analytical_kinematics.inverse_kinematics(link6_pose);
   }
 
+
+  int num_match_posture = 0;
+
   for (const auto &q_ik : q_all) {
     EXPECT_TRUE((q_ik.array() >= q_lb.array()).all());
     EXPECT_TRUE((q_ik.array() <= q_ub.array()).all());
@@ -169,8 +172,40 @@ void TestInverseKinematics(const IRB140AnalyticalKinematics& analytical_kinemati
       std::cout << "q_ik\n" << q_ik << std::endl;
       analytical_kinematics.inverse_kinematics(link6_pose);
     }
+    if (std::abs(sin(q(4))) > 1E-5) {
+      // Non degenerate case.
+      if ((q - q_ik).norm() <= 5E-3) {
+        ++num_match_posture;
+      }
+    } else {
+      // Degenerate case.
+      if (std::cos(q(4)) > 0) {
+        // If cos(q5) = 1, then q4 + q6 should be constant.
+        if (std::abs(q_ik(3) + q_ik(5) - q(3) - q(5)) < 1E-3
+            && (q_ik.head<3>() - q.head<3>()).norm() < 1E-2
+            && std::abs(q_ik(4) - q(4)) < 1E-3) {
+          ++num_match_posture;
+        }
+      } else {
+        // If cos(q5) = -1, then q4 - q6 should be constant.
+        if (std::abs(q_ik(3) - q_ik(5) - q(3) + q(5)) < 1E-3
+            && (q_ik.head<3>() - q.head<3>()).norm() < 1E-2
+            && std::abs(q_ik(4) - q(4)) < 1E-3) {
+          ++num_match_posture;
+        }
+      }
+    }
+  }
+  EXPECT_NE(num_match_posture, 0);
+  if (num_match_posture == 0) {
+    std::cout << "q:\n" << q.transpose() << std::endl << "q_ik:\n";
+    for (const auto& q_ik : q_all) {
+      std::cout << q_ik.transpose() << std::endl;
+    }
+    analytical_kinematics.inverse_kinematics(link6_pose);
   }
 }
+
 TEST_F(IRB140Test, inverse_kinematics_test) {
   std::vector<Eigen::Isometry3d> link6_pose_all;
   Eigen::Isometry3d link6_pose;
@@ -192,15 +227,15 @@ TEST_F(IRB140Test, inverse_kinematics_test) {
     }
   }
 }
-/*
+
 TEST_F(IRB140Test, inverse_kinematics_exhaustive_test) {
   std::vector<Eigen::Matrix<double, 6, 1>> q_all;
-  const int num_joint_sample = 10;
+  const int num_joint_sample = 11;
   Eigen::Matrix<double, 6, num_joint_sample> q_sample;
   for (int i = 0; i < 6; ++i) {
     q_sample.row(i) = Eigen::Matrix<double, 1, num_joint_sample>::LinSpaced(
-        analytical_kinematics.robot()->joint_limit_min(i) + 1E-4,
-        analytical_kinematics.robot()->joint_limit_max(i) - 1E-4);
+        analytical_kinematics.robot()->joint_limit_min(i) + 1E-2,
+        analytical_kinematics.robot()->joint_limit_max(i) - 1E-2);
   }
 
   for (int i0 = 0; i0 < num_joint_sample; ++i0) {
@@ -217,14 +252,14 @@ TEST_F(IRB140Test, inverse_kinematics_exhaustive_test) {
               q(4) = q_sample(4, i4);
               q(5) = q_sample(5, i5);
 
-              TestInverseKinematics(analytical_kinematics, q);
+              TestInverseKinematics(analytical_kinematics, q, 3E-5);
             }
           }
         }
       }
     }
   }
-} */
+}
 
 
 TEST_F(IRB140Test, inverse_kinematics_corner_test) {
