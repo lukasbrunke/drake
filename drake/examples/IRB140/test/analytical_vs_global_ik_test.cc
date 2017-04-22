@@ -144,8 +144,8 @@ class DUT {
     solvers::GurobiSolver gurobi_solver;
     solvers::MosekSolver mosek_solver;
     //global_ik_.SetSolverOption(solvers::SolverType::kGurobi, "OutputFlag", 1);
-    //solvers::SolutionResult global_ik_status = gurobi_solver.Solve(global_ik_);
-    solvers::SolutionResult global_ik_status = mosek_solver.Solve(global_ik_);
+    solvers::SolutionResult global_ik_status = gurobi_solver.Solve(global_ik_);
+    //solvers::SolutionResult global_ik_status = mosek_solver.Solve(global_ik_);
     Eigen::Matrix<double, 6, 1> q_global;
     q_global.setZero();
     if (global_ik_status == solvers::SolutionResult::kSolutionFound) {
@@ -463,9 +463,9 @@ void DebugOutputFile(int argc, char* argv[]) {
       ik_result.printToFile(&output_file1);
     }*/
     if (ik_result.analytical_ik_status() == solvers::SolutionResult::kInfeasibleConstraints
-        && ik_result.global_ik_status() == solvers::SolutionResult::kSolutionFound
-        && ik_result.ee_pose().translation()(2) >= 0.4) {
+        && ik_result.global_ik_status() == solvers::SolutionResult::kSolutionFound) {
       dut.SolveGlobalIK(ik_result.ee_pose().translation(), &ik_result);
+      ik_result.printToFile(&output_file1);
     }
     ik_result.printToFile(&output_file2);
   }
