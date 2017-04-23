@@ -464,7 +464,7 @@ void DebugOutputFile(int argc, char* argv[]) {
     }*/
     if (ik_result.analytical_ik_status() == solvers::SolutionResult::kInfeasibleConstraints
         && ik_result.global_ik_status() == solvers::SolutionResult::kSolutionFound) {
-      dut.SolveGlobalIK(ik_result.ee_pose().translation(), &ik_result);
+      dut.SolveAnalyticalIK(ik_result.ee_pose().translation(), &ik_result);
       ik_result.printToFile(&output_file1);
     }
     ik_result.printToFile(&output_file2);

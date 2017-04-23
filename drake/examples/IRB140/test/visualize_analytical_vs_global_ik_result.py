@@ -25,7 +25,7 @@ def receiveMessage(msg):
     d3 = DebugData()
     d4 = DebugData()
     
-    file = open('/home/hongkai/drake-distro/ik_output21_0.txt','r')
+    file = open('/home/hongkai/drake-distro/ik_output21_2_recompute.txt','r')
 
     lines = file.readlines()
 
