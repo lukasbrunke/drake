@@ -1901,6 +1901,12 @@ class MathematicalProgram {
     return solver_id_;
   }
 
+  void SetComputationTime(const double computation_time) {
+    computation_time_ = computation_time;
+  }
+
+  double computation_time() const {return computation_time_;}
+
   /**
    * Getter for optimal cost at the solution. Will return NaN if there has
    * been no successful solution.
@@ -2174,6 +2180,8 @@ class MathematicalProgram {
   std::map<SolverId, std::map<std::string, double>> solver_options_double_;
   std::map<SolverId, std::map<std::string, int>> solver_options_int_;
   std::map<SolverId, std::map<std::string, std::string>> solver_options_str_;
+
+  double computation_time_{0};
 
   AttributesSet required_capabilities_{0};
 
