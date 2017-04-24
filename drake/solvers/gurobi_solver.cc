@@ -833,7 +833,7 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
   prog.SetSolverId(id());
 
   double runtime{0};
-  GRBgetdblattrelement(model, GRB_DBL_ATTR_RUNTIME, 0, &runtime);
+  error = GRBgetdblattr(model, GRB_DBL_ATTR_RUNTIME, &runtime);
   prog.SetComputationTime(runtime);
 
   GRBfreemodel(model);
