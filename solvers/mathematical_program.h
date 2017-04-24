@@ -2248,6 +2248,12 @@ class MathematicalProgram {
    */
   optional<SolverId> GetSolverId() const { return solver_id_; }
 
+  void SetComputationTime(const double computation_time) {
+    computation_time_ = computation_time;
+  }
+
+  double computation_time() const {return computation_time_;}
+
   /**
    * Getter for optimal cost at the solution.
    * If the solver finds an optimal solution, then we return the cost evaluated
@@ -2646,6 +2652,8 @@ class MathematicalProgram {
   std::map<SolverId, std::map<std::string, double>> solver_options_double_;
   std::map<SolverId, std::map<std::string, int>> solver_options_int_;
   std::map<SolverId, std::map<std::string, std::string>> solver_options_str_;
+
+  double computation_time_{0};
 
   AttributesSet required_capabilities_{0};
 
