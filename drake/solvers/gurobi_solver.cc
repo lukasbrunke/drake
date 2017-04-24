@@ -659,6 +659,10 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
 
   prog.SetSolverResult(solver_type(), error);
 
+  double runtime{0};
+  GRBgetdblattrelement(model, GRB_DBL_ATTR_RUNTIME, 0, &runtime);
+  prog.SetComputationTime(runtime);
+
   GRBfreemodel(model);
   GRBfreeenv(env);
 
