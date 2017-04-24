@@ -687,8 +687,18 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
                               &gurobi_var_type, &xlow, &xupp);
 
   GRBmodel* model = nullptr;
+  char** var_names = new char*[num_gurobi_vars];
+  for (int i = 0; i < num_gurobi_vars; ++i) {
+    if (!is_new_variable[i]) {
+      var_names[i] = static_cast<char*>(malloc(100*sizeof(char)));
+      sprintf(var_names[i], "%s", prog.decision_variable(i).get_name().c_str());
+    } else {
+      var_names[i] = static_cast<char*>(malloc(100*sizeof(char)));
+      sprintf(var_names[i], "x%d", i);
+    }
+  }
   GRBnewmodel(env, &model, "gurobi_model", num_gurobi_vars, nullptr, &xlow[0],
-              &xupp[0], gurobi_var_type.data(), nullptr);
+              &xupp[0], gurobi_var_type.data(), var_names);
 
   int error = 0;
   // TODO(naveenoid) : This needs access externally.
@@ -796,6 +806,11 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
           solution_result = SolutionResult::kInfeasibleConstraints;
           break;
         }
+      }
+      if (optimstatus == GRB_INF_OR_UNBD || optimstatus == GRB_INFEASIBLE) {
+        GRBwrite(model, "gurobi_model.lp");
+        GRBcomputeIIS(model);
+        GRBwrite(model, "gurobi_iis.ilp");
       }
     } else {
       solution_result = SolutionResult::kSolutionFound;
