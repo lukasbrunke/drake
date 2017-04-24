@@ -59,6 +59,10 @@ class IKresult {
 
   const Eigen::Matrix<double, 6, 1>& q_nl_ik_resolve() const {return q_nl_ik_resolve_;}
 
+  double& global_ik_time() {return global_ik_time_;}
+
+  const double& global_ik_time() const {return global_ik_time_;}
+
   void printToFile(std::fstream* output_file) const {
     // Now print to file.
     if (output_file->is_open()) {
@@ -80,6 +84,7 @@ class IKresult {
 
       (*output_file) << "global_ik_status: " << global_ik_status_ << std::endl;
       (*output_file) << "q_global:\n" << q_global_ik_.transpose() << std::endl;
+      (*output_file) << "global_ik_time: " << global_ik_time_ << std::endl;
 
       (*output_file) << "nonlinear_ik_resolve_status: " << nl_ik_resolve_status_
                      << std::endl;
@@ -100,6 +105,7 @@ class IKresult {
   Eigen::Matrix<double, 6, 1> q_global_ik_;
   Eigen::Matrix<double, 6, 1> q_nl_ik_;
   Eigen::Matrix<double, 6, 1> q_nl_ik_resolve_;
+  double global_ik_time_;
 };
 
 class DUT {
@@ -143,7 +149,7 @@ class DUT {
     global_ik_pos_cnstr_.constraint()->UpdateUpperBound(link6_pos);
     solvers::GurobiSolver gurobi_solver;
     solvers::MosekSolver mosek_solver;
-    //global_ik_.SetSolverOption(solvers::SolverType::kGurobi, "OutputFlag", 1);
+    global_ik_.SetSolverOption(solvers::SolverType::kGurobi, "OutputFlag", 1);
     solvers::SolutionResult global_ik_status = gurobi_solver.Solve(global_ik_);
     //solvers::SolutionResult global_ik_status = mosek_solver.Solve(global_ik_);
     Eigen::Matrix<double, 6, 1> q_global;
@@ -153,6 +159,7 @@ class DUT {
     }
     ik_result->global_ik_status() = global_ik_status;
     ik_result->q_global_ik() = q_global;
+    ik_result->global_ik_time() = global_ik_.computation_time();
   }
 
   void SolveIK(
@@ -389,6 +396,14 @@ void ReadOutputFile(std::ifstream& file, std::vector<IKresult>* ik_results) {
         throw std::runtime_error("oops");
       }
 
+      /*getline(file, line);
+      const auto global_ik_time_str = BreakLineBySpaces(line);
+      if (global_ik_time_str[0] == "global_ik_time:") {
+        ik_result.global_ik_time() = std::atof(global_ik_time_str[1].c_str());
+      } else {
+        throw std::runtime_error("oops");
+      }*/
+
       getline(file, line);
       const auto nl_ik_resolve_status_str = BreakLineBySpaces(line);
       if (nl_ik_resolve_status_str[0] == "nonlinear_ik_resolve_status:") {
@@ -477,7 +492,7 @@ void DebugOutputFile(int argc, char* argv[]) {
 }  // namespace drake
 
 int main(int argc, char* argv[]) {
-  //drake::examples::IRB140::DoMain(argc, argv);
-  drake::examples::IRB140::DebugOutputFile(argc, argv);
+  drake::examples::IRB140::DoMain(argc, argv);
+  //drake::examples::IRB140::DebugOutputFile(argc, argv);
   return 0;
 }
