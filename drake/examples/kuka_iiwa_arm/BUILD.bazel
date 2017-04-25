@@ -87,6 +87,9 @@ drake_cc_binary(
         "//drake/manipulation/models/iiwa_description:models",
     ],
     deps = [
+        "@bot_core_lcmtypes//:lib",
+        "@gflags//:gflags",
+        "@robotlocomotion_lcmtypes//:lib",
         ":iiwa_common",
         ":lcm_plan_interpolator",
         "//drake/common:text_logging_gflags",
@@ -110,6 +113,7 @@ drake_cc_binary(
     # Flaky because LCM self-test can fail (PR #7311)
     test_rule_flaky = 1,
     deps = [
+        "@gflags//:gflags",
         ":iiwa_common",
         ":iiwa_lcm",
         ":oracular_state_estimator",
@@ -132,6 +136,37 @@ drake_cc_binary(
 )
 
 drake_cc_binary(
+    name = "kuka_global_ik_demo",
+    srcs = ["kuka_global_ik_demo.cc"],
+    add_test_rule = 1,
+    data = [
+        ":models",
+        "//drake/examples/schunk_wsg:models",
+        "//drake/manipulation/models/iiwa_description:models",
+    ],
+    deps = [
+        "@gflags//:gflags",
+        ":iiwa_common",
+        ":iiwa_lcm",
+        "//drake/examples/kuka_iiwa_arm/dev/tools:simple_tree_visualizer",
+        "//drake/examples/kuka_iiwa_arm/iiwa_world:iiwa_wsg_diagram_factory",
+        "//drake/examples/kuka_iiwa_arm/iiwa_world:world_sim_diagram_factory",
+        "//drake/examples/kuka_iiwa_arm/iiwa_world:world_sim_tree_builder",
+        "//drake/examples/schunk_wsg:schunk_wsg_constants",
+        "//drake/examples/schunk_wsg:schunk_wsg_lcm",
+        "//drake/lcm",
+        "//drake/multibody:rigid_body_tree_construction",
+        "//drake/multibody/rigid_body_plant",
+        "//drake/systems/analysis",
+        "//drake/systems/controllers:inverse_dynamics_controller",
+        "//drake/systems/controllers:pid_controller",
+        "//drake/systems/primitives:constant_vector_source",
+        "//drake/systems/primitives:matrix_gain",
+        "//drake/util:lcm_util",
+    ],
+)
+
+drake_cc_binary(
     name = "kuka_simulation",
     srcs = ["kuka_simulation.cc"],
     add_test_rule = 1,
@@ -143,6 +178,7 @@ drake_cc_binary(
     # Flaky because LCM self-test can fail (PR #7311)
     test_rule_flaky = 1,
     deps = [
+        "@gflags//:gflags",
         ":iiwa_common",
         ":iiwa_lcm",
         "//drake/common:find_resource",
@@ -167,11 +203,32 @@ drake_cc_binary(
         "//drake/manipulation/models/iiwa_description:models",
     ],
     deps = [
+        "@bot_core_lcmtypes//:lib",
+        "@robotlocomotion_lcmtypes//:lib",
         ":iiwa_common",
         ":iiwa_lcm",
         "//drake/common:find_resource",
         "@lcmtypes_bot2_core",
         "@lcmtypes_robotlocomotion",
+    ],
+)
+
+drake_cc_binary(
+    name = "kuka_ik_demo",
+    srcs = ["kuka_ik_demo.cc"],
+    data = [
+        ":models",
+        "//drake/manipulation/models/iiwa_description:models",
+    ],
+    deps = [
+        "@lcmtypes_bot2_core",
+        "@lcmtypes_robotlocomotion",
+        ":iiwa_common",
+        "//drake/lcm",
+        "//drake/multibody:inverse_kinematics",
+        "//drake/multibody:rigid_body_tree",
+        "//drake/multibody/parsers",
+        "//drake/solvers:mathematical_program",
     ],
 )
 
