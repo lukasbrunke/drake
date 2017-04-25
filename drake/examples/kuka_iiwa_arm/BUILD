@@ -33,12 +33,12 @@ drake_cc_library(
         "iiwa_common.h",
     ],
     deps = [
+        "@bot_core_lcmtypes//:lib",
+        "@robotlocomotion_lcmtypes//:lib",
         "//drake/common/trajectories:piecewise_polynomial_trajectory",
         "//drake/multibody:inverse_kinematics",
         "//drake/multibody:rigid_body_tree",
         "//drake/multibody/parsers",
-        "@bot_core_lcmtypes//:lib",
-        "@robotlocomotion_lcmtypes//:lib",
     ],
 )
 
@@ -102,6 +102,9 @@ drake_cc_binary(
         "//drake/manipulation/models/iiwa_description:models",
     ],
     deps = [
+        "@bot_core_lcmtypes//:lib",
+        "@gflags//:gflags",
+        "@robotlocomotion_lcmtypes//:lib",
         ":iiwa_common",
         ":iiwa_lcm",
         ":robot_plan_interpolator",
@@ -111,9 +114,6 @@ drake_cc_binary(
         "//drake/systems/lcm",
         "//drake/systems/lcm:lcm_driven_loop",
         "//drake/systems/primitives:demultiplexer",
-        "@bot_core_lcmtypes//:lib",
-        "@gflags//:gflags",
-        "@robotlocomotion_lcmtypes//:lib",
     ],
 )
 
@@ -128,6 +128,7 @@ drake_cc_binary(
     ],
     test_rule_args = ["--simulation_sec=0.01"],
     deps = [
+        "@gflags//:gflags",
         ":iiwa_common",
         ":iiwa_lcm",
         ":oracular_state_estimator",
@@ -144,7 +145,37 @@ drake_cc_binary(
         "//drake/systems/primitives:constant_vector_source",
         "//drake/systems/primitives:matrix_gain",
         "//drake/util:lcm_util",
+    ],
+)
+
+drake_cc_binary(
+    name = "kuka_global_ik_demo",
+    srcs = ["kuka_global_ik_demo.cc"],
+    add_test_rule = 1,
+    data = [
+        ":models",
+        "//drake/examples/schunk_wsg:models",
+        "//drake/manipulation/models/iiwa_description:models",
+    ],
+    deps = [
         "@gflags//:gflags",
+        ":iiwa_common",
+        ":iiwa_lcm",
+        "//drake/examples/kuka_iiwa_arm/dev/tools:simple_tree_visualizer",
+        "//drake/examples/kuka_iiwa_arm/iiwa_world:iiwa_wsg_diagram_factory",
+        "//drake/examples/kuka_iiwa_arm/iiwa_world:world_sim_diagram_factory",
+        "//drake/examples/kuka_iiwa_arm/iiwa_world:world_sim_tree_builder",
+        "//drake/examples/schunk_wsg:schunk_wsg_constants",
+        "//drake/examples/schunk_wsg:schunk_wsg_lcm",
+        "//drake/lcm",
+        "//drake/multibody:rigid_body_tree_construction",
+        "//drake/multibody/rigid_body_plant",
+        "//drake/systems/analysis",
+        "//drake/systems/controllers:inverse_dynamics_controller",
+        "//drake/systems/controllers:pid_controller",
+        "//drake/systems/primitives:constant_vector_source",
+        "//drake/systems/primitives:matrix_gain",
+        "//drake/util:lcm_util",
     ],
 )
 
@@ -158,6 +189,7 @@ drake_cc_binary(
     ],
     test_rule_args = ["--simulation_sec=0.1"],
     deps = [
+        "@gflags//:gflags",
         ":iiwa_common",
         ":iiwa_lcm",
         ":sim_diagram_builder",
@@ -167,7 +199,6 @@ drake_cc_binary(
         "//drake/systems/analysis:simulator",
         "//drake/systems/controllers:inverse_dynamics_controller",
         "//drake/systems/primitives:constant_vector_source",
-        "@gflags//:gflags",
     ],
 )
 
@@ -179,10 +210,29 @@ drake_cc_binary(
         "//drake/manipulation/models/iiwa_description:models",
     ],
     deps = [
-        ":iiwa_common",
-        ":iiwa_lcm",
         "@bot_core_lcmtypes//:lib",
         "@robotlocomotion_lcmtypes//:lib",
+        ":iiwa_common",
+        ":iiwa_lcm",
+    ],
+)
+
+drake_cc_binary(
+    name = "kuka_ik_demo",
+    srcs = ["kuka_ik_demo.cc"],
+    data = [
+        ":models",
+        "//drake/manipulation/models/iiwa_description:models",
+    ],
+    deps = [
+        "@bot_core_lcmtypes//:lib",
+        "@robotlocomotion_lcmtypes//:lib",
+        ":iiwa_common",
+        "//drake/lcm",
+        "//drake/multibody:inverse_kinematics",
+        "//drake/multibody:rigid_body_tree",
+        "//drake/multibody/parsers",
+        "//drake/solvers:mathematical_program",
     ],
 )
 
