@@ -146,6 +146,66 @@ drake_cc_binary(
     ],
 )
 
+drake_cc_library(
+    name = "kuka_global_ik_util",
+    srcs = ["test/kuka_global_ik_util.cc"],
+    hdrs = [
+        "test/kuka_global_ik_util.h",
+    ],
+    data = [
+        "//manipulation/models/iiwa_description:models",
+        "//manipulation/models/wsg_50_description:models",
+    ],
+    deps = [
+        ":iiwa_common",
+        "//multibody:rigid_body_tree",
+        "//multibody:rigid_body_tree_construction",
+    ],
+)
+
+drake_cc_binary(
+    name = "kuka_global_ik_demo",
+    srcs = ["test/kuka_global_ik_demo.cc"],
+    add_test_rule = 1,
+    data = [
+        ":models",
+    ],
+    deps = [
+        ":iiwa_common",
+        ":iiwa_lcm",
+        ":kuka_global_ik_util",
+        "//lcm",
+        "//manipulation/util:simple_tree_visualizer",
+        "//math:autodiff",
+        "//multibody:global_inverse_kinematics",
+        "//util:lcm_util",
+    ],
+)
+
+#drake_cc_binary(
+#    name = "kuka_global_ik_infeasible_demo",
+#    testonly = 1,
+#    srcs = ["test/kuka_global_ik_infeasible_demo.cc"],
+#    add_test_rule = 1,
+#    data = [
+#        ":models",
+#        "//manipulation/models/wsg_50_description:models",
+#        "//manipulation/models/iiwa_description:models",
+#    ],
+#    deps = [
+#        ":iiwa_common",
+#        ":iiwa_lcm",
+#        ":kuka_global_ik_util",
+#        "//examples/kuka_iiwa_arm/dev/tools:simple_tree_visualizer",
+#        "//lcm",
+#        "//math:autodiff",
+#        "//multibody:global_inverse_kinematics",
+#        "//util:lcm_util",
+#        "@gflags//:gflags",
+#        "@gtest//:main",
+#    ],
+#)
+
 drake_cc_binary(
     name = "kuka_simulation",
     srcs = ["kuka_simulation.cc"],
@@ -205,6 +265,26 @@ drake_cc_binary(
         "//manipulation/planner:constraint_relaxing_ik",
         "//math:geometric_transform",
         "@lcm",
+        "@lcmtypes_bot2_core",
+        "@lcmtypes_robotlocomotion",
+    ],
+)
+
+
+drake_cc_binary(
+    name = "kuka_ik_demo",
+    srcs = ["kuka_ik_demo.cc"],
+    data = [
+        ":models",
+        "//drake/manipulation/models/iiwa_description:models",
+    ],
+    deps = [
+        ":iiwa_common",
+        "//lcm",
+        "//multibody:inverse_kinematics",
+        "//multibody:rigid_body_tree",
+        "//multibody/parsers",
+        "//solvers:mathematical_program",
         "@lcmtypes_bot2_core",
         "@lcmtypes_robotlocomotion",
     ],

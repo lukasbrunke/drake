@@ -1,0 +1,45 @@
+<?xml version="1.0" ?>
+<robot name = "beets">
+  <material name="Black">
+    <color rgba="0.0 0.0 0.0 1.0"/>
+  </material>
+  <material name="Blue">
+    <color rgba="0.0 0.0 0.8 1.0"/>
+  </material>
+  <material name="Green">
+    <color rgba="0.0 0.8 0.0 1.0"/>
+  </material>
+  <material name="Grey">
+    <color rgba="0.4 0.4 0.4 1.0"/>
+  </material>
+  <material name="Orange">
+    <color rgba="1.0 0.423529411765 0.0392156862745 1.0"/>
+  </material>
+  <material name="Brown">
+    <color rgba="0.870588235294 0.811764705882 0.764705882353 1.0"/>
+  </material>
+  <material name="Red">
+    <color rgba="0.8 0.0 0.0 1.0"/>
+  </material>
+  <material name="White">
+    <color rgba="1.0 1.0 1.0 1.0"/>
+  </material>
+	<link name = "beets">
+	<visual>
+		<origin rpy="1.57079632 0 0" xyz="0 0 0.07"/>
+		<geometry>
+		<mesh filename="../meshes/beets.obj"/>
+		</geometry>
+		<material name="Beets">
+			<color rgba="0.7 0.5 0.2 1.0"/>
+			<texture filename="../meshes/belabel.jpg"/>
+		</material>
+	</visual>
+	<collision>
+		<origin rpy="1.57079632 0 0" xyz="0 0 0"/>
+		<geometry>
+		<cylinder length="0.06" radius="0.15"/>
+		</geometry>
+	</collision>
+	</link>
+</robot>
