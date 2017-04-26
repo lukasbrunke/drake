@@ -52,6 +52,7 @@ drake_cc_binary(
     deps = [
         ":IRB140_analytical_kinematics",
         ":IRB140_common",
+        "//drake/common:call_matlab",
         "//drake/multibody:global_inverse_kinematics",
         "//drake/multibody:inverse_kinematics",
     ],
