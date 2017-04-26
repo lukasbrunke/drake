@@ -86,28 +86,40 @@ std::unique_ptr<RigidBodyTreed> ConstructKuka() {
   const std::string schunk_path = drake::GetDrakePath() + "/examples/schunk_wsg/models/schunk_wsg_50_fixed_joint.sdf";
   parsers::sdf::AddModelInstancesFromSdfFile(schunk_path, drake::multibody::joints::kFixed, iiwa_frame_ee, rigid_body_tree.get());
 
-  const std::string cup_path = drake::GetDrakePath() + "/manipulation/models/objects/YCB_play_go_ranbox_stakin_cups_9_red/urdf/cup.urdf";
-  const Eigen::Vector3d kCupPos(kRobotBase(0) + 0.8, kRobotBase(1), kRobotBase(2));
-  auto cup_frame = std::make_shared<RigidBodyFrame<double>>("cup", rigid_body_tree->get_mutable_body(0), kCupPos, Eigen::Vector3d::Zero());
-  parsers::urdf::AddModelInstanceFromUrdfFile(cup_path, drake::multibody::joints::kFixed, cup_frame, rigid_body_tree.get());
+  const std::string mug_path = drake::GetDrakePath() + "/manipulation/models/objects/coffee_mug/urdf/coffee_mug.urdf";
+  const Eigen::Vector3d kMugPos(kRobotBase(0) + 0.8, kRobotBase(1), kRobotBase(2));
+  auto mug_frame = std::make_shared<RigidBodyFrame<double>>("mug", rigid_body_tree->get_mutable_body(0), kMugPos, Eigen::Vector3d(0, 0, M_PI));
+  parsers::urdf::AddModelInstanceFromUrdfFile(mug_path, drake::multibody::joints::kFixed, mug_frame, rigid_body_tree.get());
+  rigid_body_tree->addFrame(mug_frame);
 
+  const std::string beets_path = drake::GetDrakePath() + "/manipulation/models/objects/beets_can/urdf/beets.urdf";
+  const Eigen::Vector3d kBeetsPos(kMugPos(0) - 0.2, kMugPos(1) + 0.05, kMugPos(2));
+  auto beets_frame = std::make_shared<RigidBodyFrame<double>>("beets", rigid_body_tree->get_mutable_body(0), kBeetsPos, Eigen::Vector3d::Zero());
+  parsers::urdf::AddModelInstanceFromUrdfFile(beets_path, drake::multibody::joints::kFixed, beets_frame, rigid_body_tree.get());
   multibody::AddFlatTerrainToWorld(rigid_body_tree.get());
+  rigid_body_tree->addFrame(beets_frame);
 
-  rigid_body_tree->addFrame(cup_frame);
   return rigid_body_tree;
 }
 
-Eigen::Matrix<double, 7, 1> SolveGlobalIK(RigidBodyTreed* tree, const Eigen::Ref<Eigen::Vector3d>& cup_pos) {
+Eigen::Matrix<double, 7, 1> SolveGlobalIK(RigidBodyTreed* tree, const Eigen::Ref<Eigen::Vector3d>& mug_pos) {
   multibody::GlobalInverseKinematics global_ik(*tree);
   int link7_idx = tree->FindBodyIndex("iiwa_link_7");
   auto link7_rotmat = global_ik.body_rotation_matrix(link7_idx);
   auto link7_pos = global_ik.body_position(link7_idx);
-  // x axis of the link7 frame faces upwards.
-  global_ik.AddLinearConstraint(link7_rotmat.col(0) == Eigen::Vector3d(0, 0, 1));
-  // Impose the constraint that palm is facing the cup, with a certain distance
-  // from the axis of the cup.
-  double margin = 0.1;
-  global_ik.AddLinearConstraint(cup_pos.head<2>() - link7_pos.head<2>().cast<symbolic::Expression>() == (0.15 + margin) * link7_rotmat.block<2, 1>(0, 2).cast<symbolic::Expression>());
+  // y axis of link 7 frame is horizontal
+  global_ik.AddLinearConstraint(link7_rotmat(2, 1) == 0);
+  // z axis of link 7 frame points to the center of the cup, with a certain
+  // distance to the cup
+  Eigen::Vector3d mug_center = mug_pos;
+  mug_center(2) += 0.05;
+  mug_center(1) -= 0.01;
+  mug_center(0) -= 0.02;
+  std::cout<<mug_center<<std::endl;
+  global_ik.AddLinearConstraint(mug_center - link7_pos == 0.2 * link7_rotmat.col(2));
+  // height constraint
+  global_ik.AddLinearConstraint(link7_pos(2), mug_pos(2)+0.02, mug_pos(2) + 0.1);
+
   solvers::GurobiSolver gurobi_solver;
   global_ik.SetSolverOption(solvers::SolverType::kGurobi, "OutputFlag", true);
   solvers::SolutionResult sol_result = gurobi_solver.Solve(global_ik);
@@ -137,11 +149,12 @@ int DoMain() {
   //std::cout << pt1_pos.transpose() << std::endl;
   //std::cout << pt2_pos.transpose() << std::endl;
   //std::cout << pt3_pos.transpose() << std::endl;
-  auto cup_frame = tree->findFrame("cup");
-  Eigen::Vector3d cup_pos = cup_frame->get_transform_to_body().translation();
-  Eigen::Matrix<double, 7, 1> q_global = SolveGlobalIK(tree.get(), cup_pos);
-  simple_tree_visualizer.visualize(q_global);
-  std::cout << q_global.transpose() << std::endl;
+  //auto mug_frame = tree->findFrame("mug");
+  //Eigen::Vector3d mug_pos = mug_frame->get_transform_to_body().translation();
+  //Eigen::Matrix<double, 7, 1> q_global = SolveGlobalIK(tree.get(), mug_pos);
+  //simple_tree_visualizer.visualize(q_global);
+  simple_tree_visualizer.visualize(Eigen::Matrix<double, 7, 1>::Zero());
+  //std::cout << q_global.transpose() << std::endl;
   return 0;
 }
 }  // namespace kuka_iiwa_arm
