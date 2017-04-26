@@ -13,6 +13,7 @@
 #include "drake/multibody/rigid_body_ik.h"
 #include "drake/solvers/gurobi_solver.h"
 #include "drake/solvers/mosek_solver.h"
+#include "drake/common/call_matlab.h"
 
 using Eigen::Isometry3d;
 
@@ -149,7 +150,7 @@ class DUT {
     global_ik_pos_cnstr_.constraint()->UpdateUpperBound(link6_pos);
     solvers::GurobiSolver gurobi_solver;
     solvers::MosekSolver mosek_solver;
-    global_ik_.SetSolverOption(solvers::SolverType::kGurobi, "OutputFlag", 1);
+    //global_ik_.SetSolverOption(solvers::SolverType::kGurobi, "OutputFlag", 1);
     solvers::SolutionResult global_ik_status = gurobi_solver.Solve(global_ik_);
     //solvers::SolutionResult global_ik_status = mosek_solver.Solve(global_ik_);
     Eigen::Matrix<double, 6, 1> q_global;
@@ -224,6 +225,8 @@ class DUT {
     ik_result.ee_pose().translation() = link6_pos;
     ik_result.printToFile(output_file);
   }
+
+  int ee_idx() const {return ee_idx_;}
 
  private:
   IRB140AnalyticalKinematics analytical_ik_;
@@ -396,13 +399,13 @@ void ReadOutputFile(std::ifstream& file, std::vector<IKresult>* ik_results) {
         throw std::runtime_error("oops");
       }
 
-      /*getline(file, line);
+      getline(file, line);
       const auto global_ik_time_str = BreakLineBySpaces(line);
       if (global_ik_time_str[0] == "global_ik_time:") {
         ik_result.global_ik_time() = std::atof(global_ik_time_str[1].c_str());
       } else {
         throw std::runtime_error("oops");
-      }*/
+      }
 
       getline(file, line);
       const auto nl_ik_resolve_status_str = BreakLineBySpaces(line);
@@ -487,12 +490,100 @@ void DebugOutputFile(int argc, char* argv[]) {
   output_file1.close();
   output_file2.close();
 }
+
+void WriteRuntimeToFile(const Eigen::VectorXd& runtime, const std::string& out_file_name) {
+  RemoveFileIfExist(out_file_name);
+  std::fstream output_file;
+  output_file.open(out_file_name, std::ios::app | std::ios::out);
+  if (output_file.is_open()) {
+    output_file << runtime;
+  }
+  output_file.close();
+}
+
+void AnalyzeOutputFile(int argc, char* argv[]) {
+  using common::CallMatlab;
+  if (argc != 6) {
+    throw std::runtime_error("Usage is <infile> num_pts_per_axis <outfile1> <outfile2> <outfile3>");
+  }
+  std::string in_file_name(argv[1]);
+  int num_pts_per_axis = atoi(argv[2]);
+  std::string out_file_name1(argv[3]);
+  std::string out_file_name2(argv[4]);
+  std::string out_file_name3(argv[5]);
+
+  std::vector<IKresult> ik_results;
+  ik_results.reserve(num_pts_per_axis * num_pts_per_axis * num_pts_per_axis);
+
+  std::ifstream in_file(in_file_name);
+  ReadOutputFile(in_file, &ik_results);
+  in_file.close();
+
+  std::vector<IKresult> both_feasible;
+  std::vector<IKresult> both_infeasible;
+  std::vector<IKresult> relaxation; // global IK is feasible, but analytical IK
+                                    // is not.
+  for (const auto& ik_result : ik_results) {
+    if (ik_result.global_ik_status() == solvers::SolutionResult::kSolutionFound
+        && ik_result.analytical_ik_status() == solvers::SolutionResult::kSolutionFound) {
+      both_feasible.push_back(ik_result);
+    } else if ((ik_result.global_ik_status() == solvers::SolutionResult::kInfeasible_Or_Unbounded
+                || ik_result.global_ik_status() == solvers::SolutionResult::kInfeasibleConstraints)
+                && ik_result.analytical_ik_status() == solvers::SolutionResult::kInfeasibleConstraints) {
+      both_infeasible.push_back(ik_result);
+    } else if (ik_result.global_ik_status() == solvers::SolutionResult::kSolutionFound
+        && ik_result.analytical_ik_status() == solvers::SolutionResult::kInfeasibleConstraints) {
+      relaxation.push_back(ik_result);
+    }
+  }
+
+  Eigen::VectorXd both_feasible_time(both_feasible.size());
+  for (int i = 0; i < static_cast<int>(both_feasible.size()); ++i) {
+    // Draw the histogram of the computation time.
+    both_feasible_time(i) = both_feasible[i].global_ik_time();
+  }
+  WriteRuntimeToFile(both_feasible_time, out_file_name1);
+
+  Eigen::VectorXd relaxation_time(relaxation.size());
+  for (int i = 0; i < static_cast<int>(relaxation.size()); ++i) {
+    relaxation_time(i) = relaxation[i].global_ik_time();
+  }
+  WriteRuntimeToFile(relaxation_time, out_file_name2);
+
+  Eigen::VectorXd both_infeasible_time(both_infeasible.size());
+  for (int i = 0; i < static_cast<int>(both_infeasible.size()); ++i) {
+    both_infeasible_time(i) = both_infeasible[i].global_ik_time();
+  }
+  WriteRuntimeToFile(both_infeasible_time, out_file_name3);
+
+  Eigen::Quaterniond link6_quat(ik_results[0].ee_pose().linear());
+  DUT dut(link6_quat);
+  Eigen::Matrix2Xd global_ik_ee_error(2, both_feasible.size());
+  KinematicsCache<double> cache = dut.robot()->CreateKinematicsCache();
+  for (int i = 0; i < static_cast<int>(both_feasible.size()); ++i) {
+    cache.initialize(both_feasible[i].q_global_ik());
+    dut.robot()->doKinematics(cache);
+    Eigen::Isometry3d ee_pose_global_ik = dut.robot()->CalcBodyPoseInWorldFrame(cache, dut.robot()->get_body(dut.ee_idx()));
+    global_ik_ee_error(0, i) = (ee_pose_global_ik.translation() - both_feasible[i].ee_pose().translation()).norm();
+    global_ik_ee_error(1, i) = Eigen::AngleAxisd(ee_pose_global_ik.linear().transpose() * both_feasible[i].ee_pose().linear()).angle();
+  }
+  auto h_fig = CallMatlab(1, "figure", 1);
+  auto h_pose_error = CallMatlab(1, "plot", global_ik_ee_error.row(0) * 100, global_ik_ee_error.row(1) / M_PI * 180);
+  CallMatlab("set", h_pose_error[0], "LineStyle", "none", "Marker", "o");
+  auto h_xlabel = CallMatlab(1, "xlabel", "position error (cm)");
+  auto h_ylabel = CallMatlab(1, "ylabel", "orientation angle error (degree)");
+  CallMatlab("set", h_xlabel[0], "FontSize", 25);
+  CallMatlab("set", h_ylabel[0], "FontSize", 25);
+  auto h_axis = CallMatlab(1, "gca");
+  CallMatlab("set", h_axis[0], "FontSize", 20);
+}
 }  // namespace IRB140
 }  // namespace examples
 }  // namespace drake
 
 int main(int argc, char* argv[]) {
-  drake::examples::IRB140::DoMain(argc, argv);
+  //drake::examples::IRB140::DoMain(argc, argv);
   //drake::examples::IRB140::DebugOutputFile(argc, argv);
+  drake::examples::IRB140::AnalyzeOutputFile(argc, argv);
   return 0;
 }
