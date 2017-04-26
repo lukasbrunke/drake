@@ -93,6 +93,7 @@ std::unique_ptr<RigidBodyTreed> ConstructKuka() {
 
   multibody::AddFlatTerrainToWorld(rigid_body_tree.get());
 
+  rigid_body_tree->addFrame(cup_frame);
   return rigid_body_tree;
 }
 
