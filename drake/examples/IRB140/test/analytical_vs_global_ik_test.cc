@@ -574,16 +574,42 @@ void AnalyzeOutputFile(int argc, char* argv[]) {
   DUT dut(link6_quat);
   Eigen::Matrix2Xd global_ik_ee_error(2, both_feasible.size());
   KinematicsCache<double> cache = dut.robot()->CreateKinematicsCache();
+  std::vector<bool> q_global_ik_at_joint_limits(both_feasible.size());
+  Eigen::Matrix2Xd global_ik_ee_error_at_joint_limits(2, 0);
+  Eigen::Matrix2Xd global_ik_ee_error_not_at_joint_limits(2, 0);
   for (int i = 0; i < static_cast<int>(both_feasible.size()); ++i) {
     cache.initialize(both_feasible[i].q_global_ik());
+    q_global_ik_at_joint_limits[i] = ((both_feasible[i].q_global_ik() - dut.robot()->joint_limit_min).array() < 1E-2).any()
+        || ((both_feasible[i].q_global_ik() - dut.robot()->joint_limit_max).array() > -1E-2).any();
+
     dut.robot()->doKinematics(cache);
     Eigen::Isometry3d ee_pose_global_ik = dut.robot()->CalcBodyPoseInWorldFrame(cache, dut.robot()->get_body(dut.ee_idx()));
     global_ik_ee_error(0, i) = (ee_pose_global_ik.translation() - both_feasible[i].ee_pose().translation()).norm();
     global_ik_ee_error(1, i) = Eigen::AngleAxisd(ee_pose_global_ik.linear().transpose() * both_feasible[i].ee_pose().linear()).angle();
+    if (q_global_ik_at_joint_limits[i]) {
+      global_ik_ee_error_at_joint_limits.conservativeResize(Eigen::NoChange, global_ik_ee_error_at_joint_limits.cols() + 1);
+      global_ik_ee_error_at_joint_limits.col(global_ik_ee_error_at_joint_limits.cols() - 1) = global_ik_ee_error.col(i);
+    } else {
+      global_ik_ee_error_not_at_joint_limits.conservativeResize(Eigen::NoChange, global_ik_ee_error_not_at_joint_limits.cols() + 1);
+      global_ik_ee_error_not_at_joint_limits.col(global_ik_ee_error_not_at_joint_limits.cols() - 1) = global_ik_ee_error.col(i);
+    }
   }
+
   auto h_fig = CallMatlab(1, "figure", 1);
-  auto h_pose_error = CallMatlab(1, "plot", global_ik_ee_error.row(0) * 100, global_ik_ee_error.row(1) / M_PI * 180);
-  CallMatlab("set", h_pose_error[0], "LineStyle", "none", "Marker", "o");
+  CallMatlab("hold", "on");
+  auto h_pose_error_at_joint_limits = CallMatlab(1, "plot",
+                                 global_ik_ee_error_at_joint_limits.row(0) * 100.0,
+                                 global_ik_ee_error_at_joint_limits.row(1) / M_PI * 180.0);
+  CallMatlab("set", h_pose_error_at_joint_limits[0], "LineStyle", "none", "Marker", "o", "Color", Eigen::Vector3d(1, 0, 0));
+  CallMatlab("set", h_pose_error_at_joint_limits[0], "DisplayName", "Joint limits active");
+
+  auto h_pose_error_not_at_joint_limits = CallMatlab(1, "plot",
+                                                 global_ik_ee_error_not_at_joint_limits.row(0) * 100.0,
+                                                 global_ik_ee_error_not_at_joint_limits.row(1) / M_PI * 180.0);
+  CallMatlab("set", h_pose_error_not_at_joint_limits[0], "LineStyle", "none", "Marker", "x", "Color", Eigen::Vector3d(0, 0, 1));
+  CallMatlab("set", h_pose_error_not_at_joint_limits[0], "DisplayName", "Joint limits inactive");
+
+  CallMatlab("legend", "show");
   auto h_xlabel = CallMatlab(1, "xlabel", "position error (cm)");
   auto h_ylabel = CallMatlab(1, "ylabel", "orientation angle error (degree)");
   CallMatlab("set", h_xlabel[0], "FontSize", 25);
