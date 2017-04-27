@@ -480,10 +480,24 @@ void DebugOutputFile(int argc, char* argv[]) {
       dut.SolveGlobalIK(ik_result.ee_pose().translation(), &ik_result);
       ik_result.printToFile(&output_file1);
     }*/
-    if (ik_result.analytical_ik_status() == solvers::SolutionResult::kInfeasibleConstraints
+    /*if (ik_result.analytical_ik_status() == solvers::SolutionResult::kInfeasibleConstraints
         && ik_result.global_ik_status() == solvers::SolutionResult::kSolutionFound) {
       dut.SolveAnalyticalIK(ik_result.ee_pose().translation(), &ik_result);
       ik_result.printToFile(&output_file1);
+    }*/
+    if (ik_result.global_ik_status() == solvers::SolutionResult::kSolutionFound
+        && ik_result.analytical_ik_status() == solvers::SolutionResult::kSolutionFound) {
+      cache.initialize(ik_result.q_global_ik());
+      dut.robot()->doKinematics(cache);
+      Eigen::Isometry3d ee_pose = dut.robot()->CalcBodyPoseInWorldFrame(cache,
+                                                                        dut.robot()->get_body(
+                                                                            dut.ee_idx()));
+      double pos_error =
+          (ee_pose.translation() - ik_result.ee_pose().translation()).norm();
+      if (pos_error > 0.06) {
+        dut.SolveGlobalIK(ik_result.ee_pose().translation(), &ik_result);
+        ik_result.printToFile(&output_file1);
+      }
     }
     ik_result.printToFile(&output_file2);
   }
@@ -583,7 +597,7 @@ void AnalyzeOutputFile(int argc, char* argv[]) {
 
 int main(int argc, char* argv[]) {
   //drake::examples::IRB140::DoMain(argc, argv);
-  //drake::examples::IRB140::DebugOutputFile(argc, argv);
-  drake::examples::IRB140::AnalyzeOutputFile(argc, argv);
+  drake::examples::IRB140::DebugOutputFile(argc, argv);
+  //drake::examples::IRB140::AnalyzeOutputFile(argc, argv);
   return 0;
 }
