@@ -494,11 +494,15 @@ void DebugOutputFile(int argc, char* argv[]) {
                                                                             dut.ee_idx()));
       double pos_error =
           (ee_pose.translation() - ik_result.ee_pose().translation()).norm();
-      if (pos_error > 0.06) {
+      if (pos_error > 0.05) {
         dut.SolveGlobalIK(ik_result.ee_pose().translation(), &ik_result);
         ik_result.printToFile(&output_file1);
       }
     }
+    /*if (ik_result.global_ik_status() == solvers::SolutionResult::kInvalidInput) {
+      dut.SolveGlobalIK(ik_result.ee_pose().translation(), &ik_result);
+      ik_result.printToFile(&output_file1);
+    }*/
     ik_result.printToFile(&output_file2);
   }
   output_file1.close();
@@ -623,7 +627,7 @@ void AnalyzeOutputFile(int argc, char* argv[]) {
 
 int main(int argc, char* argv[]) {
   //drake::examples::IRB140::DoMain(argc, argv);
-  drake::examples::IRB140::DebugOutputFile(argc, argv);
-  //drake::examples::IRB140::AnalyzeOutputFile(argc, argv);
+  //drake::examples::IRB140::DebugOutputFile(argc, argv);
+  drake::examples::IRB140::AnalyzeOutputFile(argc, argv);
   return 0;
 }
