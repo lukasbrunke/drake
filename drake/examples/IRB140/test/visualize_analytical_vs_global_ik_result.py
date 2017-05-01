@@ -5,8 +5,9 @@ import bot_core as lcmbotcore
 
 # receive lcm message and draw data
 def receiveMessage(msg):
+    drake_path = '/home/hongkai/drake-distro-bk'
 
-    robotModel, jointController = roboturdf.loadRobotModel(urdfFile='/home/hongkai/drake-distro/drake/examples/IRB140/urdf/irb_140_shift.urdf', view=view, useConfigFile=False)
+    robotModel, jointController = roboturdf.loadRobotModel(urdfFile=drake_path+'/drake/examples/IRB140/urdf/irb_140_shift.urdf', view=view, useConfigFile=False)
     jointController.setPose('my posture', np.zeros(len(jointController.jointNames)))
 
     folderName = 'my data'
@@ -25,7 +26,7 @@ def receiveMessage(msg):
     d3 = DebugData()
     d4 = DebugData()
     
-    file = open('/home/hongkai/drake-distro/ik_output21_2_recompute.txt','r')
+    file = open(drake_path+'/ik_output21_0.txt','r')
 
     lines = file.readlines()
 
