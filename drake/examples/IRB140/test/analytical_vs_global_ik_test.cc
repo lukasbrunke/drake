@@ -150,6 +150,28 @@ class DUT {
     global_ik_pos_cnstr_.constraint()->UpdateUpperBound(link6_pos);
     solvers::GurobiSolver gurobi_solver;
     solvers::MosekSolver mosek_solver;
+    for (int i = 1; i < robot()->get_num_bodies(); ++i) {
+      const auto& body_R = global_ik_.body_rotation_matrix(i);
+      Eigen::Matrix<symbolic::Expression, 5, 1> cone_expr;
+      cone_expr(0) = 1.0;
+      cone_expr(1) = 3.0;
+      cone_expr.tail<3>() = body_R.col(0) + body_R.col(1) + body_R.col(2);
+      global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
+      cone_expr.tail<3>() = body_R.col(0) + body_R.col(1) - body_R.col(2);
+      global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
+      cone_expr.tail<3>() = body_R.col(0) - body_R.col(1) + body_R.col(2);
+      global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
+      cone_expr.tail<3>() = body_R.col(0) - body_R.col(1) - body_R.col(2);
+      global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
+      cone_expr.tail<3>() = body_R.row(0) + body_R.row(1) + body_R.row(2);
+      global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
+      cone_expr.tail<3>() = body_R.row(0) + body_R.row(1) - body_R.row(2);
+      global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
+      cone_expr.tail<3>() = body_R.row(0) - body_R.row(1) + body_R.row(2);
+      global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
+      cone_expr.tail<3>() = body_R.row(0) - body_R.row(1) - body_R.row(2);
+      global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
+    }
     //global_ik_.SetSolverOption(solvers::SolverType::kGurobi, "OutputFlag", 1);
     solvers::SolutionResult global_ik_status = gurobi_solver.Solve(global_ik_);
     //solvers::SolutionResult global_ik_status = mosek_solver.Solve(global_ik_);
@@ -494,7 +516,7 @@ void DebugOutputFile(int argc, char* argv[]) {
                                                                             dut.ee_idx()));
       double pos_error =
           (ee_pose.translation() - ik_result.ee_pose().translation()).norm();
-      if (pos_error > 0.05) {
+      if (pos_error > 0.08) {
         dut.SolveGlobalIK(ik_result.ee_pose().translation(), &ik_result);
         ik_result.printToFile(&output_file1);
       }
