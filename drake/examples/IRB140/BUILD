@@ -45,6 +45,17 @@ drake_cc_googletest(
     ],
 )
 
+drake_cc_googletest(
+    name = "IRB140_global_ik_test",
+    srcs = ["test/IRB140_global_ik_test.cc"],
+    deps = [
+        ":IRB140_analytical_kinematics",
+        ":IRB140_common",
+        "//drake/common:eigen_matrix_compare",
+        "//drake/multibody:global_inverse_kinematics",
+    ],
+)
+
 drake_cc_binary(
     name = "analytical_vs_global_ik_test",
     testonly = 1,
