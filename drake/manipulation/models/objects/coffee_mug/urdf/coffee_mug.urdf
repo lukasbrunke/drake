@@ -26,13 +26,14 @@
   </material>
 	<link name = "coffee_mug">
 	<visual>
-		<origin rpy="1.5707963 0 0" xyz="-0.01 0 0"/>
+		<origin rpy="1.5707963 0 0" xyz="-0.03 -0.01 0"/>
 		<geometry>
 		<mesh filename="../meshes/coffee_mug.obj"/>
 		</geometry>
 		<material name="Blue"/>
 	</visual>
 	<collision>
+		<origin rpy="1.5707963 0 0" xyz="-0.03 -0.01 0"/>
 		<geometry>
 		<cylinder length="0.05" radius="0.12"/>
 		</geometry>

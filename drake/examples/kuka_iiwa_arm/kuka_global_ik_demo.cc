@@ -32,6 +32,8 @@
 #include "drake/util/drakeGeometryUtil.h"
 #include "drake/multibody/global_inverse_kinematics.h"
 #include "drake/solvers/gurobi_solver.h"
+#include "drake/math/autodiff.h"
+#include "drake/math/autodiff_gradient.h"
 
 namespace drake {
 namespace examples {
@@ -114,7 +116,7 @@ std::unique_ptr<RigidBodyTreed> ConstructKuka() {
   return rigid_body_tree;
 }
 
-Eigen::Matrix<double, 7, 1> SolveGlobalIK(RigidBodyTreed* tree, const Eigen::Ref<Eigen::Vector3d>& mug_pos) {
+Eigen::Matrix<double, 7, 1> SolveGlobalIK(RigidBodyTreed* tree, const Eigen::Ref<Eigen::Vector3d>& mug_center) {
   multibody::GlobalInverseKinematics global_ik(*tree);
   int link7_idx = tree->FindBodyIndex("iiwa_link_7");
   auto link7_rotmat = global_ik.body_rotation_matrix(link7_idx);
@@ -123,14 +125,9 @@ Eigen::Matrix<double, 7, 1> SolveGlobalIK(RigidBodyTreed* tree, const Eigen::Ref
   global_ik.AddLinearConstraint(link7_rotmat(2, 1) == 0);
   // z axis of link 7 frame points to the center of the cup, with a certain
   // distance to the cup
-  Eigen::Vector3d mug_center = mug_pos;
-  mug_center(2) += 0.05;
-  mug_center(1) -= 0.01;
-  mug_center(0) -= 0.02;
-  std::cout<<mug_center<<std::endl;
-  global_ik.AddLinearConstraint(mug_center - link7_pos == 0.2 * link7_rotmat.col(2));
+  global_ik.AddWorldPositionConstraint(link7_idx, Eigen::Vector3d(0, 0, 0.2), mug_center, mug_center);
   // height constraint
-  global_ik.AddLinearConstraint(link7_pos(2), mug_pos(2)+0.02, mug_pos(2) + 0.1);
+  global_ik.AddLinearConstraint(link7_pos(2), mug_center(2) - 0.02, mug_center(2) + 0.05);
 
   solvers::GurobiSolver gurobi_solver;
   global_ik.SetSolverOption(solvers::SolverType::kGurobi, "OutputFlag", true);
@@ -140,6 +137,73 @@ Eigen::Matrix<double, 7, 1> SolveGlobalIK(RigidBodyTreed* tree, const Eigen::Ref
   }
   return global_ik.ReconstructGeneralizedPositionSolution();
 }
+
+class GraspConstraint : public solvers::Constraint {
+ public:
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(GraspConstraint)
+
+  GraspConstraint(RigidBodyTreed* tree) : Constraint(4, 7),
+                                          tree_(tree),
+                                          cache_(tree_->CreateKinematicsCache()),
+                                          link7_idx_(tree_->FindBodyIndex("iiwa_link_7")) {}
+
+  void DoEval(const Eigen::Ref<const Eigen::VectorXd>& x, Eigen::VectorXd& y) const override {
+    y.resize(4);
+    cache_.initialize(x);
+    tree_->doKinematics(cache_);
+    const Eigen::Isometry3d link7_pose = tree_->CalcBodyPoseInWorldFrame(cache_, tree_->get_body(link7_idx_));
+    y.head<3>() = link7_pose.linear() * Eigen::Vector3d(0, 0, 0.2) + link7_pose.translation();
+    y(3) = link7_pose.linear()(2, 1);
+  }
+
+  void DoEval(const Eigen::Ref<const AutoDiffVecXd>& x, AutoDiffVecXd& y) const  override{
+    y.resize(4);
+    Eigen::Matrix<double, 7, 1> q = math::autoDiffToValueMatrix(x);
+    cache_.initialize(q);
+    tree_->doKinematics(cache_);
+    Eigen::Vector3d grasp_pt(0, 0, 0.2);
+    Eigen::Vector4d y_val;
+    Eigen::Matrix<double, 4, 7> dy_val;
+    dy_val.setZero();
+    y_val.head<3>() = tree_->transformPoints(cache_, grasp_pt, link7_idx_,0);
+    dy_val.block<3, 7>(0, 0) = tree_->transformPointsJacobian(cache_, grasp_pt, link7_idx_, 0, true);
+    Eigen::Vector3d y_axis(0, 1, 0);
+    Eigen::Vector3d y_axis_pos = tree_->transformPoints(cache_, y_axis, link7_idx_, 0);
+    Eigen::Vector3d ee_origin_pos = tree_->transformPoints(cache_, Eigen::Vector3d::Zero(), link7_idx_, 0);
+    y_val(3) = y_axis_pos(2) - ee_origin_pos(2);
+    Eigen::Matrix<double, 3, 7> dee_origin_pos = tree_->transformPointsJacobian(cache_, Eigen::Vector3d::Zero(), link7_idx_, 0, true);
+    Eigen::Matrix<double, 3, 7> dy_axis_pos = tree_->transformPointsJacobian(cache_, y_axis, link7_idx_, 0, true);
+    dy_val.row(3) = dy_axis_pos.row(2) - dee_origin_pos.row(2);
+    Eigen::MatrixXd dy_val_dynamic = dy_val * math::autoDiffToGradientMatrix(x);
+    Eigen::VectorXd y_val_dynamic = y_val;
+    math::initializeAutoDiffGivenGradientMatrix(y_val_dynamic, dy_val_dynamic, y);
+  }
+
+  void SetMugCenter(const Eigen::Ref<const Eigen::Vector3d>& mug_center) {
+    Eigen::Vector4d bnd;
+    bnd << mug_center, 0;
+    set_bounds(mug_center, mug_center);
+  }
+
+ private:
+  RigidBodyTreed* tree_;
+  mutable KinematicsCache<double> cache_;
+  int link7_idx_;
+};
+
+Eigen::Matrix<double, 7, 1> SolveNonlinearIK(RigidBodyTreed* tree, const Eigen::Ref<Eigen::Vector3d>& mug_center) {
+  solvers::MathematicalProgram nl_ik;
+  auto q = nl_ik.NewContinuousVariables<7>();
+  nl_ik.AddBoundingBoxConstraint(tree->joint_limit_min, tree->joint_limit_max, q);
+
+  auto grasp_cnstr = std::make_shared<GraspConstraint>(tree);
+  grasp_cnstr->SetMugCenter(mug_center);
+  nl_ik.AddConstraint(grasp_cnstr, q);
+
+  solvers::SolutionResult nl_ik_result = nl_ik.Solve();
+  std::cout << "nonlinear IK status: " << nl_ik_result << std::endl;
+  return nl_ik.GetSolution(q);
+};
 
 int DoMain() {
   drake::lcm::DrakeLcm lcm;
@@ -161,11 +225,15 @@ int DoMain() {
   //std::cout << pt1_pos.transpose() << std::endl;
   //std::cout << pt2_pos.transpose() << std::endl;
   //std::cout << pt3_pos.transpose() << std::endl;
-  //auto mug_frame = tree->findFrame("mug");
-  //Eigen::Vector3d mug_pos = mug_frame->get_transform_to_body().translation();
-  //Eigen::Matrix<double, 7, 1> q_global = SolveGlobalIK(tree.get(), mug_pos);
+  auto mug_frame = tree->findFrame("mug");
+  Eigen::Vector3d mug_pos = mug_frame->get_transform_to_body().translation();
+  Eigen::Vector3d mug_center = mug_pos;
+  mug_center(2) += 0.05;
+  //Eigen::Matrix<double, 7, 1> q_global = SolveGlobalIK(tree.get(), mug_center);
   //simple_tree_visualizer.visualize(q_global);
-  simple_tree_visualizer.visualize(Eigen::Matrix<double, 7, 1>::Zero());
+  Eigen::Matrix<double, 7, 1> q_nl = SolveNonlinearIK(tree.get(), mug_center);
+  simple_tree_visualizer.visualize(q_nl);
+  //simple_tree_visualizer.visualize(Eigen::Matrix<double, 7, 1>::Zero());
   //std::cout << q_global.transpose() << std::endl;
   return 0;
 }

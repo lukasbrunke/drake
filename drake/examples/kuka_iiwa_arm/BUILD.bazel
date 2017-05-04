@@ -155,6 +155,7 @@ drake_cc_binary(
         "//drake/examples/schunk_wsg:schunk_wsg_constants",
         "//drake/examples/schunk_wsg:schunk_wsg_lcm",
         "//drake/lcm",
+        "//drake/math:autodiff",
         "//drake/multibody:global_inverse_kinematics",
         "//drake/multibody:rigid_body_tree_construction",
         "//drake/multibody/rigid_body_plant",
