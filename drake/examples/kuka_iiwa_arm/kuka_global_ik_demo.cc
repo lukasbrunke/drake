@@ -99,6 +99,18 @@ std::unique_ptr<RigidBodyTreed> ConstructKuka() {
   multibody::AddFlatTerrainToWorld(rigid_body_tree.get());
   rigid_body_tree->addFrame(beets_frame);
 
+  const std::string bowl_path = drake::GetDrakePath() + "/manipulation/models/objects/bowl/urdf/bowl.urdf";
+  const Eigen::Vector3d kBowlPos(kMugPos(0) - 0.2, kMugPos(1) - 0.15, kMugPos(2));
+  auto bowl_frame = std::make_shared<RigidBodyFrame<double>>("bowl", rigid_body_tree->get_mutable_body(0), kBowlPos, Eigen::Vector3d::Zero());
+  parsers::urdf::AddModelInstanceFromUrdfFile(bowl_path, drake::multibody::joints::kFixed, bowl_frame, rigid_body_tree.get());
+  multibody::AddFlatTerrainToWorld(rigid_body_tree.get());
+  rigid_body_tree->addFrame(bowl_frame);
+
+  const std::string bottle_path = drake::GetDrakePath() + "/manipulation/models/objects/wine_bottle/urdf/bottle.urdf";
+  const Eigen::Vector3d kBottlePos(kMugPos(0), kMugPos(1) - 0.15, kMugPos(2));
+  auto bottle_frame = std::make_shared<RigidBodyFrame<double>>("bottle", rigid_body_tree->get_mutable_body(0), kBottlePos, Eigen::Vector3d::Zero());
+  parsers::urdf::AddModelInstanceFromUrdfFile(bottle_path, drake::multibody::joints::kFixed, bottle_frame, rigid_body_tree.get());
+  rigid_body_tree->addFrame(bottle_frame);
   return rigid_body_tree;
 }
 
