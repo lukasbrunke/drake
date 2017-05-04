@@ -28,10 +28,10 @@
           <lighting>1</lighting>
           <script>
             <uri>file://media/materials/scripts/gazebo.material</uri>
-            <name>Gazebo/Grey</name>
+            <name>Gazebo/FlatBlack</name>
           </script>
-          <ambient>0.3 0.3 0.3 1</ambient>
-          <diffuse>0.7 0.7 0.7 1</diffuse>
+          <ambient>0.4 0.4 0.4 1</ambient>
+          <diffuse>0.6 0.6 0.6 1</diffuse>
           <specular>0.01 0.01 0.01 1</specular>
           <emissive>0 0 0 1</emissive>
           <shader type='vertex'>
@@ -124,7 +124,7 @@
           <lighting>1</lighting>
           <script>
             <uri>file://media/materials/scripts/gazebo.material</uri>
-            <name>Gazebo/Grey</name>
+            <name>Gazebo/FlatBlack</name>
           </script>
           <ambient>0.3 0.3 0.3 1</ambient>
           <diffuse>0.7 0.7 0.7 1</diffuse>
@@ -256,7 +256,7 @@
           <lighting>1</lighting>
           <script>
             <uri>file://media/materials/scripts/gazebo.material</uri>
-            <name>Gazebo/Grey</name>
+            <name>Gazebo/FlatBlack</name>
           </script>
           <ambient>0.3 0.3 0.3 1</ambient>
           <diffuse>0.7 0.7 0.7 1</diffuse>
@@ -353,7 +353,7 @@
           <lighting>1</lighting>
           <script>
             <uri>file://media/materials/scripts/gazebo.material</uri>
-            <name>Gazebo/Grey</name>
+            <name>Gazebo/FlatBlack</name>
           </script>
           <ambient>0.3 0.3 0.3 1</ambient>
           <diffuse>0.7 0.7 0.7 1</diffuse>
