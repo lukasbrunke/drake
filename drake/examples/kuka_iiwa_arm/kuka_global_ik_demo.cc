@@ -34,6 +34,8 @@
 #include "drake/solvers/gurobi_solver.h"
 #include "drake/math/autodiff.h"
 #include "drake/math/autodiff_gradient.h"
+#include "drake/multibody/shapes/geometry.h"
+#include "drake/multibody/joints/fixed_joint.h"
 
 namespace drake {
 namespace examples {
@@ -48,6 +50,36 @@ using systems::InputPortDescriptor;
 using systems::OutputPortDescriptor;
 using systems::RigidBodyPlant;
 using systems::Simulator;
+
+Eigen::Matrix<double, 3, 8> AddBoxToTree(RigidBodyTreed* tree, const Eigen::Ref<const Eigen::Vector3d>& box_size, const Eigen::Isometry3d& box_pose, const std::string& name) {
+  auto body = std::make_unique<RigidBody<double>>();
+  body->set_name(name);
+  body->set_mass(1.0);
+  body->set_spatial_inertia(Matrix6<double>::Identity());
+
+  const DrakeShapes::Box shape(box_size);
+  const Eigen::Vector4d material(0.3, 0.4, 0.5, 0.5);
+  const DrakeShapes::VisualElement visual_element(shape, Eigen::Isometry3d::Identity(), material);
+  body->AddVisualElement(visual_element);
+
+  auto joint = std::make_unique<FixedJoint>(name + "joint", box_pose);
+  body->add_joint(&tree->world(), std::move(joint));
+
+  tree->bodies.push_back(std::move(body));
+  Eigen::Matrix<double, 3, 8> box_vertices;
+  box_vertices.row(0) << 1, 1, 1, 1, -1, -1, -1, -1;
+  box_vertices.row(1) << 1, 1, -1, -1, 1, 1, -1, -1;
+  box_vertices.row(2) << 1, -1, 1, -1, 1, -1, 1, -1;
+  for (int i = 0; i < 3; ++i) {
+    box_vertices.row(i) *= box_size(i) / 2;
+  }
+  box_vertices = box_pose.linear() * box_vertices;
+  for (int i = 0; i < 8; ++i) {
+    box_vertices.col(i) += box_pose.translation();
+  }
+  std::cout << box_vertices.transpose() << std::endl;
+  return box_vertices;
+}
 
 std::unique_ptr<RigidBodyTreed> ConstructKuka() {
   std::unique_ptr<RigidBodyTreed> rigid_body_tree = std::make_unique<RigidBodyTreed>();
@@ -102,18 +134,39 @@ std::unique_ptr<RigidBodyTreed> ConstructKuka() {
   rigid_body_tree->addFrame(beets_frame);
 
   const std::string bowl_path = drake::GetDrakePath() + "/manipulation/models/objects/bowl/urdf/bowl.urdf";
-  const Eigen::Vector3d kBowlPos(kMugPos(0) - 0.2, kMugPos(1) - 0.15, kMugPos(2));
+  const Eigen::Vector3d kBowlPos(kMugPos(0), kMugPos(1) - 0.25, kMugPos(2));
   auto bowl_frame = std::make_shared<RigidBodyFrame<double>>("bowl", rigid_body_tree->get_mutable_body(0), kBowlPos, Eigen::Vector3d::Zero());
   parsers::urdf::AddModelInstanceFromUrdfFile(bowl_path, drake::multibody::joints::kFixed, bowl_frame, rigid_body_tree.get());
   multibody::AddFlatTerrainToWorld(rigid_body_tree.get());
   rigid_body_tree->addFrame(bowl_frame);
 
   const std::string bottle_path = drake::GetDrakePath() + "/manipulation/models/objects/wine_bottle/urdf/bottle.urdf";
-  const Eigen::Vector3d kBottlePos(kMugPos(0), kMugPos(1) - 0.15, kMugPos(2));
+  const Eigen::Vector3d kBottlePos(kMugPos(0) - 0.25, kMugPos(1) - 0.05, kMugPos(2));
   auto bottle_frame = std::make_shared<RigidBodyFrame<double>>("bottle", rigid_body_tree->get_mutable_body(0), kBottlePos, Eigen::Vector3d::Zero());
   parsers::urdf::AddModelInstanceFromUrdfFile(bottle_path, drake::multibody::joints::kFixed, bottle_frame, rigid_body_tree.get());
   rigid_body_tree->addFrame(bottle_frame);
+
   return rigid_body_tree;
+}
+
+std::vector<Eigen::Matrix3Xd> SetFreeSpace(RigidBodyTreed* tree) {
+  //const Eigen::Vector3d kBottlePos = tree->findFrame("bottle")->get_transform_to_body().translation();
+  //const Eigen::Vector3d kMugPos = tree->findFrame("mug")->get_transform_to_body().translation();
+  //const Eigen::Vector3d kBeetsPos = tree->findFrame("beets")->get_transform_to_body().translation();
+  //const Eigen::Vector3d kBowlPos = tree->findFrame("bowl")->get_transform_to_body().translation();
+
+  std::vector<Eigen::Matrix3Xd> box_vertices;
+
+  Eigen::Isometry3d box1_pose;
+  box1_pose.linear().setIdentity();
+  box1_pose.translation() << 0.32, -0.85, 1.02;
+  box_vertices.push_back(AddBoxToTree(tree, Eigen::Vector3d(0.25, 0.25, 0.5), box1_pose, "box1"));
+
+  Eigen::Isometry3d box2_pose;
+  box2_pose.linear().setIdentity();
+  box2_pose.translation() << 0.42, -0.72, 1.02;
+  box_vertices.push_back(AddBoxToTree(tree, Eigen::Vector3d(0.15, 0.2, 0.5), box2_pose, "box2"));
+  return box_vertices;
 }
 
 Eigen::Matrix<double, 7, 1> SolveGlobalIK(RigidBodyTreed* tree, const Eigen::Ref<Eigen::Vector3d>& mug_center) {
@@ -182,7 +235,7 @@ class GraspConstraint : public solvers::Constraint {
   void SetMugCenter(const Eigen::Ref<const Eigen::Vector3d>& mug_center) {
     Eigen::Vector4d bnd;
     bnd << mug_center, 0;
-    set_bounds(mug_center, mug_center);
+    set_bounds(bnd, bnd);
   }
 
  private:
@@ -208,6 +261,7 @@ Eigen::Matrix<double, 7, 1> SolveNonlinearIK(RigidBodyTreed* tree, const Eigen::
 int DoMain() {
   drake::lcm::DrakeLcm lcm;
   auto tree = ConstructKuka();
+  const std::vector<Eigen::Matrix3Xd> free_space_vertices = SetFreeSpace(tree.get());
   tools::SimpleTreeVisualizer simple_tree_visualizer(*tree.get(), &lcm);
   // Palm faces +y axis of ee_frame. The face of the palm is at about (0, 0.1, 0)
   // of the ee_frame.
