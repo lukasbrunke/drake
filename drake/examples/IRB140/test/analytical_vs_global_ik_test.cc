@@ -42,7 +42,7 @@ class IKresult {
 
   int& nl_ik_resolve_status() {return nl_ik_resolve_status_;}
 
-  const int& nl_ik_status_resolve_status() const {return nl_ik_resolve_status_;}
+  const int& nl_ik_resolve_status() const {return nl_ik_resolve_status_;}
 
   std::vector<Eigen::Matrix<double, 6, 1>>& q_analytical_ik() {return q_analytical_ik_;}
 
@@ -188,14 +188,9 @@ class DUT {
     ik_result->global_ik_time() = global_ik_.computation_time();
   }
 
-  void SolveIK(
-      const Eigen::Vector3d& link6_pos, std::fstream* output_file) {
-    IKresult ik_result;
-    // Solve IK using analytical IK
-    SolveAnalyticalIK(link6_pos, &ik_result);
-
-
-    // Solve IK using nonlinear IK
+  void SolveNonlinearIK(const Eigen::Vector3d& link6_pos, IKresult* ik_result,
+                        const Eigen::Ref<const Eigen::Matrix<double, 6, 1>>& q_guess,
+                        bool resolve_flag) {
     WorldPositionConstraint nl_ik_pos_cnstr(analytical_ik_.robot(), ee_idx_,
                                             Eigen::Vector3d::Zero(), link6_pos,
                                             link6_pos);
@@ -206,30 +201,36 @@ class DUT {
         0);
     int nl_ik_info;
     std::vector<std::string> infeasible_constraint;
-    Eigen::VectorXd q_nl_ik_guess = Eigen::Matrix<double, 6, 1>::Zero();
     std::array<RigidBodyConstraint*, 2> nl_ik_cnstr = {
         {&nl_ik_pos_cnstr, &nl_ik_quat_cnstr}};
     IKoptions ik_options(analytical_ik_.robot());
+    Eigen::VectorXd q_ik_guess = q_guess;
     Eigen::VectorXd q_nl_ik(6);
-    inverseKin(analytical_ik_.robot(), q_nl_ik_guess, q_nl_ik_guess, 2,
+    inverseKin(analytical_ik_.robot(), q_ik_guess, q_ik_guess, 2,
                nl_ik_cnstr.data(), ik_options, &q_nl_ik, &nl_ik_info,
                &infeasible_constraint);
-    Eigen::VectorXd q_nl_ik_resolve(6);
-    int nl_ik_resolve_info;
-    nl_ik_resolve_info = 0;
-    q_nl_ik_resolve = Eigen::Matrix<double, 6, 1>::Constant(NAN);
+    if (resolve_flag) {
+      ik_result->nl_ik_resolve_status() = nl_ik_info;
+      ik_result->q_nl_ik_resolve() = q_nl_ik;
+    } else {
+      ik_result->nl_ik_status() = nl_ik_info;
+      ik_result->q_nl_ik() = q_nl_ik;
+    }
+  }
+  void SolveIK(
+      const Eigen::Vector3d& link6_pos, std::fstream* output_file) {
+    IKresult ik_result;
+    // Solve IK using analytical IK
+    SolveAnalyticalIK(link6_pos, &ik_result);
+
+
+    // Solve IK using nonlinear IK
+    SolveNonlinearIK(link6_pos, &ik_result, Eigen::VectorXd::Zero(6), false);
 
     // Solve IK using global IK
     SolveGlobalIK(link6_pos, &ik_result);
     if (ik_result.global_ik_status() == solvers::SolutionResult::kSolutionFound) {
-      if (nl_ik_info != 1) {
-        // Resolve nonlinear IK if it was not solved before. This time use the
-        // global IK solution as the initial guess.
-        Eigen::VectorXd q_global_dynamic = ik_result.q_global_ik();
-        inverseKin(analytical_ik_.robot(), q_global_dynamic, q_global_dynamic,
-                   2, nl_ik_cnstr.data(), ik_options, &q_nl_ik_resolve,
-                   &nl_ik_resolve_info, &infeasible_constraint);
-      }
+      SolveNonlinearIK(link6_pos, &ik_result, ik_result.q_global_ik(), true);
     }
 
     if (ik_result.analytical_ik_status() == solvers::SolutionResult::kSolutionFound &&
@@ -242,10 +243,6 @@ class DUT {
     }
 
     // For print out.
-    ik_result.nl_ik_status() = nl_ik_info;
-    ik_result.nl_ik_resolve_status() = nl_ik_resolve_info;
-    ik_result.q_nl_ik() = q_nl_ik;
-    ik_result.q_nl_ik_resolve() = q_nl_ik_resolve;
     ik_result.ee_pose().linear() = ee_orient_.toRotationMatrix();
     ik_result.ee_pose().translation() = link6_pos;
     ik_result.printToFile(output_file);
@@ -533,10 +530,14 @@ void DebugOutputFile(int argc, char* argv[]) {
       dut.SolveGlobalIK(ik_result.ee_pose().translation(), &ik_result);
       ik_result.printToFile(&output_file1);
     }*/
-    if ((ik_result.global_ik_status() == solvers::SolutionResult::kInfeasibleConstraints
+    /*if ((ik_result.global_ik_status() == solvers::SolutionResult::kInfeasibleConstraints
         || ik_result.global_ik_status() == solvers::SolutionResult::kInfeasible_Or_Unbounded)
         && ik_result.analytical_ik_status() == solvers::SolutionResult::kSolutionFound) {
       dut.SolveGlobalIK(ik_result.ee_pose().translation(), &ik_result);
+      ik_result.printToFile(&output_file1);
+    }*/
+    if (ik_result.global_ik_status() == solvers::SolutionResult::kSolutionFound) {
+      dut.SolveNonlinearIK(ik_result.ee_pose().translation(), &ik_result, ik_result.q_global_ik(), true);
       ik_result.printToFile(&output_file1);
     }
     ik_result.printToFile(&output_file2);
@@ -553,6 +554,38 @@ void WriteRuntimeToFile(const Eigen::VectorXd& runtime, const std::string& out_f
     output_file << runtime;
   }
   output_file.close();
+}
+
+void AnalyzeNonlinearIKresult(const std::vector<IKresult>& ik_results) {
+  // Analyze whether global IK gives a better initial seed to nonlinear IK.
+  int both_infeasible_count = 0;
+  int both_feasible_count = 0;
+  int resolve_feasible_count = 0; // IK fails initially, but succeeds with global
+                                  // IK result as the seed.
+  int initial_feasible_count = 0; // IK succeeds initially, but fails with global
+                                  // IK result as the seed.
+  for (const auto& ik_result : ik_results) {
+    if (ik_result.analytical_ik_status() == solvers::SolutionResult::kSolutionFound) {
+      if (ik_result.nl_ik_status() <= 3) {
+        if (ik_result.nl_ik_resolve_status() <= 3) {
+          ++both_feasible_count;
+        } else {
+          ++initial_feasible_count;
+        }
+      } else {
+        // Initially IK fails.
+        if (ik_result.nl_ik_resolve_status() <= 3) {
+          ++resolve_feasible_count;
+        } else {
+          ++both_infeasible_count;
+        }
+      }
+    }
+  }
+  std::cout << "Both initial IK and resolve IK succeed: " << both_feasible_count << std::endl;
+  std::cout << "Neither initial IK nor resolve IK succeed: " << both_infeasible_count << std::endl;
+  std::cout << "Initial IK fails, but resolve IK succeed: " << resolve_feasible_count << std::endl;
+  std::cout << "Initial IK succeeds, but resolve IK fails: " << initial_feasible_count << std::endl;
 }
 
 void AnalyzeOutputFile(int argc, char* argv[]) {
@@ -656,6 +689,8 @@ void AnalyzeOutputFile(int argc, char* argv[]) {
   CallMatlab("set", h_ylabel[0], "FontSize", 25);
   auto h_axis = CallMatlab(1, "gca");
   CallMatlab("set", h_axis[0], "FontSize", 20);
+
+  AnalyzeNonlinearIKresult(ik_results);
 }
 }  // namespace IRB140
 }  // namespace examples
@@ -663,7 +698,7 @@ void AnalyzeOutputFile(int argc, char* argv[]) {
 
 int main(int argc, char* argv[]) {
   //drake::examples::IRB140::DoMain(argc, argv);
-  drake::examples::IRB140::DebugOutputFile(argc, argv);
-  //drake::examples::IRB140::AnalyzeOutputFile(argc, argv);
+  //drake::examples::IRB140::DebugOutputFile(argc, argv);
+  drake::examples::IRB140::AnalyzeOutputFile(argc, argv);
   return 0;
 }
