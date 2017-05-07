@@ -77,7 +77,6 @@ Eigen::Matrix<double, 3, 8> AddBoxToTree(RigidBodyTreed* tree, const Eigen::Ref<
   for (int i = 0; i < 8; ++i) {
     box_vertices.col(i) += box_pose.translation();
   }
-  std::cout << box_vertices.transpose() << std::endl;
   return box_vertices;
 }
 
@@ -127,7 +126,7 @@ std::unique_ptr<RigidBodyTreed> ConstructKuka() {
   rigid_body_tree->addFrame(mug_frame);
 
   const std::string beets_path = drake::GetDrakePath() + "/manipulation/models/objects/beets_can/urdf/beets.urdf";
-  const Eigen::Vector3d kBeetsPos(kMugPos(0) - 0.2, kMugPos(1) + 0.05, kMugPos(2));
+  const Eigen::Vector3d kBeetsPos(kMugPos(0) - 0.1, kMugPos(1) + 0.15, kMugPos(2) - 0.01);
   auto beets_frame = std::make_shared<RigidBodyFrame<double>>("beets", rigid_body_tree->get_mutable_body(0), kBeetsPos, Eigen::Vector3d::Zero());
   parsers::urdf::AddModelInstanceFromUrdfFile(beets_path, drake::multibody::joints::kFixed, beets_frame, rigid_body_tree.get());
   multibody::AddFlatTerrainToWorld(rigid_body_tree.get());
@@ -157,19 +156,36 @@ std::vector<Eigen::Matrix3Xd> SetFreeSpace(RigidBodyTreed* tree) {
 
   std::vector<Eigen::Matrix3Xd> box_vertices;
 
-  Eigen::Isometry3d box1_pose;
-  box1_pose.linear().setIdentity();
-  box1_pose.translation() << 0.32, -0.85, 1.02;
-  box_vertices.push_back(AddBoxToTree(tree, Eigen::Vector3d(0.25, 0.25, 0.5), box1_pose, "box1"));
+  Eigen::Isometry3d box_pose;
+  box_pose.linear().setIdentity();
+  box_pose.translation() << 0.32, -0.85, 1.02;
+  box_vertices.push_back(AddBoxToTree(tree, Eigen::Vector3d(0.25, 0.25, 0.5), box_pose, "box1"));
 
-  Eigen::Isometry3d box2_pose;
-  box2_pose.linear().setIdentity();
-  box2_pose.translation() << 0.42, -0.72, 1.02;
-  box_vertices.push_back(AddBoxToTree(tree, Eigen::Vector3d(0.15, 0.2, 0.5), box2_pose, "box2"));
+
+  box_pose.translation() << 0.42, -0.64, 1.02;
+  box_vertices.push_back(AddBoxToTree(tree, Eigen::Vector3d(0.15, 0.23, 0.5), box_pose, "box2"));
+
+  box_pose.translation() << 0.57, -0.73, 0.83;
+  box_vertices.push_back(AddBoxToTree(tree, Eigen::Vector3d(0.2, 0.1, 0.12), box_pose, "box3"));
+
+  box_pose.translation() << 0.55, -0.6, 1.08;
+  box_vertices.push_back(AddBoxToTree(tree, Eigen::Vector3d(0.3, 0.7, 0.4), box_pose, "box4"));
+
+  box_pose.translation() << 0.6, -0.4, 1.02;
+  box_vertices.push_back(AddBoxToTree(tree, Eigen::Vector3d(0.2, 0.35, 0.5), box_pose, "box5"));
+
+  box_pose.translation() << 0.32, -0.32, 1.02;
+  box_vertices.push_back(AddBoxToTree(tree, Eigen::Vector3d(0.4, 0.2, 0.5), box_pose, "box6"));
+
+  box_pose.translation() << 0.25, -0.52, 1.02;
+  box_vertices.push_back(AddBoxToTree(tree, Eigen::Vector3d(0.3, 0.23, 0.5), box_pose, "box7"));
+
+  box_pose.translation() << 0.25, -0.68, 1.23;
+  box_vertices.push_back(AddBoxToTree(tree, Eigen::Vector3d(0.25, 0.14, 0.2), box_pose, "box8"));
   return box_vertices;
 }
 
-Eigen::Matrix<double, 7, 1> SolveGlobalIK(RigidBodyTreed* tree, const Eigen::Ref<Eigen::Vector3d>& mug_center) {
+Eigen::Matrix<double, 7, 1> SolveGlobalIK(RigidBodyTreed* tree, const Eigen::Ref<Eigen::Vector3d>& mug_center, const std::vector<Eigen::Matrix3Xd>& free_space_vertices) {
   multibody::GlobalInverseKinematics global_ik(*tree);
   int link7_idx = tree->FindBodyIndex("iiwa_link_7");
   auto link7_rotmat = global_ik.body_rotation_matrix(link7_idx);
@@ -182,6 +198,48 @@ Eigen::Matrix<double, 7, 1> SolveGlobalIK(RigidBodyTreed* tree, const Eigen::Ref
   // height constraint
   global_ik.AddLinearConstraint(link7_pos(2), mug_center(2) - 0.02, mug_center(2) + 0.05);
 
+  // link 7 above the table
+  const double kTableHeight = mug_center(2) - 0.05;
+  global_ik.AddLinearConstraint((link7_rotmat * Eigen::Vector3d(0.04, 0, 0) + link7_pos)(2) >= kTableHeight + 0.03);
+  global_ik.AddLinearConstraint((link7_rotmat * Eigen::Vector3d(-0.04, 0, 0) + link7_pos)(2) >= kTableHeight + 0.03);
+  global_ik.AddLinearConstraint((link7_rotmat * Eigen::Vector3d(0, 0.04, 0) + link7_pos)(2) >= kTableHeight + 0.03);
+  global_ik.AddLinearConstraint((link7_rotmat * Eigen::Vector3d(0, -0.04, 0) + link7_pos)(2) >= kTableHeight + 0.03);
+  global_ik.AddLinearConstraint((link7_rotmat * Eigen::Vector3d(0.03, 0.03, 0) + link7_pos)(2) >= kTableHeight + 0.03);
+  global_ik.AddLinearConstraint((link7_rotmat * Eigen::Vector3d(0.03, -0.03, 0) + link7_pos)(2) >= kTableHeight + 0.03);
+  global_ik.AddLinearConstraint((link7_rotmat * Eigen::Vector3d(-0.03, 0.03, 0) + link7_pos)(2) >= kTableHeight + 0.03);
+  global_ik.AddLinearConstraint((link7_rotmat * Eigen::Vector3d(-0.03, -0.03, 0) + link7_pos)(2) >= kTableHeight + 0.03);
+
+  // Collision avoidance constraint
+  if (true) {
+    global_ik.BodyPointInOneOfRegions(link7_idx,
+                                      Eigen::Vector3d::Zero(),
+                                      free_space_vertices);
+    global_ik.BodyPointInOneOfRegions(link7_idx,
+                                      Eigen::Vector3d(0, 0.05, 0.1),
+                                      free_space_vertices);
+    global_ik.BodyPointInOneOfRegions(link7_idx,
+                                      Eigen::Vector3d(0, -0.05, 0.1),
+                                      free_space_vertices);
+    global_ik.BodyPointInOneOfRegions(link7_idx,
+                                      Eigen::Vector3d(0, -0.05, 0),
+                                      free_space_vertices);
+    global_ik.BodyPointInOneOfRegions(link7_idx,
+                                      Eigen::Vector3d(0, 0.05, 0),
+                                      free_space_vertices);
+    int link5_idx = tree->FindBodyIndex("iiwa_link_5");
+    global_ik.BodyPointInOneOfRegions(link5_idx,
+                                      Eigen::Vector3d(0.04, 0, 0),
+                                      free_space_vertices);
+    global_ik.BodyPointInOneOfRegions(link5_idx,
+                                      Eigen::Vector3d(-0.04, 0, 0),
+                                      free_space_vertices);
+    global_ik.BodyPointInOneOfRegions(link5_idx,
+                                      Eigen::Vector3d(0, 0.04, 0),
+                                      free_space_vertices);
+    global_ik.BodyPointInOneOfRegions(link5_idx,
+                                      Eigen::Vector3d(0, -0.04, 0),
+                                      free_space_vertices);
+  }
   solvers::GurobiSolver gurobi_solver;
   global_ik.SetSolverOption(solvers::SolverType::kGurobi, "OutputFlag", true);
   solvers::SolutionResult sol_result = gurobi_solver.Solve(global_ik);
@@ -272,6 +330,8 @@ int DoMain() {
   //auto cache = tree->CreateKinematicsCache();
   //cache.initialize(Eigen::Matrix<double, 7, 1>::Zero());
   //tree->doKinematics(cache);
+  //auto link5_pose = tree->CalcBodyPoseInWorldFrame(cache, *(tree->FindBody("iiwa_link_5")));
+  //std::cout << link5_pose.matrix() << std::endl;
   //auto link_7_pose = tree->CalcBodyPoseInWorldFrame(cache, *link_7);
   //Eigen::Vector3d pt1_pos = link_7_pose.linear() * Eigen::Vector3d(0.1, 0, 0) + link_7_pose.translation();
   //Eigen::Vector3d pt2_pos = link_7_pose.linear() * Eigen::Vector3d(0, 0.1, 0) + link_7_pose.translation();
@@ -283,10 +343,9 @@ int DoMain() {
   Eigen::Vector3d mug_pos = mug_frame->get_transform_to_body().translation();
   Eigen::Vector3d mug_center = mug_pos;
   mug_center(2) += 0.05;
-  //Eigen::Matrix<double, 7, 1> q_global = SolveGlobalIK(tree.get(), mug_center);
-  //simple_tree_visualizer.visualize(q_global);
-  Eigen::Matrix<double, 7, 1> q_nl = SolveNonlinearIK(tree.get(), mug_center);
-  simple_tree_visualizer.visualize(q_nl);
+  Eigen::Matrix<double, 7, 1> q_global = SolveGlobalIK(tree.get(), mug_center, free_space_vertices);
+  simple_tree_visualizer.visualize(q_global);
+  //Eigen::Matrix<double, 7, 1> q_nl = SolveNonlinearIK(tree.get(), mug_center);
   //simple_tree_visualizer.visualize(Eigen::Matrix<double, 7, 1>::Zero());
   //std::cout << q_global.transpose() << std::endl;
   return 0;
