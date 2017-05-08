@@ -2299,6 +2299,9 @@ class MathematicalProgram {
    * Gets the solution of an Eigen matrix of decision variables.
    * @tparam Derived An Eigen matrix containing Variable.
    * @param var The decision variables.
+   * @param solution_number solution_number = 0 is the optimal solution,
+   * solution_number > 0 corresponds to the i'th sub-optimal solution.
+   * @default is 0.
    * @return The value of the decision variable after solving the problem.
    */
   template <typename Derived>
@@ -2306,40 +2309,13 @@ class MathematicalProgram {
       std::is_same<typename Derived::Scalar, symbolic::Variable>::value,
       Eigen::Matrix<double, Derived::RowsAtCompileTime,
                     Derived::ColsAtCompileTime>>::type
-  GetSolution(const Eigen::MatrixBase<Derived>& var) const {
+  GetSolution(const Eigen::MatrixBase<Derived>& var, int solution_number = 0) const {
     Eigen::Matrix<double, Derived::RowsAtCompileTime,
                   Derived::ColsAtCompileTime>
         value(var.rows(), var.cols());
     for (int i = 0; i < var.rows(); ++i) {
       for (int j = 0; j < var.cols(); ++j) {
-        value(i, j) = GetSolution(var(i, j));
-      }
-    }
-    return value;
-  }
-
-
-  /**
-   * Gets the suboptimal solution of an Eigen matrix of decision variables.
-   * @tparam Derived An Eigen matrix containing Variable.
-   * @param var The decision variables.
-   * @param int solution_number The i'th sub-optimal solution.
-   * @pre 0 <= solution_number < suboptimal_sol_.size(). Throw a runtime_error
-   * if the precondition is not satisfied.
-   * @return The value of the decision variable after solving the problem.
-   */
-  template <typename Derived>
-  typename std::enable_if<
-      std::is_same<typename Derived::Scalar, symbolic::Variable>::value,
-      Eigen::Matrix<double, Derived::RowsAtCompileTime,
-                    Derived::ColsAtCompileTime>>::type
-  GetSuboptimalSolution(const Eigen::MatrixBase<Derived>& var, int solution_number) const {
-    Eigen::Matrix<double, Derived::RowsAtCompileTime,
-                  Derived::ColsAtCompileTime>
-        value(var.rows(), var.cols());
-    for (int i = 0; i < var.rows(); ++i) {
-      for (int j = 0; j < var.cols(); ++j) {
-        value(i, j) = GetSuboptimalSolution(var(i, j), solution_number);
+        value(i, j) = GetSolution(var(i, j), solution_number);
       }
     }
     return value;
@@ -2347,10 +2323,10 @@ class MathematicalProgram {
 
   /**
    * Gets the value of a single decision variable.
+   * @param solution_number 0 is the optimal solution. > 0 is the i'th
+   * sub-optimal solution. @default is 0.
    */
-  double GetSolution(const symbolic::Variable& var) const;
-
-  double GetSuboptimalSolution(const symbolic::Variable& var, int solution_number) const;
+  double GetSolution(const symbolic::Variable& var, int solution_number = 0) const;
 
   /**
    * Evaluate the constraint in the Binding at the solution value.

@@ -221,20 +221,12 @@ GTEST_TEST(GurobiTest, MIPtest1) {
     EXPECT_EQ(sol_result, SolutionResult::kSolutionFound);
     std::array<std::pair<Eigen::Vector2d, Eigen::Vector2d>, 6> pt_val;
     std::array<double, 6> distance;
-    pt_val[0].first.setZero();
-    pt_val[0].second.setZero();
-    for (int i = 0; i < 3; ++i) {
-      auto alpha_i = prog.GetSolution(alpha[i]);
-      auto beta_i = prog.GetSolution(beta[i]);
-      pt_val[0].first += V[i] * alpha_i;
-      pt_val[0].second += V[i] * beta_i;
-    }
-    for (int j = 1; j < 6; ++j) {
+    for (int j = 0; j < 6; ++j) {
       pt_val[j].first.setZero();
       pt_val[j].second.setZero();
       for (int i = 0; i < 3; ++i) {
-        auto alpha_i = prog.GetSuboptimalSolution(alpha[i], j - 1);
-        auto beta_i = prog.GetSuboptimalSolution(beta[i], j - 1);
+        auto alpha_i = prog.GetSolution(alpha[i], j);
+        auto beta_i = prog.GetSolution(beta[i], j);
         pt_val[j].first += V[i] * alpha_i;
         pt_val[j].second += V[i] * beta_i;
       }

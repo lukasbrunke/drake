@@ -1087,16 +1087,14 @@ MathematicalProgram::VarType MathematicalProgram::DecisionVariableType(
   return decision_variable_type_[FindDecisionVariableIndex(var)];
 }
 
-double MathematicalProgram::GetSolution(const Variable& var) const {
-  return x_values_[FindDecisionVariableIndex(var)];
-}
-
-double MathematicalProgram::GetSuboptimalSolution(const symbolic::Variable& var,
-                                                  int solution_number) const {
-  if (solution_number < 0 || solution_number >= static_cast<int>(suboptimal_sol_.size())) {
+double MathematicalProgram::GetSolution(const Variable& var, int solution_number) const {
+  if (solution_number == 0) {
+    return x_values_[FindDecisionVariableIndex(var)];
+  } else if (solution_number >= 1 && solution_number <= static_cast<int>(suboptimal_sol_.size())) {
+    return suboptimal_sol_[solution_number - 1].second(FindDecisionVariableIndex(var));
+  } else {
     throw std::runtime_error("solution number is not valid.");
   }
-  return suboptimal_sol_[solution_number].second(FindDecisionVariableIndex(var));
 }
 
 double MathematicalProgram::GetSuboptimalCost(int solution_number) const {
