@@ -1,5 +1,6 @@
 #include "drake/solvers/gurobi_solver.h"
 
+#include <algorithm>
 #include <gtest/gtest.h>
 
 #include "drake/common/eigen_matrix_compare.h"
@@ -103,8 +104,13 @@ GTEST_TEST(GurobiTest, TestInitialGuess) {
   }
 }*/
 
+struct PairwiseClosestPoints {
+  double distance;
+  Eigen::Vector2d pt1;
+  Eigen::Vector2d pt2;
+};
 // Compute the closest distance between two 2D triangles.
-double ComputeClosestDistanceBetweenTriangles(const Eigen::Matrix<double, 2, 3>& triangle1, const Eigen::Matrix<double, 2, 3>& triangle2) {
+PairwiseClosestPoints ComputeClosestDistanceBetweenTriangles(const Eigen::Matrix<double, 2, 3>& triangle1, const Eigen::Matrix<double, 2, 3>& triangle2) {
   // Formulate an optimization program
   // min (p1 - p2)ᵀ * (p1 - p2)
   // s.t p1 = V1 * lambda1
@@ -127,9 +133,24 @@ double ComputeClosestDistanceBetweenTriangles(const Eigen::Matrix<double, 2, 3>&
   if (gurobi_solver.available()) {
     auto sol_result = gurobi_solver.Solve(prog);
     EXPECT_EQ(sol_result, SolutionResult::kSolutionFound);
-    return prog.GetOptimalCost();
+    Eigen::Vector2d p1_val = triangle1 * prog.GetSolution(lambda1);
+    Eigen::Vector2d p2_val = triangle2 * prog.GetSolution(lambda2);
+    PairwiseClosestPoints pts;
+    pts.distance = (p1_val - p2_val).squaredNorm();
+    pts.pt1 = p1_val;
+    pts.pt2 = p2_val;
+    return pts;
   }
-  return 0;
+  PairwiseClosestPoints pts_nan;
+  pts_nan.distance = NAN;
+  pts_nan.pt1 = Eigen::Vector2d::Constant(NAN);
+  pts_nan.pt2 = Eigen::Vector2d::Constant(NAN);
+  return pts_nan;
+}
+
+
+bool sortPairwiseClosestPoint(const PairwiseClosestPoints& pts1, const PairwiseClosestPoints& pts2) {
+  return pts1.distance < pts2.distance;
 }
 
 // Test a mixed integer optimization problem. Retrieve the multiple
@@ -192,30 +213,51 @@ GTEST_TEST(GurobiTest, MIPtest1) {
   }
   prog.AddCost((p1 - p2).dot(p1 - p2));
   prog.SetSolverOption(solvers::SolverType::kGurobi, "PoolSearchMode", 2);
-  prog.SetSolverOption(solvers::SolverType::kGurobi, "PoolSolutions", 3);
+  prog.SetSolverOption(solvers::SolverType::kGurobi, "PoolSolutions", 100);
 
   GurobiSolver gurobi_solver;
   if (gurobi_solver.available()) {
     auto sol_result = gurobi_solver.Solve(prog);
     EXPECT_EQ(sol_result, SolutionResult::kSolutionFound);
-    double optimal_cost = prog.GetOptimalCost();
-    std::array<double, 2> suboptimal_cost;
-    for (int i = 0; i < 2; ++i) {
-      suboptimal_cost[i] = prog.GetSuboptimalCost(i);
-      Eigen::Vector2d p1_val = Eigen::Vector2d::Zero();
-      Eigen::Vector2d p2_val = Eigen::Vector2d::Zero();
-      for (int j = 0; j < 3; ++j) {
-        auto alpha_j = prog.GetSuboptimalSolution(alpha[j], i);
-        auto beta_j = prog.GetSuboptimalSolution(beta[j], i);
-        p1_val += V[j] * alpha_j;
-        p2_val += V[j] * beta_j;
-        EXPECT_NEAR(alpha_j.sum(), prog.GetSuboptimalSolution(z1(j), i), 1E-6);
-        EXPECT_NEAR(beta_j.sum(), prog.GetSuboptimalSolution(z2(j), i), 1E-6);
-      }
-      EXPECT_NEAR((p1_val - p2_val).squaredNorm(), suboptimal_cost[i], 1E-6);
+    std::array<std::pair<Eigen::Vector2d, Eigen::Vector2d>, 6> pt_val;
+    std::array<double, 6> distance;
+    pt_val[0].first.setZero();
+    pt_val[0].second.setZero();
+    for (int i = 0; i < 3; ++i) {
+      auto alpha_i = prog.GetSolution(alpha[i]);
+      auto beta_i = prog.GetSolution(beta[i]);
+      pt_val[0].first += V[i] * alpha_i;
+      pt_val[0].second += V[i] * beta_i;
     }
-    EXPECT_GE(optimal_cost, suboptimal_cost[0]);
-    EXPECT_GE(suboptimal_cost[0], suboptimal_cost[1]);
+    for (int j = 1; j < 6; ++j) {
+      pt_val[j].first.setZero();
+      pt_val[j].second.setZero();
+      for (int i = 0; i < 3; ++i) {
+        auto alpha_i = prog.GetSuboptimalSolution(alpha[i], j - 1);
+        auto beta_i = prog.GetSuboptimalSolution(beta[i], j - 1);
+        pt_val[j].first += V[i] * alpha_i;
+        pt_val[j].second += V[i] * beta_i;
+      }
+    }
+    for (int j = 0; j < 6; ++j) {
+      distance[j] = (pt_val[j].first - pt_val[j].second).squaredNorm();
+    }
+    for (int j = 1; j < 6; ++j) {
+      EXPECT_LE(distance[j - 1], distance[j]);
+    }
+
+    // Now compute the pair-wise closest distance between each pair of triangles.
+    std::array<PairwiseClosestPoints, 3> pairwise_pts;
+    pairwise_pts[0] = ComputeClosestDistanceBetweenTriangles(V[0], V[1]);
+    pairwise_pts[1] = ComputeClosestDistanceBetweenTriangles(V[0], V[2]);
+    pairwise_pts[2] = ComputeClosestDistanceBetweenTriangles(V[1], V[2]);
+    // Now sort the pair-wise closest distance.
+    std::sort(pairwise_pts.begin(), pairwise_pts.end(), sortPairwiseClosestPoint);
+
+    for (int i = 0; i < 3; ++i) {
+      EXPECT_NEAR(distance[2 * i], pairwise_pts[i].distance, 1E-6);
+      EXPECT_NEAR(distance[2 * i + 1], pairwise_pts[i].distance, 1E-6);
+    }
   }
 }
 }  // namespace test

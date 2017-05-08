@@ -658,8 +658,8 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
       GRBgetintattr(model, "SolCount", &sol_count);
 
       std::vector<std::pair<double, Eigen::VectorXd>> suboptimal_sol{};
-      suboptimal_sol.reserve(sol_count);
-      for (int solution_number = 0; solution_number < sol_count; ++solution_number) {
+      suboptimal_sol.reserve(sol_count - 1);
+      for (int solution_number = 1; solution_number < sol_count; ++solution_number) {
         error = GRBsetintparam(model_env, "SolutionNumber", solution_number);
         DRAKE_DEMAND(!error);
         double suboptimal_obj{1.0};
