@@ -464,25 +464,25 @@ drake_cc_googletest(
 )
 
 # Temporarily disabled because we have no Gurobi license in CI. #5862
-#drake_cc_googletest(
-#    name = "gurobi_solver_test",
-#    srcs = [
-#        "test/gurobi_solver_test.cc",
-#    ],
-#    tags = [
-#        "exclusive",
-#        "gurobi",
-#        "local",
-#    ],
-#    deps = [
-#        ":gurobi_solver",
-#        ":linear_program_examples",
-#        ":mathematical_program",
-#        ":mathematical_program_test_util",
-#        ":quadratic_program_examples",
-#        "//drake/common:eigen_matrix_compare",
-#    ],
-#)
+drake_cc_googletest(
+    name = "gurobi_solver_test",
+    srcs = [
+        "test/gurobi_solver_test.cc",
+    ],
+    tags = [
+        "exclusive",
+        "gurobi",
+        "local",
+    ],
+    deps = [
+        ":gurobi_solver",
+        ":linear_program_examples",
+        ":mathematical_program",
+        ":mathematical_program_test_util",
+        ":quadratic_program_examples",
+        "//drake/common:eigen_matrix_compare",
+    ],
+)
 
 drake_cc_googletest(
     name = "ipopt_solver_test",

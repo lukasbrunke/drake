@@ -2039,6 +2039,12 @@ class MathematicalProgram {
       const Eigen::Ref<const VectorXDecisionVariable>& variables,
       const Eigen::Ref<const Eigen::VectorXd>& values);
 
+  void SetSubOptimalSolutionValues(
+      const std::vector<std::pair<double, Eigen::VectorXd>>& suboptimal_sol
+  ) {
+    suboptimal_sol_ = suboptimal_sol;
+  }
+
   /**
    * Sets the value of a single decision variable in the optimization program.
    * @param var A decision variable in the program.
@@ -2120,6 +2126,14 @@ class MathematicalProgram {
    * been no successful solution.
    */
   double GetOptimalCost() const { return optimal_cost_; }
+
+  /**
+   * Getter for the suboptimal cost at the solution. Will throw a runtime_error
+   * if no sub-optimal cost is computed.
+   * @param solution_number The i'th suboptimal cost.
+   * @return The suboptimal cost.
+   */
+  double GetSuboptimalCost(int solution_number) const;
 
   void SetOptimalCost(double optimal_cost) { optimal_cost_ = optimal_cost; }
 
@@ -2304,10 +2318,39 @@ class MathematicalProgram {
     return value;
   }
 
+
+  /**
+   * Gets the suboptimal solution of an Eigen matrix of decision variables.
+   * @tparam Derived An Eigen matrix containing Variable.
+   * @param var The decision variables.
+   * @param int solution_number The i'th sub-optimal solution.
+   * @pre 0 <= solution_number < suboptimal_sol_.size(). Throw a runtime_error
+   * if the precondition is not satisfied.
+   * @return The value of the decision variable after solving the problem.
+   */
+  template <typename Derived>
+  typename std::enable_if<
+      std::is_same<typename Derived::Scalar, symbolic::Variable>::value,
+      Eigen::Matrix<double, Derived::RowsAtCompileTime,
+                    Derived::ColsAtCompileTime>>::type
+  GetSuboptimalSolution(const Eigen::MatrixBase<Derived>& var, int solution_number) const {
+    Eigen::Matrix<double, Derived::RowsAtCompileTime,
+                  Derived::ColsAtCompileTime>
+        value(var.rows(), var.cols());
+    for (int i = 0; i < var.rows(); ++i) {
+      for (int j = 0; j < var.cols(); ++j) {
+        value(i, j) = GetSuboptimalSolution(var(i, j), solution_number);
+      }
+    }
+    return value;
+  }
+
   /**
    * Gets the value of a single decision variable.
    */
   double GetSolution(const symbolic::Variable& var) const;
+
+  double GetSuboptimalSolution(const symbolic::Variable& var, int solution_number) const;
 
   /**
    * Evaluate the constraint in the Binding at the solution value.
@@ -2373,6 +2416,13 @@ class MathematicalProgram {
   SolverType solver_type_;
   int solver_result_;
   double optimal_cost_;
+  // suboptimal_sol_ records the sub-optimal solution to the problem.
+  // suboptimal_sol_[i].first is the i'th suboptimal objective value,
+  // suboptimal_sol_[i].second is the i'th suboptimal value for the decision
+  // variables.
+  // This feature is currently only supported in Gurobi solver, for (mixed)
+  // integer optimiazation.
+  std::vector<std::pair<double, Eigen::VectorXd>> suboptimal_sol_{};
   std::map<SolverType, std::map<std::string, double>> solver_options_double_;
   std::map<SolverType, std::map<std::string, int>> solver_options_int_;
   std::map<SolverType, std::map<std::string, std::string>> solver_options_str_;

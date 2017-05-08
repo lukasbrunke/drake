@@ -1091,6 +1091,21 @@ double MathematicalProgram::GetSolution(const Variable& var) const {
   return x_values_[FindDecisionVariableIndex(var)];
 }
 
+double MathematicalProgram::GetSuboptimalSolution(const symbolic::Variable& var,
+                                                  int solution_number) const {
+  if (solution_number < 0 || solution_number >= static_cast<int>(suboptimal_sol_.size())) {
+    throw std::runtime_error("solution number is not valid.");
+  }
+  return suboptimal_sol_[solution_number].second(FindDecisionVariableIndex(var));
+}
+
+double MathematicalProgram::GetSuboptimalCost(int solution_number) const {
+  if (solution_number < 0 || solution_number >= static_cast<int>(suboptimal_sol_.size())) {
+    throw std::runtime_error("solution number is not valid.");
+  }
+  return suboptimal_sol_[solution_number].first;
+}
+
 void MathematicalProgram::SetDecisionVariableValues(
     const Eigen::Ref<const Eigen::VectorXd>& values) {
   SetDecisionVariableValues(decision_variables_, values);

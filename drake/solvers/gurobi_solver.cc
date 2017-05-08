@@ -444,6 +444,20 @@ void AddSecondOrderConeVariables(
     }
   }
 }
+
+Eigen::VectorXd  RetrieveProgramSolution(const std::vector<double>& solver_sol_vector,
+const std::vector<bool>& is_new_variable, int num_prog_vars) {
+  int num_total_variables = is_new_variable.size();
+  Eigen::VectorXd prog_sol_vector(num_prog_vars);
+  int prog_var_count = 0;
+  for (int i = 0; i < num_total_variables; ++i) {
+    if (!is_new_variable[i]) {
+      prog_sol_vector(prog_var_count) = solver_sol_vector[i];
+      ++prog_var_count;
+    }
+  }
+  return prog_sol_vector;
+}
 }  // close namespace
 
 bool GurobiSolver::available() const { return true; }
@@ -631,20 +645,32 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
       std::vector<double> solver_sol_vector(num_total_variables);
       GRBgetdblattrarray(model, GRB_DBL_ATTR_X, 0, num_total_variables,
                          solver_sol_vector.data());
-      Eigen::VectorXd prog_sol_vector(num_prog_vars);
-      int prog_var_count = 0;
-      for (int i = 0; i < num_total_variables; ++i) {
-        if (!is_new_variable[i]) {
-          prog_sol_vector(prog_var_count) = solver_sol_vector[i];
-          ++prog_var_count;
-        }
-      }
+      const Eigen::VectorXd prog_sol_vector = RetrieveProgramSolution(solver_sol_vector, is_new_variable, num_prog_vars);
       prog.SetDecisionVariableValues(prog_sol_vector);
 
       // Obtain optimal cost
       double optimal_cost = std::numeric_limits<double>::quiet_NaN();
       GRBgetdblattr(model, GRB_DBL_ATTR_OBJVAL, &optimal_cost);
       prog.SetOptimalCost(optimal_cost);
+
+      // The program wants to retrieve sub-optimal solutions
+      int sol_count{0};
+      GRBgetintattr(model, "SolCount", &sol_count);
+
+      std::vector<std::pair<double, Eigen::VectorXd>> suboptimal_sol{};
+      suboptimal_sol.reserve(sol_count);
+      for (int solution_number = 0; solution_number < sol_count; ++solution_number) {
+        error = GRBsetintparam(model_env, "SolutionNumber", solution_number);
+        DRAKE_DEMAND(!error);
+        double suboptimal_obj{1.0};
+        error = GRBgetdblattrarray(model, "Xn", 0, num_total_variables,
+            solver_sol_vector.data());
+        DRAKE_DEMAND(!error);
+        error = GRBgetdblattr(model, "PoolObjVal", &suboptimal_obj);
+        DRAKE_DEMAND(!error);
+        suboptimal_sol.emplace_back(suboptimal_obj,RetrieveProgramSolution(solver_sol_vector, is_new_variable, num_prog_vars));
+      }
+      prog.SetSubOptimalSolutionValues(suboptimal_sol);
     }
   }
 
