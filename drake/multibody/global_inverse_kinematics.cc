@@ -225,15 +225,15 @@ GlobalInverseKinematics::body_position(int body_index) const {
 }
 
 Eigen::VectorXd
-GlobalInverseKinematics::ReconstructGeneralizedPositionSolution() const {
+GlobalInverseKinematics::ReconstructGeneralizedPositionSolution(int solution_number) const {
   Eigen::VectorXd q(robot_->get_num_positions());
   for (int body_idx = 1; body_idx < robot_->get_num_bodies(); ++body_idx) {
     const RigidBody<double>& body = robot_->get_body(body_idx);
-    const Matrix3d R_WC = GetSolution(R_WB_[body_idx]);
+    const Matrix3d R_WC = GetSolution(R_WB_[body_idx], solution_number);
     if (!body.IsRigidlyFixedToWorld() && body.has_parent_body()) {
       const RigidBody<double>* parent = body.get_parent();
       // R_WP is the rotation matrix of parent frame to the world frame.
-      const Matrix3d R_WP = GetSolution(R_WB_[parent->get_body_index()]);
+      const Matrix3d R_WP = GetSolution(R_WB_[parent->get_body_index()], solution_number);
       const DrakeJoint* joint = &(body.getJoint());
       const auto& X_PF = joint->get_transform_to_parent_body();
 
@@ -242,7 +242,7 @@ GlobalInverseKinematics::ReconstructGeneralizedPositionSolution() const {
       // the posture for that joint.
       if (joint->is_floating()) {
         // p_WBi is the position of the body frame in the world frame.
-        Vector3d p_WBi = GetSolution(p_WBo_[body_idx]);
+        Vector3d p_WBi = GetSolution(p_WBo_[body_idx], solution_number);
         Matrix3d normalized_rotmat = math::ProjectMatToRotMat(R_WC);
 
         q.segment<3>(body.get_position_start_index()) = p_WBi;

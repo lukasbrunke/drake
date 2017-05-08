@@ -69,11 +69,13 @@ class GlobalInverseKinematics : public solvers::MathematicalProgram {
    * @warning Do not call this method if the problem is not solved successfully!
    * The returned value can be NaN or meaningless number if the problem is
    * not solved.
+   * @param solution_number set to 0 means the optimal solution. A number > 0
+   * is the i'th sub-optimal solution. @default is 0.
    * @retval q The reconstructed posture of the robot of the generalized
    * coordinates, corresponding to the RigidBodyTree on which the inverse
    * kinematics problem is solved.
    */
-  Eigen::VectorXd ReconstructGeneralizedPositionSolution() const;
+  Eigen::VectorXd ReconstructGeneralizedPositionSolution(int solution_number = 0) const;
 
   /**
    * Adds the constraint that the position of a point `Q` on a body `B`
