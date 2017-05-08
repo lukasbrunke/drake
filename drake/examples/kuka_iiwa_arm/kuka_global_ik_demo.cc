@@ -228,6 +228,9 @@ Eigen::Matrix<double, 7, 1> SolveGlobalIK(RigidBodyTreed* tree, const Eigen::Ref
                                       free_space_vertices);
     int link5_idx = tree->FindBodyIndex("iiwa_link_5");
     global_ik.BodyPointInOneOfRegions(link5_idx,
+                                      Eigen::Vector3d(0, 0, 0),
+                                      free_space_vertices);
+    global_ik.BodyPointInOneOfRegions(link5_idx,
                                       Eigen::Vector3d(0.04, 0, 0),
                                       free_space_vertices);
     global_ik.BodyPointInOneOfRegions(link5_idx,
