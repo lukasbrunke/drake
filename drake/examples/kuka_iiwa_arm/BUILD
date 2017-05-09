@@ -154,8 +154,14 @@ drake_cc_library(
     hdrs = [
         "test/kuka_global_ik_util.h",
     ],
+    data = [
+        "//drake/examples/schunk_wsg:models",
+        "//drake/manipulation/models/iiwa_description:models",
+    ],
     deps = [
+        ":iiwa_common",
         "//drake/multibody:rigid_body_tree",
+        "//drake/multibody:rigid_body_tree_construction",
     ],
 )
 
@@ -165,8 +171,6 @@ drake_cc_binary(
     add_test_rule = 1,
     data = [
         ":models",
-        "//drake/examples/schunk_wsg:models",
-        "//drake/manipulation/models/iiwa_description:models",
     ],
     deps = [
         "@gflags//:gflags",
@@ -177,7 +181,6 @@ drake_cc_binary(
         "//drake/lcm",
         "//drake/math:autodiff",
         "//drake/multibody:global_inverse_kinematics",
-        "//drake/multibody:rigid_body_tree_construction",
         "//drake/util:lcm_util",
     ],
 )
@@ -202,7 +205,6 @@ drake_cc_binary(
         "//drake/lcm",
         "//drake/math:autodiff",
         "//drake/multibody:global_inverse_kinematics",
-        "//drake/multibody:rigid_body_tree_construction",
         "//drake/util:lcm_util",
     ],
 )

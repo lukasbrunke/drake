@@ -25,72 +25,33 @@ namespace examples {
 namespace kuka_iiwa_arm {
 using systems::DrakeVisualizer;
 
-std::unique_ptr<RigidBodyTreed> ConstructKuka() {
-  std::unique_ptr<RigidBodyTreed> rigid_body_tree = std::make_unique<RigidBodyTreed>();
-
-  const std::string model_path = drake::GetDrakePath() +
-      "/manipulation/models/iiwa_description/urdf/"
-          "iiwa14_polytope_collision.urdf";
-
-  const std::string table_path = drake::GetDrakePath() + "/examples/kuka_iiwa_arm/models/table/"
-      "extra_heavy_duty_table_surface_only_collision.sdf";
-
-  auto table1_frame = std::make_shared<RigidBodyFrame<double>>(
-      "iiwa_table",
-      rigid_body_tree->get_mutable_body(0), Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());
-
-  auto table2_frame = std::make_shared<RigidBodyFrame<double>>(
-      "object_table",
-      rigid_body_tree->get_mutable_body(0), Eigen::Vector3d(0.8, 0, 0), Eigen::Vector3d::Zero());
-
-  parsers::sdf::AddModelInstancesFromSdfFile(table_path, drake::multibody::joints::kFixed, table1_frame, rigid_body_tree.get());
-
-  parsers::sdf::AddModelInstancesFromSdfFile(table_path, drake::multibody::joints::kFixed,
-                                             table2_frame, rigid_body_tree.get());
-
-  const double kTableTopZInWorld = 0.736 + 0.057 / 2;
-  const Eigen::Vector3d kRobotBase(-0.243716, -0.625087, kTableTopZInWorld);
-
-  auto robot_base_frame = std::make_shared<RigidBodyFrame<double>>(
-      "iiwa_base", rigid_body_tree->get_mutable_body(0), kRobotBase, Eigen::Vector3d::Zero());
-
-  parsers::urdf::AddModelInstanceFromUrdfFile(
-      model_path,
-      drake::multibody::joints::kFixed,
-      robot_base_frame,
-      rigid_body_tree.get());
-
-  auto iiwa_frame_ee = rigid_body_tree->findFrame("iiwa_frame_ee");
-  const std::string schunk_path = drake::GetDrakePath() + "/examples/schunk_wsg/models/schunk_wsg_50_fixed_joint.sdf";
-  parsers::sdf::AddModelInstancesFromSdfFile(schunk_path, drake::multibody::joints::kFixed, iiwa_frame_ee, rigid_body_tree.get());
-
+void AddObjects(RigidBodyTreed* rigid_body_tree) {
+  const Eigen::Vector3d kRobotBasePos = rigid_body_tree->findFrame("iiwa_base")->get_transform_to_body().translation();
   const std::string mug_path = drake::GetDrakePath() + "/manipulation/models/objects/coffee_mug/urdf/coffee_mug.urdf";
-  const Eigen::Vector3d kMugPos(kRobotBase(0) + 0.8, kRobotBase(1), kRobotBase(2));
+  const Eigen::Vector3d kMugPos(kRobotBasePos(0) + 0.8, kRobotBasePos(1), kRobotBasePos(2));
   auto mug_frame = std::make_shared<RigidBodyFrame<double>>("mug", rigid_body_tree->get_mutable_body(0), kMugPos, Eigen::Vector3d(0, 0, M_PI));
-  parsers::urdf::AddModelInstanceFromUrdfFile(mug_path, drake::multibody::joints::kFixed, mug_frame, rigid_body_tree.get());
+  parsers::urdf::AddModelInstanceFromUrdfFile(mug_path, drake::multibody::joints::kFixed, mug_frame, rigid_body_tree);
   rigid_body_tree->addFrame(mug_frame);
 
   const std::string beets_path = drake::GetDrakePath() + "/manipulation/models/objects/beets_can/urdf/beets.urdf";
   const Eigen::Vector3d kBeetsPos(kMugPos(0) - 0.1, kMugPos(1) + 0.15, kMugPos(2) - 0.01);
   auto beets_frame = std::make_shared<RigidBodyFrame<double>>("beets", rigid_body_tree->get_mutable_body(0), kBeetsPos, Eigen::Vector3d::Zero());
-  parsers::urdf::AddModelInstanceFromUrdfFile(beets_path, drake::multibody::joints::kFixed, beets_frame, rigid_body_tree.get());
-  multibody::AddFlatTerrainToWorld(rigid_body_tree.get());
+  parsers::urdf::AddModelInstanceFromUrdfFile(beets_path, drake::multibody::joints::kFixed, beets_frame, rigid_body_tree);
+  multibody::AddFlatTerrainToWorld(rigid_body_tree);
   rigid_body_tree->addFrame(beets_frame);
 
   const std::string bowl_path = drake::GetDrakePath() + "/manipulation/models/objects/bowl/urdf/bowl.urdf";
   const Eigen::Vector3d kBowlPos(kMugPos(0), kMugPos(1) - 0.25, kMugPos(2));
   auto bowl_frame = std::make_shared<RigidBodyFrame<double>>("bowl", rigid_body_tree->get_mutable_body(0), kBowlPos, Eigen::Vector3d::Zero());
-  parsers::urdf::AddModelInstanceFromUrdfFile(bowl_path, drake::multibody::joints::kFixed, bowl_frame, rigid_body_tree.get());
-  multibody::AddFlatTerrainToWorld(rigid_body_tree.get());
+  parsers::urdf::AddModelInstanceFromUrdfFile(bowl_path, drake::multibody::joints::kFixed, bowl_frame, rigid_body_tree);
+  multibody::AddFlatTerrainToWorld(rigid_body_tree);
   rigid_body_tree->addFrame(bowl_frame);
 
   const std::string bottle_path = drake::GetDrakePath() + "/manipulation/models/objects/wine_bottle/urdf/bottle.urdf";
   const Eigen::Vector3d kBottlePos(kMugPos(0) - 0.25, kMugPos(1) - 0.05, kMugPos(2));
   auto bottle_frame = std::make_shared<RigidBodyFrame<double>>("bottle", rigid_body_tree->get_mutable_body(0), kBottlePos, Eigen::Vector3d::Zero());
-  parsers::urdf::AddModelInstanceFromUrdfFile(bottle_path, drake::multibody::joints::kFixed, bottle_frame, rigid_body_tree.get());
+  parsers::urdf::AddModelInstanceFromUrdfFile(bottle_path, drake::multibody::joints::kFixed, bottle_frame, rigid_body_tree);
   rigid_body_tree->addFrame(bottle_frame);
-
-  return rigid_body_tree;
 }
 
 std::vector<Eigen::Matrix3Xd> SetFreeSpace(RigidBodyTreed* tree) {
@@ -274,6 +235,7 @@ Eigen::Matrix<double, 7, 1> SolveNonlinearIK(RigidBodyTreed* tree, const Eigen::
 int DoMain() {
   drake::lcm::DrakeLcm lcm;
   auto tree = ConstructKuka();
+  AddObjects(tree.get());
   const std::vector<Eigen::Matrix3Xd> free_space_vertices = SetFreeSpace(tree.get());
   tools::SimpleTreeVisualizer simple_tree_visualizer(*tree.get(), &lcm);
   // Palm faces +y axis of ee_frame. The face of the palm is at about (0, 0.1, 0)

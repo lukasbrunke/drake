@@ -8,7 +8,6 @@
 #include "drake/examples/kuka_iiwa_arm/iiwa_common.h"
 #include "drake/examples/kuka_iiwa_arm/iiwa_lcm.h"
 #include "drake/lcm/drake_lcm.h"
-
 #include "drake/multibody/parsers/urdf_parser.h"
 #include "drake/multibody/parsers/sdf_parser.h"
 #include "drake/multibody/rigid_body_tree_construction.h"
@@ -22,54 +21,12 @@
 #include "drake/math/autodiff_gradient.h"
 #include "drake/multibody/shapes/geometry.h"
 #include "drake/multibody/joints/fixed_joint.h"
+#include "drake/examples/kuka_iiwa_arm/test/kuka_global_ik_util.h"
 
 namespace drake {
 namespace examples {
 namespace kuka_iiwa_arm {
 using systems::DrakeVisualizer;
-
-std::unique_ptr<RigidBodyTreed> ConstructKuka() {
-  std::unique_ptr<RigidBodyTreed> rigid_body_tree = std::make_unique<RigidBodyTreed>();
-
-  const std::string model_path = drake::GetDrakePath() +
-      "/manipulation/models/iiwa_description/urdf/"
-          "iiwa14_polytope_collision.urdf";
-
-  const std::string table_path = drake::GetDrakePath() + "/examples/kuka_iiwa_arm/models/table/"
-      "extra_heavy_duty_table_surface_only_collision.sdf";
-
-  auto table1_frame = std::make_shared<RigidBodyFrame<double>>(
-      "iiwa_table",
-      rigid_body_tree->get_mutable_body(0), Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());
-
-  auto table2_frame = std::make_shared<RigidBodyFrame<double>>(
-      "object_table",
-      rigid_body_tree->get_mutable_body(0), Eigen::Vector3d(0.8, 0, 0), Eigen::Vector3d::Zero());
-
-  parsers::sdf::AddModelInstancesFromSdfFile(table_path, drake::multibody::joints::kFixed, table1_frame, rigid_body_tree.get());
-
-  parsers::sdf::AddModelInstancesFromSdfFile(table_path, drake::multibody::joints::kFixed,
-                                             table2_frame, rigid_body_tree.get());
-
-  const double kTableTopZInWorld = 0.736 + 0.057 / 2;
-  const Eigen::Vector3d kRobotBase(-0.243716, -0.625087, kTableTopZInWorld);
-
-  auto robot_base_frame = std::make_shared<RigidBodyFrame<double>>(
-      "iiwa_base", rigid_body_tree->get_mutable_body(0), kRobotBase, Eigen::Vector3d::Zero());
-  rigid_body_tree->addFrame(robot_base_frame);
-
-  parsers::urdf::AddModelInstanceFromUrdfFile(
-      model_path,
-      drake::multibody::joints::kFixed,
-      robot_base_frame,
-      rigid_body_tree.get());
-
-  auto iiwa_frame_ee = rigid_body_tree->findFrame("iiwa_frame_ee");
-  const std::string schunk_path = drake::GetDrakePath() + "/examples/schunk_wsg/models/schunk_wsg_50_fixed_joint.sdf";
-  parsers::sdf::AddModelInstancesFromSdfFile(schunk_path, drake::multibody::joints::kFixed, iiwa_frame_ee, rigid_body_tree.get());
-
-  return rigid_body_tree;
-}
 
 void AddBottle(RigidBodyTreed* tree, const Eigen::Vector3d& kBottlePos) {
   const std::string bottle_path = drake::GetDrakePath() + "/manipulation/models/objects/wine_bottle/urdf/bottle.urdf";
@@ -85,7 +42,71 @@ void AddMicrowave(RigidBodyTreed* tree, const Eigen::Vector3d& kMicrowavePos) {
   tree->addFrame(microwave_frame);
 }
 
-Eigen::Matrix<double, 7, 1> SolveGlobalIKreachable(RigidBodyTreed* tree, const Eigen::Vector3d& bottle_pos) {
+std::vector<Eigen::Matrix3Xd> SetFreeSpace(RigidBodyTreed* tree) {
+  std::vector<Eigen::Matrix3Xd> box_vertices;
+
+  Eigen::Isometry3d box_pose;
+  box_pose.linear().setIdentity();
+  box_pose.translation() << 0.3, -0.5, 1.3;
+  box_vertices.push_back(AddBoxToTree(tree, Eigen::Vector3d(0.6, 0.6, 0.4), box_pose, "box1"));
+
+  box_pose.translation() << 0.54, -0.5, 0.97;
+  box_vertices.push_back(AddBoxToTree(tree, Eigen::Vector3d(0.36, 0.6, 0.4), box_pose, "box2"));
+  return box_vertices;
+}
+
+std::vector<std::pair<int, Eigen::Vector3d>> AddBodyCollisionPoint(RigidBodyTreed* tree) {
+  std::vector<std::pair<int, Eigen::Vector3d>> collision_pts;
+  int link5_idx = tree->FindBodyIndex("iiwa_link_5");
+  Eigen::Vector3d pt;
+  pt << 0.06, 0, 0;
+  AddSphereToBody(tree, link5_idx, pt, "link5_pt1");
+  collision_pts.emplace_back(link5_idx, pt);
+
+  pt << -0.06, 0, 0;
+  AddSphereToBody(tree, link5_idx, pt, "link5_pt2");
+  collision_pts.emplace_back(link5_idx, pt);
+
+  pt << 0, 0.06, 0;
+  AddSphereToBody(tree, link5_idx, pt, "link5_pt3");
+  collision_pts.emplace_back(link5_idx, pt);
+
+  pt << 0, -0.06, 0;
+  AddSphereToBody(tree, link5_idx, pt, "link5_pt4");
+  collision_pts.emplace_back(link5_idx, pt);
+
+  int link6_idx = tree->FindBodyIndex("iiwa_link_6");
+  pt << 0.05, 0, -0.05;
+  AddSphereToBody(tree, link6_idx, pt, "link6_pt1");
+  collision_pts.emplace_back(link6_idx, pt);
+
+  pt << -0.05, 0, -0.05;
+  AddSphereToBody(tree, link6_idx, pt, "link6_pt2");
+  collision_pts.emplace_back(link6_idx, pt);
+
+  pt << 0.04, -0.04, 0.05;
+  AddSphereToBody(tree, link6_idx, pt, "link6_pt3");
+  collision_pts.emplace_back(link6_idx, pt);
+
+  pt << -0.04, -0.04, 0.05;
+  AddSphereToBody(tree, link6_idx, pt, "link6_pt4");
+  collision_pts.emplace_back(link6_idx, pt);
+
+  pt << 0.05, 0.06, 0;
+  AddSphereToBody(tree, link6_idx, pt, "link6_pt5");
+  collision_pts.emplace_back(link6_idx, pt);
+
+  pt << -0.05, 0.06, 0;
+  AddSphereToBody(tree, link6_idx, pt, "link6_pt6");
+  collision_pts.emplace_back(link6_idx, pt);
+
+  return collision_pts;
+}
+
+Eigen::Matrix<double, 7, 1> SolveGlobalIKreachable(
+    RigidBodyTreed* tree, const Eigen::Vector3d& bottle_pos,
+    const std::vector<Eigen::Matrix3Xd>& free_space_vertices,
+    const std::vector<std::pair<int, Eigen::Vector3d>>& collision_pts, bool with_collision) {
   multibody::GlobalInverseKinematics global_ik(*tree);
   int link7_idx = tree->FindBodyIndex("iiwa_link_7");
   auto link7_rotmat = global_ik.body_rotation_matrix(link7_idx);
@@ -101,10 +122,22 @@ Eigen::Matrix<double, 7, 1> SolveGlobalIKreachable(RigidBodyTreed* tree, const E
       Eigen::Vector3d(bottle_pos(0), bottle_pos(1) - 0.2, bottle_pos(2)),
       Eigen::Vector3d(bottle_pos(0), bottle_pos(1) - 0.1, bottle_pos(2)));
 
+  if (with_collision) {
+    for (const auto& body_pt : collision_pts) {
+      global_ik.BodyPointInOneOfRegions(body_pt.first, body_pt.second, free_space_vertices);
+    }
+  }
+
   solvers::GurobiSolver gurobi_solver;
   global_ik.SetSolverOption(solvers::SolverType::kGurobi, "OutputFlag", true);
   auto sol_result = gurobi_solver.Solve(global_ik);
-  EXPECT_EQ(sol_result, solvers::SolutionResult::kSolutionFound);
+  if (with_collision) {
+    EXPECT_TRUE(sol_result == solvers::SolutionResult::kInfeasible_Or_Unbounded
+      || sol_result == solvers::SolutionResult::kInfeasibleConstraints);
+  } else {
+    EXPECT_EQ(sol_result, solvers::SolutionResult::kSolutionFound);
+  }
+
   return global_ik.ReconstructGeneralizedPositionSolution();
 };
 
@@ -114,14 +147,16 @@ int DoMain() {
   auto robot_base_frame = tree->findFrame("iiwa_base");
   const Eigen::Vector3d kBasePos = robot_base_frame->get_transform_to_body().translation();
   const Eigen::Vector3d kBottleReachablePos(kBasePos(0) + 0.8, kBasePos(1) + 0.2, kBasePos(2) + 0.04);
-  std::cout << kBottleReachablePos.transpose() << std::endl;
   AddBottle(tree.get(), kBottleReachablePos);
   const Eigen::Vector3d kMicrowavePos(kBasePos(0) + 0.2, kBasePos(1) - 0.2, kBasePos(2));
   AddMicrowave(tree.get(), kMicrowavePos);
+  auto free_space_vertices = SetFreeSpace(tree.get());
+  auto collision_pts = AddBodyCollisionPoint(tree.get());
   tools::SimpleTreeVisualizer simple_tree_visualizer(*tree.get(), &lcm);
-  auto q_feasible = SolveGlobalIKreachable(tree.get(), kBottleReachablePos);
+  auto q_feasible = SolveGlobalIKreachable(tree.get(), kBottleReachablePos, free_space_vertices, collision_pts, false);
   simple_tree_visualizer.visualize(q_feasible);
-  //simple_tree_visualizer.visualize(Eigen::Matrix<double, 7, 1>::Zero());
+  SolveGlobalIKreachable(tree.get(), kBottleReachablePos, free_space_vertices, collision_pts, true);
+  simple_tree_visualizer.visualize(Eigen::Matrix<double, 7, 1>::Zero());
   return 0;
 }
 }  // namespace kuka_iiwa_arm
