@@ -61,10 +61,10 @@ drake_cc_library(
     srcs = ["oracular_state_estimator.cc"],
     hdrs = ["oracular_state_estimator.h"],
     deps = [
+        "@bot_core_lcmtypes//:lib",
         "//drake/multibody:rigid_body_tree",
         "//drake/systems/framework:leaf_system",
         "//drake/util:lcm_util",
-        "@bot_core_lcmtypes//:lib",
     ],
 )
 
@@ -73,12 +73,12 @@ drake_cc_library(
     srcs = ["robot_plan_interpolator.cc"],
     hdrs = ["robot_plan_interpolator.h"],
     deps = [
+        "@bot_core_lcmtypes//:lib",
+        "@robotlocomotion_lcmtypes//:lib",
         "//drake/common/trajectories:piecewise_polynomial",
         "//drake/multibody:rigid_body_tree",
         "//drake/multibody/parsers",
         "//drake/systems/framework:leaf_system",
-        "@bot_core_lcmtypes//:lib",
-        "@robotlocomotion_lcmtypes//:lib",
     ],
 )
 
@@ -216,25 +216,6 @@ drake_cc_binary(
         "@robotlocomotion_lcmtypes//:lib",
         ":iiwa_common",
         ":iiwa_lcm",
-    ],
-)
-
-drake_cc_binary(
-    name = "kuka_ik_demo",
-    srcs = ["kuka_ik_demo.cc"],
-    data = [
-        ":models",
-        "//drake/manipulation/models/iiwa_description:models",
-    ],
-    deps = [
-        "@bot_core_lcmtypes//:lib",
-        "@robotlocomotion_lcmtypes//:lib",
-        ":iiwa_common",
-        "//drake/lcm",
-        "//drake/multibody:inverse_kinematics",
-        "//drake/multibody:rigid_body_tree",
-        "//drake/multibody/parsers",
-        "//drake/solvers:mathematical_program",
     ],
 )
 
