@@ -7,22 +7,14 @@
 #include "drake/examples/kuka_iiwa_arm/dev/tools/simple_tree_visualizer.h"
 #include "drake/examples/kuka_iiwa_arm/iiwa_common.h"
 #include "drake/examples/kuka_iiwa_arm/iiwa_lcm.h"
-#include "drake/examples/schunk_wsg/schunk_wsg_constants.h"
-#include "drake/examples/schunk_wsg/schunk_wsg_lcm.h"
 #include "drake/lcm/drake_lcm.h"
-#include "drake/lcmt_iiwa_command.hpp"
-#include "drake/lcmt_iiwa_status.hpp"
-#include "drake/lcmt_schunk_wsg_command.hpp"
-#include "drake/lcmt_schunk_wsg_status.hpp"
+
 #include "drake/multibody/parsers/urdf_parser.h"
 #include "drake/multibody/parsers/sdf_parser.h"
 #include "drake/multibody/rigid_body_tree_construction.h"
 #include "drake/multibody/rigid_body_plant/drake_visualizer.h"
-#include "drake/multibody/rigid_body_plant/rigid_body_plant.h"
 #include "drake/systems/lcm/lcm_publisher_system.h"
 #include "drake/systems/lcm/lcm_subscriber_system.h"
-#include "drake/systems/primitives/constant_vector_source.h"
-#include "drake/systems/primitives/matrix_gain.h"
 #include "drake/util/drakeGeometryUtil.h"
 #include "drake/multibody/global_inverse_kinematics.h"
 #include "drake/solvers/gurobi_solver.h"
@@ -34,12 +26,7 @@
 namespace drake {
 namespace examples {
 namespace kuka_iiwa_arm {
-using schunk_wsg::SchunkWsgStatusSender;
-using schunk_wsg::SchunkWsgTrajectoryGenerator;
 using systems::DrakeVisualizer;
-using systems::InputPortDescriptor;
-using systems::OutputPortDescriptor;
-using systems::RigidBodyPlant;
 
 std::unique_ptr<RigidBodyTreed> ConstructKuka() {
   std::unique_ptr<RigidBodyTreed> rigid_body_tree = std::make_unique<RigidBodyTreed>();

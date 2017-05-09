@@ -6,79 +6,24 @@
 #include "drake/examples/kuka_iiwa_arm/dev/tools/simple_tree_visualizer.h"
 #include "drake/examples/kuka_iiwa_arm/iiwa_common.h"
 #include "drake/examples/kuka_iiwa_arm/iiwa_lcm.h"
-#include "drake/examples/kuka_iiwa_arm/iiwa_world/iiwa_wsg_diagram_factory.h"
-#include "drake/examples/kuka_iiwa_arm/iiwa_world/world_sim_tree_builder.h"
-#include "drake/examples/schunk_wsg/schunk_wsg_constants.h"
-#include "drake/examples/schunk_wsg/schunk_wsg_lcm.h"
 #include "drake/lcm/drake_lcm.h"
-#include "drake/lcm/drake_lcm.h"
-#include "drake/lcmt_iiwa_command.hpp"
-#include "drake/lcmt_iiwa_status.hpp"
-#include "drake/lcmt_schunk_wsg_command.hpp"
-#include "drake/lcmt_schunk_wsg_status.hpp"
 #include "drake/multibody/parsers/urdf_parser.h"
 #include "drake/multibody/parsers/sdf_parser.h"
 #include "drake/multibody/rigid_body_tree_construction.h"
 #include "drake/multibody/rigid_body_plant/drake_visualizer.h"
-#include "drake/multibody/rigid_body_plant/rigid_body_plant.h"
-#include "drake/systems/analysis/simulator.h"
-#include "drake/systems/framework/diagram.h"
-#include "drake/systems/framework/diagram_builder.h"
-#include "drake/systems/framework/leaf_system.h"
 #include "drake/systems/lcm/lcm_publisher_system.h"
 #include "drake/systems/lcm/lcm_subscriber_system.h"
-#include "drake/systems/primitives/constant_vector_source.h"
-#include "drake/systems/primitives/matrix_gain.h"
 #include "drake/util/drakeGeometryUtil.h"
 #include "drake/multibody/global_inverse_kinematics.h"
 #include "drake/solvers/gurobi_solver.h"
 #include "drake/math/autodiff.h"
 #include "drake/math/autodiff_gradient.h"
-#include "drake/multibody/shapes/geometry.h"
-#include "drake/multibody/joints/fixed_joint.h"
+#include "drake/examples/kuka_iiwa_arm/test/kuka_global_ik_util.h"
 
 namespace drake {
 namespace examples {
 namespace kuka_iiwa_arm {
-using schunk_wsg::SchunkWsgStatusSender;
-using schunk_wsg::SchunkWsgTrajectoryGenerator;
-using systems::Context;
-using systems::Diagram;
-using systems::DiagramBuilder;
 using systems::DrakeVisualizer;
-using systems::InputPortDescriptor;
-using systems::OutputPortDescriptor;
-using systems::RigidBodyPlant;
-using systems::Simulator;
-
-Eigen::Matrix<double, 3, 8> AddBoxToTree(RigidBodyTreed* tree, const Eigen::Ref<const Eigen::Vector3d>& box_size, const Eigen::Isometry3d& box_pose, const std::string& name) {
-  auto body = std::make_unique<RigidBody<double>>();
-  body->set_name(name);
-  body->set_mass(1.0);
-  body->set_spatial_inertia(Matrix6<double>::Identity());
-
-  const DrakeShapes::Box shape(box_size);
-  const Eigen::Vector4d material(0.3, 0.4, 0.5, 0.5);
-  const DrakeShapes::VisualElement visual_element(shape, Eigen::Isometry3d::Identity(), material);
-  body->AddVisualElement(visual_element);
-
-  auto joint = std::make_unique<FixedJoint>(name + "joint", box_pose);
-  body->add_joint(&tree->world(), std::move(joint));
-
-  tree->bodies.push_back(std::move(body));
-  Eigen::Matrix<double, 3, 8> box_vertices;
-  box_vertices.row(0) << 1, 1, 1, 1, -1, -1, -1, -1;
-  box_vertices.row(1) << 1, 1, -1, -1, 1, 1, -1, -1;
-  box_vertices.row(2) << 1, -1, 1, -1, 1, -1, 1, -1;
-  for (int i = 0; i < 3; ++i) {
-    box_vertices.row(i) *= box_size(i) / 2;
-  }
-  box_vertices = box_pose.linear() * box_vertices;
-  for (int i = 0; i < 8; ++i) {
-    box_vertices.col(i) += box_pose.translation();
-  }
-  return box_vertices;
-}
 
 std::unique_ptr<RigidBodyTreed> ConstructKuka() {
   std::unique_ptr<RigidBodyTreed> rigid_body_tree = std::make_unique<RigidBodyTreed>();
@@ -245,15 +190,15 @@ std::vector<Eigen::Matrix<double, 7, 1>> SolveGlobalIK(RigidBodyTreed* tree, con
   }
   solvers::GurobiSolver gurobi_solver;
   global_ik.SetSolverOption(solvers::SolverType::kGurobi, "OutputFlag", true);
-  int num_solutions = 2;
-  global_ik.SetSolverOption(solvers::SolverType::kGurobi, "PoolSearchMode", 1);
-  global_ik.SetSolverOption(solvers::SolverType::kGurobi, "PoolSolutions", num_solutions);
+  //int num_solutions = 2;
+  //global_ik.SetSolverOption(solvers::SolverType::kGurobi, "PoolSearchMode", 1);
+  //global_ik.SetSolverOption(solvers::SolverType::kGurobi, "PoolSolutions", num_solutions);
   solvers::SolutionResult sol_result = gurobi_solver.Solve(global_ik);
   if (sol_result != solvers::SolutionResult::kSolutionFound) {
     throw std::runtime_error("global ik fails.");
   }
   std::vector<Eigen::Matrix<double, 7, 1>> q;
-  for (int i = 0; i < num_solutions; ++i) {
+  for (int i = 0; i < 1; ++i) {
     q.push_back(global_ik.ReconstructGeneralizedPositionSolution(i));
   }
   return q;
