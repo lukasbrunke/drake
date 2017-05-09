@@ -185,7 +185,7 @@ std::vector<Eigen::Matrix3Xd> SetFreeSpace(RigidBodyTreed* tree) {
   return box_vertices;
 }
 
-Eigen::Matrix<double, 7, 1> SolveGlobalIK(RigidBodyTreed* tree, const Eigen::Ref<Eigen::Vector3d>& mug_center, const std::vector<Eigen::Matrix3Xd>& free_space_vertices) {
+std::vector<Eigen::Matrix<double, 7, 1>> SolveGlobalIK(RigidBodyTreed* tree, const Eigen::Ref<Eigen::Vector3d>& mug_center, const std::vector<Eigen::Matrix3Xd>& free_space_vertices) {
   multibody::GlobalInverseKinematics global_ik(*tree);
   int link7_idx = tree->FindBodyIndex("iiwa_link_7");
   auto link7_rotmat = global_ik.body_rotation_matrix(link7_idx);
@@ -245,11 +245,18 @@ Eigen::Matrix<double, 7, 1> SolveGlobalIK(RigidBodyTreed* tree, const Eigen::Ref
   }
   solvers::GurobiSolver gurobi_solver;
   global_ik.SetSolverOption(solvers::SolverType::kGurobi, "OutputFlag", true);
+  int num_solutions = 2;
+  global_ik.SetSolverOption(solvers::SolverType::kGurobi, "PoolSearchMode", 1);
+  global_ik.SetSolverOption(solvers::SolverType::kGurobi, "PoolSolutions", num_solutions);
   solvers::SolutionResult sol_result = gurobi_solver.Solve(global_ik);
   if (sol_result != solvers::SolutionResult::kSolutionFound) {
     throw std::runtime_error("global ik fails.");
   }
-  return global_ik.ReconstructGeneralizedPositionSolution();
+  std::vector<Eigen::Matrix<double, 7, 1>> q;
+  for (int i = 0; i < num_solutions; ++i) {
+    q.push_back(global_ik.ReconstructGeneralizedPositionSolution(i));
+  }
+  return q;
 }
 
 class GraspConstraint : public solvers::Constraint {
@@ -346,8 +353,11 @@ int DoMain() {
   Eigen::Vector3d mug_pos = mug_frame->get_transform_to_body().translation();
   Eigen::Vector3d mug_center = mug_pos;
   mug_center(2) += 0.05;
-  Eigen::Matrix<double, 7, 1> q_global = SolveGlobalIK(tree.get(), mug_center, free_space_vertices);
-  simple_tree_visualizer.visualize(q_global);
+  auto q_global = SolveGlobalIK(tree.get(), mug_center, free_space_vertices);
+  for (int i = 0; i < static_cast<int>(q_global.size()); ++i) {
+    simple_tree_visualizer.visualize(q_global[i]);
+  }
+
   //Eigen::Matrix<double, 7, 1> q_nl = SolveNonlinearIK(tree.get(), mug_center);
   //simple_tree_visualizer.visualize(Eigen::Matrix<double, 7, 1>::Zero());
   //std::cout << q_global.transpose() << std::endl;
