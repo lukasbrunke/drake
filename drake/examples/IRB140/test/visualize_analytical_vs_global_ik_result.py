@@ -21,12 +21,15 @@ def receiveMessage(msg):
     # unpack message
     data = pickle.loads(msg.data)
 
-    d1 = DebugData()
-    d2 = DebugData()
-    d3 = DebugData()
-    d4 = DebugData()
+    d_reachable = DebugData()
+    d_unreachable_le_100ms = DebugData()
+    d_unreachable_le_1s = DebugData()
+    d_unreachable_le_1m = DebugData()
+    d_unreachable_ge_1m = DebugData()
+    d_relaxation = DebugData()
+    d_problem = DebugData()
     
-    file = open(drake_path+'/ik_output21_0.txt','r')
+    file = open(drake_path+'/ik_output21_2.txt','r')
 
     lines = file.readlines()
 
@@ -47,23 +50,36 @@ def receiveMessage(msg):
         elif line.startswith("global_ik_status:"):
             global_ik_status_str = line.split()
             global_ik_status = int(global_ik_status_str[1])
+        elif line.startswith("global_ik_time:"):
+            global_ik_time_str = line.split()
+            global_ik_time = float(global_ik_time_str[1])
         elif line.startswith("q_nonlinear_ik_resolve:"):
             if (analytical_ik_status == 0 or nonlinear_ik_status == 1) and (global_ik_status == 0):
                 # Analytical IK and global IK both find solution
-                d1.addSphere(pos, radius = 0.01, color = [0, 1, 0])
+                d_reachable.addSphere(pos, radius = 0.01, color = [0, 1, 0])
             elif (analytical_ik_status == -2 and global_ik_status == -2):
-                d2.addSphere(pos, radius = 0.01, color = [0, 0, 1])
+                if global_ik_time < 0.1:
+                    d_unreachable_le_100ms.addSphere(pos, radius = 0.01, color = [0, 0, 1])
+                elif global_ik_time < 1:
+                    d_unreachable_le_1s.addSphere(pos, radius = 0.01, color = [0, 0, 1])
+                elif global_ik_time < 60:
+                    d_unreachable_le_1m.addSphere(pos, radius = 0.01, color = [0, 0, 1])
+                else:
+                    d_unreachable_ge_1m.addSphere(pos, radius = 0.01, color = [0, 0, 1])
             elif (analytical_ik_status == -2 and global_ik_status == 0):
-                d3.addSphere(pos, radius = 0.01, color = [1, 0, 0])
+                d_relaxation.addSphere(pos, radius = 0.01, color = [1, 0, 0])
             elif analytical_ik_status == 0 and global_ik_status == -2:
-                d4.addSphere(pos, radius = 0.01, color = [0, 0, 0])
+                d_problem.addSphere(pos, radius = 0.01, color = [0, 0, 0])
         line_number =  line_number + 1
 
     
-    vis.showPolyData(d1.getPolyData(), 'reachable', parent=folder, colorByName='RGB255')
-    vis.showPolyData(d2.getPolyData(), 'unreachable', parent=folder, colorByName='RGB255')
-    vis.showPolyData(d3.getPolyData(), 'relaxation', parent=folder, colorByName='RGB255')
-    vis.showPolyData(d4.getPolyData(), 'problem', parent=folder, colorByName='RGB255')
+    vis.showPolyData(d_reachable.getPolyData(), 'reachable', parent=folder, colorByName='RGB255')
+    vis.showPolyData(d_unreachable_le_100ms.getPolyData(), 'unreachable<100ms', parent=folder, colorByName='RGB255')
+    vis.showPolyData(d_unreachable_le_1s.getPolyData(), 'unreachable<1s', parent=folder, colorByName='RGB255')
+    vis.showPolyData(d_unreachable_le_1m.getPolyData(), 'unreachable<1m', parent=folder, colorByName='RGB255')
+    vis.showPolyData(d_unreachable_ge_1m.getPolyData(), 'unreachable>1m', parent=folder, colorByName='RGB255')
+    vis.showPolyData(d_relaxation.getPolyData(), 'relaxation', parent=folder, colorByName='RGB255')
+    vis.showPolyData(d_problem.getPolyData(), 'problem', parent=folder, colorByName='RGB255')
 
 def publishData():
     data = 1
