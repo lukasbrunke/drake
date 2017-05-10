@@ -11089,25 +11089,25 @@
       /><line x1="275" x2="282" y1="884" style="fill:none; stroke:blue;" y2="891"
     /></g
     ><g style="fill:white; text-rendering:optimizeSpeed; color-rendering:optimizeSpeed; image-rendering:optimizeSpeed; shape-rendering:crispEdges; color-interpolation:sRGB; stroke:white;"
-    ><path style="stroke:none;" d="M1396 151 L1396 88 L1666 88 L1666 151 Z"
+    ><path style="stroke:none;" d="M1391 849 L1391 786 L1661 786 L1661 849 Z"
     /></g
-    ><g transform="translate(1433,104.632)" style="font-size:24px; text-rendering:geometricPrecision; color-rendering:optimizeQuality; image-rendering:optimizeQuality; font-family:'SansSerif'; color-interpolation:linearRGB;"
+    ><g transform="translate(1428,802.632)" style="font-size:24px; text-rendering:geometricPrecision; color-rendering:optimizeQuality; image-rendering:optimizeQuality; font-family:'SansSerif'; color-interpolation:linearRGB;"
     ><text x="0" xml:space="preserve" y="8.5" style="stroke:none;"
       >Joint limits active</text
     ></g
     ><g style="stroke-linecap:butt; fill:red; text-rendering:geometricPrecision; color-rendering:optimizeQuality; image-rendering:optimizeQuality; stroke-linejoin:round; color-interpolation:linearRGB; stroke:red;"
-    ><path d="M1418.5 104.5 L1417.7361 102.1489 L1415.7361 100.6958 L1413.2639 100.6958 L1411.2639 102.1489 L1410.5 104.5 L1411.2639 106.8511 L1413.2639 108.3042 L1415.7361 108.3042 L1417.7361 106.8511 Z" style="fill:none; fill-rule:evenodd;"
+    ><path d="M1413.5 802.5 L1412.7361 800.1489 L1410.7361 798.6958 L1408.2639 798.6958 L1406.2639 800.1489 L1405.5 802.5 L1406.2639 804.8511 L1408.2639 806.3042 L1410.7361 806.3042 L1412.7361 804.8511 Z" style="fill:none; fill-rule:evenodd;"
     /></g
-    ><g transform="translate(1433,134.368)" style="font-size:24px; text-rendering:geometricPrecision; color-rendering:optimizeQuality; image-rendering:optimizeQuality; font-family:'SansSerif'; color-interpolation:linearRGB;"
+    ><g transform="translate(1428,832.368)" style="font-size:24px; text-rendering:geometricPrecision; color-rendering:optimizeQuality; image-rendering:optimizeQuality; font-family:'SansSerif'; color-interpolation:linearRGB;"
     ><text x="0" xml:space="preserve" y="8.5" style="stroke:none;"
       >Joint limits inactive</text
     ></g
     ><g style="stroke-linecap:butt; fill:blue; text-rendering:geometricPrecision; color-rendering:optimizeQuality; image-rendering:optimizeQuality; stroke-linejoin:round; color-interpolation:linearRGB; stroke:blue;"
-    ><line y2="131" style="fill:none;" x1="1411" x2="1418" y1="138"
-      /><line y2="138" style="fill:none;" x1="1411" x2="1418" y1="131"
+    ><line y2="829" style="fill:none;" x1="1406" x2="1413" y1="836"
+      /><line y2="836" style="fill:none;" x1="1406" x2="1413" y1="829"
     /></g
     ><g style="stroke-linecap:butt; fill:rgb(38,38,38); text-rendering:geometricPrecision; color-rendering:optimizeQuality; image-rendering:optimizeQuality; color-interpolation:linearRGB; stroke:rgb(38,38,38); stroke-width:0.6667;"
-    ><path d="M1396 151 L1396 88 L1666 88 L1666 151 Z" style="fill:none; fill-rule:evenodd;"
+    ><path d="M1391 849 L1391 786 L1661 786 L1661 849 Z" style="fill:none; fill-rule:evenodd;"
     /></g
   ></g
 ></svg
