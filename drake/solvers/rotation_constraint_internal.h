@@ -22,6 +22,11 @@ bool AreAllVerticesCoPlanar(const std::vector<Eigen::Vector3d>& pts,
 void ComputeInnerFacetsForBoxSphereIntersection(
     const std::vector<Eigen::Vector3d>& pts,
     Eigen::Matrix<double, Eigen::Dynamic, 3>* A, Eigen::VectorXd* b);
+
+void ComputeTriangleOutwardNormal(const Eigen::Vector3d& pt0,
+                                  const Eigen::Vector3d& pt1,
+                                  const Eigen::Vector3d& pt2,
+                                  Eigen::Vector3d* n, double* d);
 }  // namespace internal
 }  // namespace solvers
 }  // namespace drake

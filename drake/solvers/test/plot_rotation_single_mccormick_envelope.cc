@@ -15,6 +15,13 @@ void DrawLineBetweenPoints(const Eigen::Ref<const Eigen::Vector3d>& pt1,
   CallMatlab("set", h[0], "Color", Eigen::Vector3d(0.8, 0.1, 0.1));
 }
 
+void DrawTriangle(const Eigen::Vector3d& pt1, const Eigen::Vector3d& pt2, const Eigen::Vector3d& pt3, const Eigen::Vector3d& color) {
+  using common::CallMatlab;
+  CallMatlab("fill3", Eigen::Vector3d(pt1(0), pt2(0), pt3(0)),
+             Eigen::Vector3d(pt1(1), pt2(1), pt3(1)),
+             Eigen::Vector3d(pt1(2), pt2(2), pt3(2)), "FaceColor", color);
+}
+
 // Draw one mccormick envelope for 2 binary variables per half axis case.
 // Draw the convex hull of the intersection region, between the surface of the
 // sphere, and the box [0, 0.5, 0] <= x <= [0.5, 1, 0.5]
@@ -36,19 +43,27 @@ void DrawSingleMcCormickEnvelopes() {
   DrawLineBetweenPoints(intersection_pts[2], intersection_pts[3]);
 
   // Draw the sphere surface
-  const int kNumSurfPts = 11;
+  const int kNumSurfPts = 21;
   Eigen::Matrix<double, kNumSurfPts, kNumSurfPts> surf_X, surf_Y, surf_Z;
   for (int i = 0; i < kNumSurfPts; ++i) {
     surf_Y.col(i) = Eigen::Matrix<double, kNumSurfPts, 1>::LinSpaced(std::sqrt(2) / 2, 1);
   }
   for (int i = 0; i < kNumSurfPts; ++i) {
-    surf_X.row(i) = Eigen::Matrix<double, 1, kNumSurfPts>::LinSpaced(0, std::min(std::sqrt(1 - surf_Y(i, 0) * surf_Y(i, 0)), 0.5));
+    surf_X.row(i) = Eigen::Matrix<double, 1, kNumSurfPts>::LinSpaced(0, std::sqrt(1 - surf_Y(i, 0) * surf_Y(i, 0)));
     for (int j = 0; j < kNumSurfPts; ++j) {
       double z_square = 1.0 - surf_X(i, j) * surf_X(i, j) - surf_Y(i, j) * surf_Y(i,j);
       if (z_square > 0) {
-        surf_Z(i, j) = std::min(std::sqrt(z_square), 0.5);
+        surf_Z(i, j) = std::sqrt(z_square);
       } else {
         surf_Z(i, j) = 0;
+      }
+      if (surf_Z(i, j) > 0.5) {
+        surf_Y(i, j) = std::sqrt(1 - surf_X(i, j) * surf_X(i, j) - 0.25);
+        surf_Z(i, j) = 0.5;
+      }
+      if (surf_X(i, j) > 0.5) {
+        surf_X(i, j) = 0.5;
+        surf_Y(i, j) = std::sqrt(1 - surf_Z(i, j) * surf_Z(i, j) - 0.25);
       }
     }
   }
@@ -58,6 +73,18 @@ void DrawSingleMcCormickEnvelopes() {
   CallMatlab("set", h_sphere[0], "FaceAlpha", 0.2);
   CallMatlab("set", h_sphere[0], "EdgeColor", sphere_color);
   CallMatlab("set", h_sphere[0], "LineStyle", "none");
+
+  // The two inner facets are triangles with points 0, 1, 3
+  // and with points 0, 2, 3
+  Eigen::Vector3d n;
+  double d;
+  internal::ComputeTriangleOutwardNormal(intersection_pts[0], intersection_pts[2], intersection_pts[3], &n, &d);
+
+  DrawLineBetweenPoints(intersection_pts[0], intersection_pts[3]);
+
+  Eigen::Vector3d plane_color(0.5, 0.3, 0.2);
+  DrawTriangle(intersection_pts[0], intersection_pts[1], intersection_pts[3], plane_color);
+  DrawTriangle(intersection_pts[0], intersection_pts[2], intersection_pts[3], plane_color);
 }
 
 void DoMain() {
