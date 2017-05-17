@@ -232,8 +232,8 @@ drake_cc_library(
     srcs = ["test/mathematical_program_test_util.cc"],
     hdrs = ["test/mathematical_program_test_util.h"],
     deps = [
-        ":mathematical_program",
         "@gtest//:main",
+        ":mathematical_program",
     ],
 )
 
@@ -243,10 +243,10 @@ drake_cc_library(
     srcs = ["test/optimization_examples.cc"],
     hdrs = ["test/optimization_examples.h"],
     deps = [
+        "@gtest//:main",
         ":mathematical_program",
         ":mathematical_program_test_util",
         "//drake/common:eigen_matrix_compare",
-        "@gtest//:main",
     ],
 )
 
@@ -352,16 +352,6 @@ drake_cc_library(
         "//conditions:default": ["no_snopt.cc"],
     }),
     hdrs = ["snopt_solver.h"],
-    deps = select({
-        "//tools:with_snopt": [
-            ":mathematical_program_api",
-            "//drake/math:autodiff",
-            "@snopt//:snopt_c",
-        ],
-        "//conditions:default": [
-            ":mathematical_program_api",
-        ],
-    }),
     # Some versions of SNOPT's API require passing a `std::string::c_str()`
     # result of `const char*` to a function taking a `char*`, or passing a
     # function pointer that receives parameters to a function that takes a
@@ -373,6 +363,16 @@ drake_cc_library(
     # and contain the language abuses there, so that the actual logic of our
     # snopt_wrapper.cc could still have full `-pedantic` checks enabled.)
     copts = ["-fpermissive"],
+    deps = select({
+        "//tools:with_snopt": [
+            ":mathematical_program_api",
+            "//drake/math:autodiff",
+            "@snopt//:snopt_c",
+        ],
+        "//conditions:default": [
+            ":mathematical_program_api",
+        ],
+    }),
 )
 
 drake_cc_library(
@@ -709,6 +709,15 @@ drake_cc_binary(
     name = "plot_rotation_mccormick_envelope",
     testonly = 1,
     srcs = ["test/plot_rotation_mccormick_envelope.cc"],
+    deps = [
+        ":rotation_constraint_visualization",
+    ],
+)
+
+drake_cc_binary(
+    name = "plot_rotation_single_mccormick_envelope",
+    testonly = 1,
+    srcs = ["test/plot_rotation_single_mccormick_envelope.cc"],
     deps = [
         ":rotation_constraint_visualization",
     ],
