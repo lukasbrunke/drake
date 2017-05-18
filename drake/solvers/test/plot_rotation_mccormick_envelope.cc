@@ -41,6 +41,10 @@ void DoMain() {
     CallMatlab("axis", "equal");
     DrawSphere();
     DrawAllMcCormickEnvelopes(num_bins);
+    CallMatlab("xlabel", "x");
+    CallMatlab("ylabel", "y");
+    CallMatlab("zlabel", "z");
+    CallMatlab("view", 145, 30);
   }
 }
 }  // namespace
