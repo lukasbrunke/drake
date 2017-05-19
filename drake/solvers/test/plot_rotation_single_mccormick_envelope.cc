@@ -97,7 +97,7 @@ void DrawSurfacePatch(const std::vector<Eigen::Vector3d>& intersection_pts, cons
 // Draw one mccormick envelope for 2 binary variables per half axis case.
 // Draw the convex hull of the intersection region, between the surface of the
 // sphere, and the box [0, 0.5, 0] <= x <= [0.5, 1, 0.5]
-void DrawSingleMcCormickEnvelopes(const Eigen::Vector3d& bmin, const Eigen::Vector3d& bmax, const Eigen::RowVector3d& sphere_color) {
+void DrawSingleMcCormickEnvelopes(const Eigen::Vector3d& bmin, const Eigen::Vector3d& bmax, const Eigen::RowVector3d& sphere_color, bool draw_face_normal) {
   using common::CallMatlab;
   DrawBoxSphereIntersection(bmin, bmax);
   auto intersection_pts = internal::ComputeBoxEdgesAndSphereIntersection(bmin, bmax);
@@ -130,9 +130,11 @@ void DrawSingleMcCormickEnvelopes(const Eigen::Vector3d& bmin, const Eigen::Vect
   DrawTriangle(intersection_pts[0], intersection_pts[1], intersection_pts[3], plane_color);
   DrawTriangle(intersection_pts[0], intersection_pts[2], intersection_pts[3], plane_color);
 
-  // Draw the normal vector
-  DrawTriangleNormal(intersection_pts[0], intersection_pts[2], intersection_pts[3], n1 / 5, "n_1");
-  DrawTriangleNormal(intersection_pts[0], intersection_pts[1], intersection_pts[3], n2 / 5, "n_2");
+  if (draw_face_normal) {
+    // Draw the normal vector
+    DrawTriangleNormal(intersection_pts[0], intersection_pts[2], intersection_pts[3], n1 / 5, "n_1");
+    DrawTriangleNormal(intersection_pts[0], intersection_pts[1], intersection_pts[3], n2 / 5, "n_2");
+  }
 
   // Draw the boundary regions as part of the axis-aligned planes, with the arc
   // being one boundary of the region.
@@ -189,6 +191,28 @@ void DrawAllMcCormickEnvelopes(int num_bins) {
   }
 }
 
+MatlabRemoteVariable DrawHalfSpaceRelaxation(const std::vector<Eigen::Vector3d>& pts) {
+  double d;
+  Eigen::Vector3d normal;
+  internal::ComputeHalfSpaceRelaxationForBoxSphereIntersection(pts, &normal, &d);
+  //double theta = std::acos(d);
+  Eigen::RowVector2d arrow_x(d * normal(0), 1.1 * normal(0));
+  Eigen::RowVector2d arrow_y(d * normal(1), 1.1 * normal(1));
+  Eigen::RowVector2d arrow_z(d * normal(2), 1.1 * normal(2));
+  CallMatlab("arrow3d", arrow_x, arrow_y, arrow_z, 0.8, 0.005, 0.01, Eigen::RowVector3d(0, 0, 0));
+  int num_pts = pts.size();
+  Eigen::VectorXd plane_X(num_pts);
+  Eigen::VectorXd plane_Y(num_pts);
+  Eigen::VectorXd plane_Z(num_pts);
+  for (int i = 0; i < num_pts; ++i) {
+    plane_X(i) = pts[i](0);
+    plane_Y(i) = pts[i](1);
+    plane_Z(i) = (d - normal(0) * plane_X(i) - normal(1) * plane_Y(i)) / normal(2);
+  }
+  auto h = CallMatlab(1, "fill3", plane_X, plane_Y, plane_Z, Eigen::RowVector3d(0, 0, 1));
+  return h[0];
+}
+
 void DoMain() {
   using common::CallMatlab;
 
@@ -206,8 +230,9 @@ void DoMain() {
   CallMatlab("xlabel", "x");
   CallMatlab("ylabel", "y");
   CallMatlab("zlabel", "z");
-  CallMatlab("view", 145, 30);
-
+  CallMatlab("view", 145, 25);
+  std::string file_name = "/home/hongkai/research/ISRR2017/figure/sphere_2_bins_shaded_single_region";
+  CallMatlab("print", file_name, "-dsvg");
 
   CallMatlab("figure", 2);
   CallMatlab("clf");
@@ -217,9 +242,20 @@ void DoMain() {
   CallMatlab("ylabel", "y");
   CallMatlab("zlabel", "z");
   //DrawSphere();
-  DrawSingleMcCormickEnvelopes(bmin, bmax, patch_color);
+  DrawSingleMcCormickEnvelopes(bmin, bmax, patch_color, true);
   //CallMatlab("view", 93, 18);
   CallMatlab("view",-117, 27);
+
+  CallMatlab("figure", 3);
+  CallMatlab("clf");
+  CallMatlab("hold", "on");
+  CallMatlab("axis", "equal");
+  CallMatlab("xlabel", "x");
+  CallMatlab("ylabel", "y");
+  CallMatlab("zlabel", "z");
+  DrawSingleMcCormickEnvelopes(bmin, bmax, patch_color, false);
+  DrawHalfSpaceRelaxation(intersection_pts);
+  CallMatlab("view", 90, 18);
 }
 }  // namespace
 }  // namespace solvers

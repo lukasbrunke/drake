@@ -115,7 +115,7 @@ void DrawBox(const Eigen::Vector3d& bmin, const Eigen::Vector3d& bmax,
         CallMatlab("set", h[i], "FaceColor", color);
         CallMatlab("set", h[i], "FaceAlpha", 0.2);
         CallMatlab("set", h[i], "EdgeColor", color);
-        CallMatlab("set", h[i], "LineStyle", "none");
+        //CallMatlab("set", h[i], "LineStyle", "none");
       }
     }
   }

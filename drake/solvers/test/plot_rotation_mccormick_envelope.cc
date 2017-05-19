@@ -44,7 +44,9 @@ void DoMain() {
     CallMatlab("xlabel", "x");
     CallMatlab("ylabel", "y");
     CallMatlab("zlabel", "z");
-    CallMatlab("view", 145, 30);
+    CallMatlab("view", 145, 25);
+    std::string file_name = "/home/hongkai/research/ISRR2017/figure/sphere_" + std::to_string(num_bins) + "_bins_w_box";
+    CallMatlab("print", file_name, "-dsvg");
   }
 }
 }  // namespace
