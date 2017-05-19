@@ -60,7 +60,7 @@ void DrawTriangleNormal(const Eigen::Vector3d& pt1, const Eigen::Vector3d& pt2, 
   CallMatlab("set", h_text[0], "FontSize", 12);
 }
 
-void DrawSurfacePatch(const std::vector<Eigen::Vector3d>& intersection_pts, const Eigen::RowVector3d& sphere_color) {
+MatlabRemoteVariable DrawSurfacePatch(const std::vector<Eigen::Vector3d>& intersection_pts, const Eigen::RowVector3d& sphere_color) {
   // Draw the sphere surface
   const int kNumSurfPts = 21;
   Eigen::Matrix<double, kNumSurfPts, kNumSurfPts> surf_X, surf_Y, surf_Z;
@@ -91,6 +91,7 @@ void DrawSurfacePatch(const std::vector<Eigen::Vector3d>& intersection_pts, cons
   CallMatlab("set", h_sphere[0], "FaceAlpha", 0.2);
   CallMatlab("set", h_sphere[0], "EdgeColor", sphere_color);
   CallMatlab("set", h_sphere[0], "LineStyle", "none");
+  return h_sphere[0];
 }
 
 
@@ -195,23 +196,37 @@ MatlabRemoteVariable DrawHalfSpaceRelaxation(const std::vector<Eigen::Vector3d>&
   double d;
   Eigen::Vector3d normal;
   internal::ComputeHalfSpaceRelaxationForBoxSphereIntersection(pts, &normal, &d);
+  for (int i = 0; i < 4; ++i) {
+    std::cout << normal.dot(pts[i]) - d << std::endl;
+  }
+
   //double theta = std::acos(d);
-  Eigen::RowVector2d arrow_x(d * normal(0), 1.1 * normal(0));
-  Eigen::RowVector2d arrow_y(d * normal(1), 1.1 * normal(1));
-  Eigen::RowVector2d arrow_z(d * normal(2), 1.1 * normal(2));
-  CallMatlab("arrow3d", arrow_x, arrow_y, arrow_z, 0.8, 0.005, 0.01, Eigen::RowVector3d(0, 0, 0));
-  int num_pts = pts.size();
-  Eigen::VectorXd plane_X(num_pts);
-  Eigen::VectorXd plane_Y(num_pts);
-  Eigen::VectorXd plane_Z(num_pts);
-  for (int i = 0; i < num_pts; ++i) {
-    plane_X(i) = pts[i](0);
-    plane_Y(i) = pts[i](1);
-    plane_Z(i) = (d - normal(0) * plane_X(i) - normal(1) * plane_Y(i)) / normal(2);
+  Eigen::RowVector2d arrow_x(0, normal(0));
+  Eigen::RowVector2d arrow_y(0, normal(1));
+  Eigen::RowVector2d arrow_z(0, normal(2));
+  CallMatlab("arrow3d", arrow_x, arrow_y, arrow_z, 0.9, 0.005, 0.015, Eigen::RowVector3d(0, 0, 0));
+  Eigen::Vector4d plane_X, plane_Y, plane_Z;
+  plane_X << 0, 0.5, pts[3](0), -0.05;
+  plane_Z << 0, 0, pts[3](2), 0.5;
+  for (int i = 0; i < 4; ++i) {
+    plane_Y(i) = (d - normal(0) * plane_X(i) - normal(2) * plane_Z(i)) / normal(1);
   }
   auto h = CallMatlab(1, "fill3", plane_X, plane_Y, plane_Z, Eigen::RowVector3d(0, 0, 1));
+  CallMatlab("set", h[0], "FaceAlpha", 0.6);
   return h[0];
 }
+
+/*std::vector<MatlabRemoteVariable> DrawXYZaxes(const Eigen::Vector3d& axes_len) {
+  std::vector<MatlabRemoteVariable> h;
+  h.reserve(3);
+  auto h_x = CallMatlab(1, "arrow3d", Eigen::RowVector2d(0, axes_len(0)), Eigen::RowVector2d::Zero(), Eigen::RowVector2d::Zero(), 0.95, 0.005, 0.015, Eigen::RowVector3d(0, 0, 0));
+  auto h_y = CallMatlab(1, "arrow3d", Eigen::RowVector2d::Zero(), Eigen::RowVector2d(0, axes_len(1)), Eigen::RowVector2d::Zero(), 0.95, 0.005, 0.015, Eigen::RowVector3d(0, 0, 0));
+  auto h_z = CallMatlab(1, "arrow3d", Eigen::RowVector2d::Zero(), Eigen::RowVector2d::Zero(), Eigen::RowVector2d(0, axes_len(2)), 0.95, 0.005, 0.015, Eigen::RowVector3d(0, 0, 0));
+  h.push_back(h_x[0]);
+  h.push_back(h_y[0]);
+  h.push_back(h_z[0]);
+  return h;
+}*/
 
 void DoMain() {
   using common::CallMatlab;
@@ -253,9 +268,20 @@ void DoMain() {
   CallMatlab("xlabel", "x");
   CallMatlab("ylabel", "y");
   CallMatlab("zlabel", "z");
-  DrawSingleMcCormickEnvelopes(bmin, bmax, patch_color, false);
+  auto h_surface_patch = DrawSurfacePatch(intersection_pts, Eigen::RowVector3d(0.7, 0.15, 0.15));
+  CallMatlab("set", h_surface_patch, "FaceAlpha", 0.5);
   DrawHalfSpaceRelaxation(intersection_pts);
-  CallMatlab("view", 90, 18);
+  CallMatlab("view", 10, 40);
+  auto h_theta_line = DrawLineBetweenPoints(Eigen::Vector3d::Zero(), intersection_pts[0]);
+  CallMatlab("set", h_theta_line, "LineStyle", "--");
+  Eigen::Matrix<double, 1, 6> axis_limits;
+  axis_limits << -0.1, 0.55, 0, 1, -0.1, 0.55;
+  CallMatlab("axis", axis_limits);
+  //DrawXYZaxes(Eigen::Vector3d(0.55, 1, 0.55));
+  CallMatlab("print", "/home/hongkai/research/ISRR2017/figure/surface_partition_halfspace_view1", "-dsvg");
+  //CallMatlab("delete", h_theta_line);
+  //CallMatlab("view", 160, 25);
+  //CallMatlab("print", "/home/hongkai/research/ISRR2017/figure/surface_partition_halfspace_view2", "-dsvg");
 }
 }  // namespace
 }  // namespace solvers
