@@ -42,16 +42,27 @@ void AddMicrowave(RigidBodyTreed* tree, const Eigen::Vector3d& kMicrowavePos) {
   tree->addFrame(microwave_frame);
 }
 
+void AddFridge(RigidBodyTreed* tree, const Eigen::Vector3d& kFridgePos) {
+  const std::string microwave_path = drake::GetDrakePath() + "/manipulation/models/objects/fridge/urdf/fridge.urdf";
+  auto microwave_frame = std::make_shared<RigidBodyFrame<double>>("microwave", tree->get_mutable_body(0), kFridgePos, Eigen::Vector3d(0, 0, 0));
+  parsers::urdf::AddModelInstanceFromUrdfFile(microwave_path, drake::multibody::joints::kFixed, microwave_frame, tree);
+  tree->addFrame(microwave_frame);
+}
+
 std::vector<Eigen::Matrix3Xd> SetFreeSpace(RigidBodyTreed* tree) {
   std::vector<Eigen::Matrix3Xd> box_vertices;
 
   Eigen::Isometry3d box_pose;
   box_pose.linear().setIdentity();
-  box_pose.translation() << 0.3, -0.5, 1.3;
+  box_pose.translation() << 0.3, -0.6, 1.5;
   box_vertices.push_back(AddBoxToTree(tree, Eigen::Vector3d(0.6, 0.6, 0.4), box_pose, "box1"));
 
-  box_pose.translation() << 0.54, -0.5, 0.97;
-  box_vertices.push_back(AddBoxToTree(tree, Eigen::Vector3d(0.36, 0.6, 0.4), box_pose, "box2"));
+  box_pose.translation() << 0.53, -0.6, 1.05;
+  box_vertices.push_back(AddBoxToTree(tree, Eigen::Vector3d(0.36, 0.6, 0.6), box_pose, "box2"));
+
+  //box_pose.translation() << 0.4, -0.8, 1.05;
+  //box_vertices.push_back(AddBoxToTree(tree, Eigen::Vector3d(0.4, 0.4, 0.6), box_pose, "box3"));
+
   return box_vertices;
 }
 
@@ -148,8 +159,10 @@ int DoMain() {
   const Eigen::Vector3d kBasePos = robot_base_frame->get_transform_to_body().translation();
   const Eigen::Vector3d kBottleReachablePos(kBasePos(0) + 0.8, kBasePos(1) + 0.2, kBasePos(2) + 0.04);
   AddBottle(tree.get(), kBottleReachablePos);
-  const Eigen::Vector3d kMicrowavePos(kBasePos(0) + 0.2, kBasePos(1) - 0.2, kBasePos(2));
-  AddMicrowave(tree.get(), kMicrowavePos);
+  //const Eigen::Vector3d kMicrowavePos(kBasePos(0) + 0.2, kBasePos(1) - 0.2, kBasePos(2));
+  //AddMicrowave(tree.get(), kMicrowavePos);
+  const Eigen::Vector3d kFridgePos(kBasePos(0) + 0.2, kBasePos(1) - 0.2, kBasePos(2));
+  AddFridge(tree.get(), kFridgePos);
   auto free_space_vertices = SetFreeSpace(tree.get());
   auto collision_pts = AddBodyCollisionPoint(tree.get());
   tools::SimpleTreeVisualizer simple_tree_visualizer(*tree.get(), &lcm);
