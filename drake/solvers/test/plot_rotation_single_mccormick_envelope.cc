@@ -246,8 +246,8 @@ void DoMain() {
   CallMatlab("ylabel", "y");
   CallMatlab("zlabel", "z");
   CallMatlab("view", 145, 25);
-  std::string file_name = "/home/hongkai/research/ISRR2017/figure/sphere_2_bins_shaded_single_region";
-  CallMatlab("print", file_name, "-dsvg");
+  //std::string file_name = "/home/hongkai/research/ISRR2017/figure/sphere_2_bins_shaded_single_region";
+  //CallMatlab("print", file_name, "-dsvg");
 
   CallMatlab("figure", 2);
   CallMatlab("clf");
@@ -280,8 +280,8 @@ void DoMain() {
   //DrawXYZaxes(Eigen::Vector3d(0.55, 1, 0.55));
   CallMatlab("print", "/home/hongkai/research/ISRR2017/figure/surface_partition_halfspace_view1", "-dsvg");
   //CallMatlab("delete", h_theta_line);
-  //CallMatlab("view", 160, 25);
-  //CallMatlab("print", "/home/hongkai/research/ISRR2017/figure/surface_partition_halfspace_view2", "-dsvg");
+  CallMatlab("view", 85, 20);
+  CallMatlab("print", "/home/hongkai/research/ISRR2017/figure/surface_partition_halfspace_view2", "-dsvg");
 }
 }  // namespace
 }  // namespace solvers
