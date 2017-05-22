@@ -38,7 +38,7 @@ def _gurobi_impl(repository_ctx):
         # in the Bazel sandbox, because the NEEDED statements in the executable
         # will not square with the RPATH statements. I don't really know why this
         # happens, but I suspect it might be a Bazel bug.
-        srcs = ["gurobi-distro/lib/libgurobi60.so"]
+        srcs = ["gurobi-distro/lib/libgurobi70.so"]
 
         linkopts = ["-pthread"]
 
