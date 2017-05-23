@@ -155,9 +155,11 @@ Eigen::Matrix<double, 7, 1> SolveGlobalIKreachable(
 int DoMain() {
   drake::lcm::DrakeLcm lcm;
   auto tree = ConstructKuka();
+  multibody::AddFlatTerrainToWorld(tree.get());
   auto robot_base_frame = tree->findFrame("iiwa_base");
   const Eigen::Vector3d kBasePos = robot_base_frame->get_transform_to_body().translation();
   const Eigen::Vector3d kBottleReachablePos(kBasePos(0) + 0.8, kBasePos(1) + 0.2, kBasePos(2) + 0.04);
+  std::cout << "bottle pos: " << kBottleReachablePos.transpose() << std::endl;
   AddBottle(tree.get(), kBottleReachablePos);
   //const Eigen::Vector3d kMicrowavePos(kBasePos(0) + 0.2, kBasePos(1) - 0.2, kBasePos(2));
   //AddMicrowave(tree.get(), kMicrowavePos);

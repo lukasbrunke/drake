@@ -261,8 +261,15 @@ int DoMain() {
   Eigen::Vector3d mug_center = mug_pos;
   mug_center(2) += 0.05;
   auto q_global = SolveGlobalIK(tree.get(), mug_center, free_space_vertices);
+  auto cache = tree->CreateKinematicsCache();
+  auto link_7 = tree->FindBody("iiwa_link_7");
   for (int i = 0; i < static_cast<int>(q_global.size()); ++i) {
     simple_tree_visualizer.visualize(q_global[i]);
+    std::cout <<"q:\n" << q_global[i].transpose() << std::endl;
+    cache.initialize(q_global[i]);
+    tree->doKinematics(cache);
+    auto link_7_pose = tree->CalcBodyPoseInWorldFrame(cache, *link_7);
+    std::cout << "link7 pos:\n" << link_7_pose.matrix() << std::endl;
   }
 
   //Eigen::Matrix<double, 7, 1> q_nl = SolveNonlinearIK(tree.get(), mug_center);
