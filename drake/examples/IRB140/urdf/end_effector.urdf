@@ -1,0 +1,43 @@
+<?xml version="1.0" ?>
+<robot name="IRB140_end_effector">
+    <link
+    name="link_6">
+    <inertial>
+      <origin
+        xyz="0.567059432845099 -0.711774967143511 2.38785136319277E-10"
+        rpy="0 0 0" />
+      <mass
+        value="0.0258654328719498" />
+      <inertia
+        ixx="5.9822143548355E-06"
+        ixy="4.58244484401765E-08"
+        ixz="-3.33091906738059E-13"
+        iyy="6.2921914507958E-06"
+        iyz="6.75626369217644E-13"
+        izz="6.17479327327778E-06" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="-0.45 0.712 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="./meshes/link6.stl" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.796078431372549 0.823529411764706 0.937254901960784 1" />
+      </material>
+    </visual>
+    <!--<collision>
+      <origin
+        xyz="-0.45 0.712 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+	  filename="./meshes/link6.stl" />
+      </geometry>
+    </collision>-->
+  </link>
+</robot>
