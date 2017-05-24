@@ -94,6 +94,20 @@ TEST_F(IRB140Test, link_forward_kinematics) {
 
   const auto X_16_sym = X_13_sym * X_34_sym * X_45_sym * X_56_sym;
   const auto X_06_sym  = X_01_sym * X_16_sym;
+  std::cout <<"X_01\n";
+  printPose(X_01_sym);
+  const auto X_02_sym = X_01_sym * X_12_sym;
+  std::cout <<"X_02\n";
+  printPose(X_02_sym);
+  const auto X_03_sym = X_02_sym * X_23_sym;
+  std::cout <<"X_03\n";
+  printPose(X_03_sym);
+  const auto X_04_sym = X_03_sym * X_34_sym;
+  std::cout << "X_04\n";
+  printPose(X_04_sym);
+  const auto X_05_sym = X_04_sym * X_45_sym;
+  std::cout << "X_05\n";
+  printPose(X_05_sym);
   std::cout <<"X_06\n";
   printPose(X_06_sym);
 

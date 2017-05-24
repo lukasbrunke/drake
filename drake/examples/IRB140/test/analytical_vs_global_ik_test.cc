@@ -151,6 +151,19 @@ class DUT {
       cone_expr.tail<3>() = body_R.row(0) - body_R.row(1) - body_R.row(2);
       global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
     }
+
+    const auto R_02 = global_ik_.body_rotation_matrix(2);
+    global_ik_.AddBoundingBoxConstraint(0, 0, R_02(2, 0));
+    global_ik_.AddBoundingBoxConstraint(Eigen::Vector3d(0, 0, -1), Eigen::Vector3d(0, 0, -1), R_02.col(1));
+    global_ik_.AddBoundingBoxConstraint(0, 0, R_02(2, 2));
+    const auto p_02 = global_ik_.body_position(2);
+    global_ik_.AddBoundingBoxConstraint(Eigen::Vector2d::Zero(), Eigen::Vector2d::Zero(), p_02.head<2>());
+
+    const auto R_03 = global_ik_.body_rotation_matrix(3);
+    global_ik_.AddBoundingBoxConstraint(0, 0, R_03(2, 2));
+
+    const auto R_04 = global_ik_.body_rotation_matrix(4);
+    global_ik_.AddBoundingBoxConstraint(0, 0, R_04(2, 2));
   }
 
   RigidBodyTreed* robot() const {return analytical_ik_.robot();}
@@ -502,11 +515,11 @@ void DebugOutputFile(int argc, char* argv[]) {
       dut.SolveGlobalIK(ik_result.ee_pose().translation(), &ik_result);
       ik_result.printToFile(&output_file1);
     }*/
-    /*if (ik_result.analytical_ik_status() == solvers::SolutionResult::kInfeasibleConstraints
+    if (ik_result.analytical_ik_status() == solvers::SolutionResult::kInfeasibleConstraints
         && ik_result.global_ik_status() == solvers::SolutionResult::kSolutionFound) {
-      dut.SolveAnalyticalIK(ik_result.ee_pose().translation(), &ik_result);
+      dut.SolveGlobalIK(ik_result.ee_pose().translation(), &ik_result);
       ik_result.printToFile(&output_file1);
-    }*/
+    }
     /*if (ik_result.global_ik_status() == solvers::SolutionResult::kSolutionFound
         && ik_result.analytical_ik_status() == solvers::SolutionResult::kSolutionFound) {
       cache.initialize(ik_result.q_global_ik());
@@ -536,11 +549,11 @@ void DebugOutputFile(int argc, char* argv[]) {
       dut.SolveNonlinearIK(ik_result.ee_pose().translation(), &ik_result, ik_result.q_global_ik(), true);
       ik_result.printToFile(&output_file1);
     }*/
-    if (ik_result.global_ik_status() == solvers::SolutionResult::kInfeasible_Or_Unbounded
+    /*if (ik_result.global_ik_status() == solvers::SolutionResult::kInfeasible_Or_Unbounded
         || ik_result.global_ik_status() == solvers::SolutionResult::kInfeasibleConstraints) {
       dut.SolveGlobalIK(ik_result.ee_pose().translation(), &ik_result);
       ik_result.printToFile(&output_file1);
-    }
+    }*/
     ik_result.printToFile(&output_file2);
   }
   output_file1.close();
