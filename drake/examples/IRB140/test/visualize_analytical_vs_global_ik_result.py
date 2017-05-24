@@ -6,10 +6,18 @@ import bot_core as lcmbotcore
 # receive lcm message and draw data
 def receiveMessage(msg):
     drake_path = '/home/hongkai/drake-distro-bk'
+    case = 0
 
     robotModel, jointController = roboturdf.loadRobotModel(urdfFile=drake_path+'/drake/examples/IRB140/urdf/irb_140_shift.urdf', view=view, useConfigFile=False)
     jointController.setPose('my posture', np.zeros(len(jointController.jointNames)))
 
+    ee_model, ee_joint_controller = roboturdf.loadRobotModel(urdfFile=drake_path+'/drake/examples/IRB140/urdf/end_effector.urdf', view=view, useConfigFile=False)
+    ee_pose = np.array([-0.5, -0.4, 0.5, 0, 0, 0])
+    if case == 0 :
+        ee_pose[5] = 0
+    elif case == 2:
+        ee_pose[5] = 1.57
+    ee_joint_controller.setPose('ee posture', ee_pose)
     folderName = 'my data'
 
     # remove the folder completely
@@ -29,7 +37,7 @@ def receiveMessage(msg):
     d_relaxation = DebugData()
     d_problem = DebugData()
     
-    file = open(drake_path+'/ik_output21_2.txt','r')
+    file = open(drake_path+'/ik_output21_' + str(case) +'.txt','r')
 
     lines = file.readlines()
 
@@ -44,6 +52,14 @@ def receiveMessage(msg):
         elif line.startswith("analytical_ik_status:"):
             analytical_ik_status_str = line.split()
             analytical_ik_status = int(analytical_ik_status_str[1])
+            if case == 2:
+                if analytical_ik_status == 0:
+                    q_analytical_str = lines[line_number + 2].split()
+                    q_analytical = np.zeros(12)
+                    for i in range(6):
+                        q_analytical[i + 6] = float(q_analytical_str[i])
+                    if (pos[0] == 0.5 and pos[1] == 0 and pos[2] == 0.6):
+                        jointController.setPose('my posture', q_analytical)
         elif line.startswith("nonlinear_ik_status:"):
             nonlinear_ik_status_str = line.split()
             nonlinear_ik_status = int(nonlinear_ik_status_str[1])
@@ -69,7 +85,7 @@ def receiveMessage(msg):
             elif (analytical_ik_status == -2 and global_ik_status == 0):
                 d_relaxation.addSphere(pos, radius = 0.01, color = [1, 0, 0])
             elif analytical_ik_status == 0 and global_ik_status == -2:
-                d_problem.addSphere(pos, radius = 0.01, color = [0, 0, 0])
+                d_problem.addSphere(pos, radius = 0.01, color = [0, 1, 0])
         line_number =  line_number + 1
 
     
@@ -80,6 +96,11 @@ def receiveMessage(msg):
     vis.showPolyData(d_unreachable_ge_1m.getPolyData(), 'unreachable>1m', parent=folder, colorByName='RGB255')
     vis.showPolyData(d_relaxation.getPolyData(), 'relaxation', parent=folder, colorByName='RGB255')
     vis.showPolyData(d_problem.getPolyData(), 'problem', parent=folder, colorByName='RGB255')
+
+    camera = view.camera()
+    camera.SetPosition([-0.7755, -2.1533, 2.8535])
+    camera.SetFocalPoint([0.3508, -0.1305, 0.5296])
+    view.forceRender()
 
 def publishData():
     data = 1
