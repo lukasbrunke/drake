@@ -35,5 +35,17 @@ void DrawBoxSphereIntersection(
     const Eigen::Vector3d &bmin,
     const Eigen::Vector3d &bmax,
     const Eigen::RowVector3d& color = Eigen::RowVector3d(1, 0, 0));
+
+// Draw an arc between two end points on the unit sphere. The two end points
+// are the vertices of the intersection region, between the box and the surface
+// of the sphere.
+// This requires that
+// arc_end0(fixed_axis) = arc_end1(fixed_axis) = x(fixed_axis),
+// where `x` is a point on the arc.
+// Draws the shorter arc between the two points.
+void DrawArcBoundaryOfBoxSphereIntersection(const Eigen::Vector3d& arc_end0,
+                                            const Eigen::Vector3d& arc_end1,
+                                            int fixed_axis,
+                                            const Eigen::RowVector3d& color);
 }  // namespace solvers
 }  // namespace drake

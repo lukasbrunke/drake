@@ -6,7 +6,6 @@
 
 namespace drake {
 namespace solvers {
-namespace {
 // Draw an arc between two end points on the unit sphere. The two end points
 // are the vertices of the intersection region, between the box and the surface
 // of the sphere.
@@ -63,7 +62,6 @@ void DrawArcBoundaryOfBoxSphereIntersection(const Eigen::Vector3d& arc_end0,
                               via_pts.row(2));
   common::CallMatlab("set", h[0], "Color", color);
 }
-}  // namespace
 
 void DrawSphere(const Eigen::RowVector3d& color) {
   using common::CallMatlab;

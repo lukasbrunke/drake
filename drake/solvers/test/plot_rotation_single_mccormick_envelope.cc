@@ -228,46 +228,40 @@ MatlabRemoteVariable DrawHalfSpaceRelaxation(const std::vector<Eigen::Vector3d>&
   return h;
 }*/
 
+void CreateNewFigure(int figure_num) {
+  CallMatlab("figure", figure_num);
+  CallMatlab("clf");
+  CallMatlab("hold", "on");
+  CallMatlab("axis", "equal");
+  CallMatlab("xlabel", "x");
+  CallMatlab("ylabel", "y");
+  CallMatlab("zlabel", "z");
+}
+
 void DoMain() {
   using common::CallMatlab;
 
   Eigen::Vector3d bmin(0, 0.5, 0);
   Eigen::Vector3d bmax(0.5, 1, 0.5);
   auto intersection_pts = internal::ComputeBoxEdgesAndSphereIntersection(bmin, bmax);
-  CallMatlab("figure", 1);
-  CallMatlab("clf");
-  CallMatlab("hold", "on");
-  CallMatlab("axis", "equal");
+
+  CreateNewFigure(1);
   DrawSphere();
   DrawAllMcCormickEnvelopes(2);
   Eigen::RowVector3d patch_color(0.6, 0.2, 0.2);
   DrawSurfacePatch(intersection_pts, patch_color);
-  CallMatlab("xlabel", "x");
-  CallMatlab("ylabel", "y");
-  CallMatlab("zlabel", "z");
+
   CallMatlab("view", 145, 25);
   //std::string file_name = "/home/hongkai/research/ISRR2017/figure/sphere_2_bins_shaded_single_region";
   //CallMatlab("print", file_name, "-dsvg");
 
-  CallMatlab("figure", 2);
-  CallMatlab("clf");
-  CallMatlab("hold", "on");
-  CallMatlab("axis", "equal");
-  CallMatlab("xlabel", "x");
-  CallMatlab("ylabel", "y");
-  CallMatlab("zlabel", "z");
+  CreateNewFigure(2);
   //DrawSphere();
   DrawSingleMcCormickEnvelopes(bmin, bmax, patch_color, true);
   //CallMatlab("view", 93, 18);
   CallMatlab("view",-117, 27);
 
-  CallMatlab("figure", 3);
-  CallMatlab("clf");
-  CallMatlab("hold", "on");
-  CallMatlab("axis", "equal");
-  CallMatlab("xlabel", "x");
-  CallMatlab("ylabel", "y");
-  CallMatlab("zlabel", "z");
+  CreateNewFigure(3);
   auto h_surface_patch = DrawSurfacePatch(intersection_pts, Eigen::RowVector3d(0.7, 0.15, 0.15));
   CallMatlab("set", h_surface_patch, "FaceAlpha", 0.5);
   DrawHalfSpaceRelaxation(intersection_pts);
@@ -278,10 +272,23 @@ void DoMain() {
   axis_limits << -0.1, 0.55, 0, 1, -0.1, 0.55;
   CallMatlab("axis", axis_limits);
   //DrawXYZaxes(Eigen::Vector3d(0.55, 1, 0.55));
-  CallMatlab("print", "/home/hongkai/research/ISRR2017/figure/surface_partition_halfspace_view1", "-dsvg");
+  //CallMatlab("print", "/home/hongkai/research/ISRR2017/figure/surface_partition_halfspace_view1", "-dsvg");
   //CallMatlab("delete", h_theta_line);
   CallMatlab("view", 85, 20);
-  CallMatlab("print", "/home/hongkai/research/ISRR2017/figure/surface_partition_halfspace_view2", "-dsvg");
+  //CallMatlab("print", "/home/hongkai/research/ISRR2017/figure/surface_partition_halfspace_view2", "-dsvg");
+
+  CreateNewFigure(4);
+  DrawSurfacePatch(intersection_pts, patch_color);
+  Eigen::Vector3d surface_pt(0.4, 0.8, std::sqrt(0.2));
+  CallMatlab("plot3", surface_pt(0), surface_pt(1), surface_pt(2), "Marker", ".", "MarkerSize", 25, "Color", Eigen::RowVector3d(1, 0, 0));
+  Eigen::Vector3d surface_pt_arc_vert1(0.5, std::sqrt(0.55), std::sqrt(0.2));
+  Eigen::Vector3d surface_pt_arc_vert2(0, std::sqrt(0.8), std::sqrt(0.2));
+  Eigen::RowVector3d arc_color1(0, 0, 1);
+  DrawArcBoundaryOfBoxSphereIntersection(surface_pt_arc_vert1, surface_pt_arc_vert2, 2, arc_color1);
+  Eigen::RowVector3d arc_color2(0, 1, 0);
+  DrawArcBoundaryOfBoxSphereIntersection(intersection_pts[0], intersection_pts[2], 0, arc_color2);
+  DrawArcBoundaryOfBoxSphereIntersection(intersection_pts[1], intersection_pts[3], 0, arc_color2);
+  CallMatlab("view", 145, 25);
 }
 }  // namespace
 }  // namespace solvers
