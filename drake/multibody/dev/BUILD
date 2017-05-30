@@ -67,6 +67,24 @@ drake_cc_googletest(
     ],
 )
 
+drake_cc_googletest(
+    name = "global_inverse_kinematics_littledog_test",
+    size = "medium",
+    srcs = ["test/global_inverse_kinematics_littledog_test.cc"],
+    data = [
+        "//drake/examples/LittleDog:models",
+    ],
+    tags = gurobi_test_tags(),
+    deps = [
+        "//drake/common:eigen_matrix_compare",
+        "//drake/lcm",
+        "//drake/multibody:global_inverse_kinematics",
+        "//drake/multibody:rigid_body_tree_construction",
+        "//drake/multibody/parsers",
+        "//drake/multibody/rigid_body_plant:drake_visualizer",
+    ],
+)
+
 #drake_cc_googletest(
 #    name = "global_inverse_kinematics_feasible_posture_test",
 #    size = "medium",

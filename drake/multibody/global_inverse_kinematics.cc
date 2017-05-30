@@ -290,8 +290,6 @@ GlobalInverseKinematics::ReconstructGeneralizedPositionSolution() const {
     const Matrix3d R_WC = GetSolution(R_WB_[body_idx]);
     if (!body.IsRigidlyFixedToWorld() && body.has_parent_body()) {
       const RigidBody<double>* parent = body.get_parent();
-      // R_WP is the rotation matrix of parent frame to the world frame.
-      const Matrix3d R_WP = GetSolution(R_WB_[parent->get_body_index()]);
       const DrakeJoint* joint = &(body.getJoint());
       const auto& X_PF = joint->get_transform_to_parent_body();
 
@@ -315,6 +313,8 @@ GlobalInverseKinematics::ReconstructGeneralizedPositionSolution() const {
               math::rotmat2quat(normalized_rotmat);
         }
       } else if (num_positions == 1) {
+        // R_WP is the rotation matrix of parent frame to the world frame.
+        const Matrix3d R_WP = GetSolution(R_WB_[parent->get_body_index()]);
         const double joint_lb = joint->getJointLimitMin()(0);
         const double joint_ub = joint->getJointLimitMax()(0);
         // Should NOT do this evil dynamic cast here, but currently we do
