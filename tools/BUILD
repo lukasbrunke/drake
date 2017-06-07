@@ -110,6 +110,7 @@ exports_create_cps_scripts([
     "nlopt",
     "octomap",
     "pybind11",
+    "sdformat",
     "spdlog",
     "tinyobjloader",
     "yaml_cpp",

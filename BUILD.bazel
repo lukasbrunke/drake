@@ -63,6 +63,7 @@ install(
         "@octomap//:install",
         "@pybind11//:install",
         "@robotlocomotion_lcmtypes//:install",
+        "@sdformat//:install",
         "@spdlog//:install",
         "@tinyobjloader//:install",
         "@vtk//:install",
