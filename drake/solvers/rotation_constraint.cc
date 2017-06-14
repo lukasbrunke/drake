@@ -886,15 +886,15 @@ AddRotationMatrixMcCormickEnvelopeReturnType
 AddRotationMatrixMcCormickEnvelopeMilpConstraints(
     MathematicalProgram* prog,
     const Eigen::Ref<const MatrixDecisionVariable<3, 3>>& R,
-    int num_binary_vars_per_half_axis, RollPitchYawLimits limits) {
-  DRAKE_DEMAND(num_binary_vars_per_half_axis >= 1);
+    int num_intervals_per_half_axis, RollPitchYawLimits limits) {
+  DRAKE_DEMAND(num_intervals_per_half_axis >= 1);
 
   // Use a simple lambda to make the constraints more readable below.
   // Note that
   //  forall k>=0, 0<=phi(k), and
-  //  forall k<=num_binary_vars_per_half_axis, phi(k)<=1.
+  //  forall k<=num_intervals_per_half_axis, phi(k)<=1.
   auto phi = [&](int k) -> double {
-    return EnvelopeMinValue(k, num_binary_vars_per_half_axis);
+    return EnvelopeMinValue(k, num_intervals_per_half_axis);
   };
 
   // Creates binary decision variables which discretize each axis.
@@ -911,7 +911,7 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
   // TODO(russt): Use symbolic constraints and remove these decision variables!
   std::vector<MatrixDecisionVariable<3, 3>> BRpos, BRneg;
   std::vector<MatrixDecisionVariable<3, 3>> CRpos, CRneg;
-  for (int k = 0; k < num_binary_vars_per_half_axis; k++) {
+  for (int k = 0; k < num_intervals_per_half_axis; k++) {
     BRpos.push_back(
         prog->NewBinaryVariables<3, 3>("BRpos" + std::to_string(k)));
     BRneg.push_back(
@@ -924,7 +924,7 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
 
   for (int i = 0; i < 3; i++) {
     for (int j = 0; j < 3; j++) {
-      for (int k = 0; k < num_binary_vars_per_half_axis; k++) {
+      for (int k = 0; k < num_intervals_per_half_axis; k++) {
         // R(i,j) > phi(k) => BRpos[k](i,j) = 1
         // R(i,j) < phi(k) => BRpos[k](i,j) = 0
         // R(i,j) = phi(k) => BRpos[k](i,j) = 0 or 1
@@ -952,7 +952,7 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
         prog->AddLinearConstraint(R(i, j) + phi(k) <= s1 - s1 * BRneg[k](i, j));
         prog->AddLinearConstraint(R(i, j) + phi(k) >= -s2 * BRneg[k](i, j));
 
-        if (k == num_binary_vars_per_half_axis - 1) {
+        if (k == num_intervals_per_half_axis - 1) {
           //   CRpos[k](i,j) = BRpos[k](i,j)
           prog->AddLinearConstraint(CRpos[k](i, j) == BRpos[k](i, j));
 
@@ -988,21 +988,21 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
                                                                limits);
 
   // Add constraints to the column and row vectors.
-  std::vector<MatrixDecisionVariable<3, 1>> cpos(num_binary_vars_per_half_axis),
-      cneg(num_binary_vars_per_half_axis);
+  std::vector<MatrixDecisionVariable<3, 1>> cpos(num_intervals_per_half_axis),
+      cneg(num_intervals_per_half_axis);
   for (int i = 0; i < 3; i++) {
     // Make lists of the decision variables in terms of column vectors and row
     // vectors to facilitate the calls below.
     // TODO(russt): Consider reorganizing the original CRpos/CRneg variables to
     // avoid this (albeit minor) cost?
-    for (int k = 0; k < num_binary_vars_per_half_axis; k++) {
+    for (int k = 0; k < num_intervals_per_half_axis; k++) {
       cpos[k] = CRpos[k].col(i);
       cneg[k] = CRneg[k].col(i);
     }
     AddMcCormickVectorConstraints(prog, R.col(i), cpos, cneg,
                                   R.col((i + 1) % 3), R.col((i + 2) % 3));
 
-    for (int k = 0; k < num_binary_vars_per_half_axis; k++) {
+    for (int k = 0; k < num_intervals_per_half_axis; k++) {
       cpos[k] = CRpos[k].row(i).transpose();
       cneg[k] = CRneg[k].row(i).transpose();
     }

@@ -122,7 +122,7 @@ std::tuple<std::vector<MatrixDecisionVariable<3, 3>>,
  *    the on other binary variables.
  * @param prog The mathematical program to which the constraints are added.
  * @param R The rotation matrix
- * @param num_binary_vars_per_half_axis number of binary variables for a half
+ * @param num_intervals_per_half_axis number of binary variables for a half
  * axis.
  * @param limits The angle joints for space fixed z-y-x representation of the
  * rotation. @default is no constraint. @see RollPitchYawLimitOptions
@@ -144,7 +144,7 @@ AddRotationMatrixMcCormickEnvelopeReturnType
 AddRotationMatrixMcCormickEnvelopeMilpConstraints(
     MathematicalProgram* prog,
     const Eigen::Ref<const MatrixDecisionVariable<3, 3>>& R,
-    int num_binary_vars_per_half_axis = 2,
+    int num_intervals_per_half_axis = 2,
     RollPitchYawLimits limits = kNoLimits);
 
 }  // namespace solvers
