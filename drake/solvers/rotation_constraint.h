@@ -104,11 +104,11 @@ void AddRotationMatrixOrthonormalSocpConstraint(
  *
  * Note: We cut each axis into intervals, with the cuts at
  * (-1, φ(1), ..., φ(N-1), 0, φ(N+1), ..., φ(2N-1), 1), where `N` is
- * num_interval_per_half_axis. We then add binary variables to indicate which
+ * `num_interval_per_half_axis`. We then add binary variables to indicate which
  * interval R(i, j) is in. For each entry R(i, j), we use binary variables
  * B[0](i, j), ..., B[K](i, j), where K = ⌈log(num_intervals_per_half_axis)⌉.
  * If the Gray code (B[0](i, j), ..., B[K](i, j)) represents integer m, then
- * R(i, j) is within the interval [φ(m), φ(m + 1)]., where φ(0) = -1, φ(N) = 0,
+ * R(i, j) is within the interval [φ(m), φ(m + 1)], where φ(0) = -1, φ(N) = 0,
  * φ(2N) = 1.
  *
  * Note: Creates `9*(1 + ⌈log(num_intervals_per_half_axis)⌉` binary variables
@@ -128,21 +128,10 @@ void AddRotationMatrixOrthonormalSocpConstraint(
  * axis.
  * @param limits The angle joints for space fixed z-y-x representation of the
  * rotation. @default is no constraint. @see RollPitchYawLimitOptions
- * @retval NewVars  Included the newly added variables
- * <CRpos, CRneg, BRpos, BRneg>. All new variables can only take values either
- * 0 or 1. `CRpos` and `CRneg` are declared as continuous variables, while
- * `BRpos` and `BRneg` are declared as binary variables.
- * The definition for these variables are
- * <pre>
- *   CRpos[k](i, j) = 1 => k / N <= R(i, j) <= (k+1) / N
- *   CRneg[k](i, j) = 1 => -(k+1) / N <= R(i, j) <= -k / N
- *   BRpos[k](i, j) = 1 => R(i, j) >= k / N
- *   BRneg[k](i, j) = 1 => R(i, j) <= -k / N
- * </pre>
- * where `N` is `num_intervals_per_half_axis`.
+ * @retval The newly added binary variables.
  */
 
-AddRotationMatrixMcCormickEnvelopeReturnType
+std::vector<MatrixDecisionVariable<3, 3>>
 AddRotationMatrixMcCormickEnvelopeMilpConstraints(
     MathematicalProgram* prog,
     const Eigen::Ref<const MatrixDecisionVariable<3, 3>>& R,

@@ -10,6 +10,7 @@
 
 #include "drake/common/symbolic_expression.h"
 #include "drake/math/cross_product.h"
+#include "drake/solvers/mixed_integer_optimization_util.h"
 
 using std::numeric_limits;
 using drake::symbolic::Expression;
@@ -822,67 +823,39 @@ void AddMcCormickVectorConstraints(
  * is exactly zero, then both vectors has to be on the boundaries of the first
  * orthant. But we can then assign the vector to a different orthant. The same
  * proof applies to the opposite orthant case.
- * To impose the constraint that R.col(0) and R.col(1) are not both in the first
- * orthant, we consider the constraint
- * Bpos0.col(0).sum() + Bpos0.col(1).sum() <= 5.
- * Namely, not all 6 entries in Bpos0.col(0) and Bpos0.col(1) can be 1 at the
- * same time, which is another way of saying R.col(0) and R.col(1) cannot be
- * both in the first orthant.
- * Similarly we can impose the constraint on the other orthant.
+ * To impose the constraint that R.col(0) and R.col(1) are not both in same
+ * orthant, we use the fact that if R(i, 0) and R(i, 1) have the same sign, then
+ * B(i, 0) and B(i, 1) has to have the same value, namely
+ * abs(B(i, 0) + B(i, 1) - 1) = 1, otherwise
+ * abs(B(i, 0) + B(i, 1) - 1) = 0 if R(i, 0) and R(i, 1) have different
+ * signs. We then consider the following constraint
+ * sum_{i = 0, 1, 2} t(i) <= 2
+ * t(i) >= B(i, 0) + B(i, 1) - 1 >= -t(i)
+ * where t(i) is the auxiliary variable as an upper bound of
+ * abs(B(i, 0) + B(i, 1))
  * @param prog Add the constraint to this mathematical program.
- * @param Bpos0 Defined in AddRotationMatrixMcCormickEnvelopeMilpConstraints(),
- * Bpos0(i,j) = 1 => R(i, j) >= 0.
- * @param Bneg0 Defined in AddRotationMatrixMcCormickEnvelopeMilpConstraints(),
- * Bneg0(i,j) = 1 => R(i, j) <= 0.
+ * @param B. The binary variables. B(i, j) = 0
+ * means R(i, j) <= 0, and B(i, j) = 1 means R(i, j) >= 0
  */
 void AddNotInSameOrOppositeOrthantConstraint(
     MathematicalProgram* prog,
-    const Eigen::Ref<const MatrixDecisionVariable<3, 3>>& Bpos0,
-    const Eigen::Ref<const MatrixDecisionVariable<3, 3>>& Bneg0) {
+    const Eigen::Ref<const MatrixDecisionVariable<3, 3>>& B) {
   const std::array<std::pair<int, int>, 3> column_idx = {
       {{0, 1}, {0, 2}, {1, 2}}};
   for (const auto& column_pair : column_idx) {
     const int col_idx0 = column_pair.first;
     const int col_idx1 = column_pair.second;
-    for (int o = 0; o < 8; ++o) {
-      // To enforce that R.col(i) and R.col(j) are not simultaneously in the
-      // o'th orthant, we will impose the constraint
-      // vars_same_orthant.sum() < = 5. The variables in vars_same_orthant
-      // depend on the orthant number o.
-      // To enforce that R.col(i) and R.col(j) are not in the opposite
-      // orthants, we will impose the constraint
-      // vars_oppo_orthant.sum() <= 5. The variables in vars_oppo_orthant
-      // depnd on the orthant number o.
-      Eigen::Matrix<symbolic::Variable, 6, 1> vars_same_orthant;
-      Eigen::Matrix<symbolic::Variable, 6, 1> vars_oppo_orthant;
-      for (int axis = 0; axis < 3; ++axis) {
-        // axis chooses x, y, or z axis.
-        if (o & (1 << axis)) {
-          // If the orthant has positive value along the `axis`, then
-          // `vars_same_orthant` choose the positive component Bpos0.
-          vars_same_orthant(2 * axis)     = Bpos0(axis, col_idx0);
-          vars_same_orthant(2 * axis + 1) = Bpos0(axis, col_idx1);
-          vars_oppo_orthant(2 * axis)     = Bpos0(axis, col_idx0);
-          vars_oppo_orthant(2 * axis + 1) = Bneg0(axis, col_idx1);
-        } else {
-          // If the orthant has negative value along the `axis`, then
-          // `vars_same_orthant` choose the negative component Bneg0.
-          vars_same_orthant(2 * axis)     = Bneg0(axis, col_idx0);
-          vars_same_orthant(2 * axis + 1) = Bneg0(axis, col_idx1);
-          vars_oppo_orthant(2 * axis)     = Bneg0(axis, col_idx0);
-          vars_oppo_orthant(2 * axis + 1) = Bpos0(axis, col_idx1);
-        }
-      }
-      prog->AddLinearConstraint(Eigen::Matrix<double, 1, 6>::Ones(), 0, 5,
-                                vars_same_orthant);
-      prog->AddLinearConstraint(Eigen::Matrix<double, 1, 6>::Ones(), 0, 5,
-                                vars_oppo_orthant);
+    auto t = prog->NewContinuousVariables<3>("t");
+    prog->AddLinearConstraint(t.cast<symbolic::Expression>().sum() <= 2);
+    for (int i = 0; i < 3; ++i) {
+      prog->AddLinearConstraint(t(i) >= B(i, col_idx0) + B(i, col_idx1) - 1);
+      prog->AddLinearConstraint(B(i, col_idx0) + B(i, col_idx1) - 1 >= -t(i));
     }
   }
 }
 }  // namespace
 
-AddRotationMatrixMcCormickEnvelopeReturnType
+std::vector<MatrixDecisionVariable<3, 3>>
 AddRotationMatrixMcCormickEnvelopeMilpConstraints(
     MathematicalProgram* prog,
     const Eigen::Ref<const MatrixDecisionVariable<3, 3>>& R,
@@ -894,123 +867,71 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
   //  forall k>=0, 0<=phi(k), and
   //  forall k<=num_intervals_per_half_axis, phi(k)<=1.
   auto phi = [&](int k) -> double {
-    return EnvelopeMinValue(k, num_intervals_per_half_axis);
+    return EnvelopeMinValue(k, num_intervals_per_half_axis) - 1;
   };
-
-  // Creates binary decision variables which discretize each axis.
-  //   BRpos[k](i,j) = 1 => R(i,j) >= phi(k)
-  //   BRneg[k](i,j) = 1 => R(i,j) <= -phi(k)
-  //
-  // For convenience, we introduce additional (continuous) variables to
-  // represent the individual sections of the real line
-  //   CRpos[k](i,j) = BRpos[k](i,j) if k=N-1, otherwise
-  //   CRpos[k](i,j) = BRpos[k](i,j) - BRpos[k+1](i,j)
-  // This is useful only because the *number of decision variables* that we
-  // pass into the constraints changes for the k=N-1 case.  Otherwise we
-  // could do a simple substitution everywhere.
-  // TODO(russt): Use symbolic constraints and remove these decision variables!
-  std::vector<MatrixDecisionVariable<3, 3>> BRpos, BRneg;
-  std::vector<MatrixDecisionVariable<3, 3>> CRpos, CRneg;
-  for (int k = 0; k < num_intervals_per_half_axis; k++) {
-    BRpos.push_back(
-        prog->NewBinaryVariables<3, 3>("BRpos" + std::to_string(k)));
-    BRneg.push_back(
-        prog->NewBinaryVariables<3, 3>("BRneg" + std::to_string(k)));
-    CRpos.push_back(
-        prog->NewContinuousVariables<3, 3>("CRpos" + std::to_string(k)));
-    CRneg.push_back(
-        prog->NewContinuousVariables<3, 3>("CRneg" + std::to_string(k)));
+  // We add auxiliary variables λ, such that λ[k](i, j),
+  // k = 0, ..., 2 * num_intervals_per_half_axis satisfy the special ordered set
+  // 2 constraint. Namely sum_k λ[k](i, j) = 1, λ[k](i, j) >= 0, and at most
+  // two λ[k](i, j) can be strictly positive among all k, and these two entries
+  // have to be adjacent, namely they should be λ[m](i, j) and λ[m+1](i, j).
+  std::vector<MatrixDecisionVariable<3, 3>> lambda;
+  int num_lambda = 2 * num_intervals_per_half_axis + 1;
+  lambda.reserve(num_lambda);
+  Eigen::VectorXd phi_vec(num_lambda);
+  for (int k = 0; k < num_lambda; ++k) {
+    lambda[k] = prog->NewContinuousVariables(3, 3, "lambda[" + std::to_string(k) + "]");
+    phi_vec(k) = phi(k);
   }
-
-  for (int i = 0; i < 3; i++) {
-    for (int j = 0; j < 3; j++) {
-      for (int k = 0; k < num_intervals_per_half_axis; k++) {
-        // R(i,j) > phi(k) => BRpos[k](i,j) = 1
-        // R(i,j) < phi(k) => BRpos[k](i,j) = 0
-        // R(i,j) = phi(k) => BRpos[k](i,j) = 0 or 1
-        // Since -s1 <= R(i, j) - phi(k) <= s2,
-        // where s1 = 1 + phi(k), s2 = 1 - phi(k). The point
-        // [R(i,j) - phi(k), BRpos[k](i,j)] has to lie within the convex hull,
-        // whose vertices are (-s1, 0), (0, 0), (s2, 1), (0, 1). By computing
-        // the edges of this convex hull, we get
-        // -s1 + s1*BRpos[k](i,j) <= R(i,j)-phi(k) <= s2 * BRpos[k](i,j)
-        double s1 = 1 + phi(k);
-        double s2 = 1 - phi(k);
-        prog->AddLinearConstraint(R(i, j) - phi(k) >=
-                                  -s1 + s1 * BRpos[k](i, j));
-        prog->AddLinearConstraint(R(i, j) - phi(k) <= s2 * BRpos[k](i, j));
-
-        // -R(i,j) > phi(k) => BRneg[k](i,j) = 1
-        // -R(i,j) < phi(k) => BRneg[k](i,j) = 0
-        // -R(i,j) = phi(k) => BRneg[k](i,j) = 0 or 1
-        // Since -s2 <= R(i, j) + phi(k) <= s1,
-        // where s1 = 1 + phi(k), s2 = 1 - phi(k). The point
-        // [R(i,j) + phi(k), BRneg[k](i,j)] has to lie within the convex hull
-        // whose vertices are (-s2, 1), (0, 0), (s1, 0), (0, 1). By computing
-        // the edges of the convex hull, we get
-        // -s2 * BRneg[k](i,j) <= R(i,j)+phi(k) <= s1-s1*BRneg[k](i,j)
-        prog->AddLinearConstraint(R(i, j) + phi(k) <= s1 - s1 * BRneg[k](i, j));
-        prog->AddLinearConstraint(R(i, j) + phi(k) >= -s2 * BRneg[k](i, j));
-
-        if (k == num_intervals_per_half_axis - 1) {
-          //   CRpos[k](i,j) = BRpos[k](i,j)
-          prog->AddLinearConstraint(CRpos[k](i, j) == BRpos[k](i, j));
-
-          //   CRneg[k](i,j) = BRneg[k](i,j)
-          prog->AddLinearConstraint(CRneg[k](i, j) == BRneg[k](i, j));
-        } else {
-          //   CRpos[k](i,j) = BRpos[k](i,j) - BRpos[k+1](i,j)
-          prog->AddLinearConstraint(CRpos[k](i, j) ==
-                                    BRpos[k](i, j) - BRpos[k + 1](i, j));
-          //   CRneg[k](i,j) = BRneg[k](i,j) - BRneg[k+1](i,j)
-          prog->AddLinearConstraint(CRneg[k](i, j) ==
-                                    BRneg[k](i, j) - BRneg[k + 1](i, j));
-        }
+  const auto gray_codes = internal::CalculateReflectedGrayCodes(num_lambda - 1);
+  int num_digits = gray_codes.cols();
+  std::vector<MatrixDecisionVariable<3, 3>> B(num_digits);
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 3; ++j) {
+      VectorX<symbolic::Expression> lambda_ij(num_lambda);
+      for (int k = 0; k < num_lambda; ++k) {
+        lambda_ij(k) = lambda[k](i, j);
       }
-      // R(i,j) has to pick a side, either non-positive or non-negative.
-      prog->AddLinearConstraint(BRpos[0](i, j) + BRneg[0](i, j) == 1);
-
-      // for debugging: constrain to positive orthant.
-      //      prog->AddBoundingBoxConstraint(1,1,{BRpos[0].block<1,1>(i,j)});
+      auto B_ij = AddLogarithmicSOS2Constraint(prog, lambda_ij);
+      for (int k = 0; k < num_lambda; ++k) {
+        B[k](i, j) = B_ij(k);
+      }
+      // R(i, j) = sum_k phi_vec(k) * lambda[k](i, j)
+      prog->AddLinearConstraint(R(i, j) - phi_vec.dot(lambda_ij) == 0);
     }
   }
 
   // Add constraint that no two rows (or two columns) can lie in the same
   // orthant (or opposite orthant).
-  AddNotInSameOrOppositeOrthantConstraint(prog, BRpos[0], BRneg[0]);
-  AddNotInSameOrOppositeOrthantConstraint(prog, BRpos[0].transpose(),
-                                          BRneg[0].transpose());
+  // Due to the property of Gray code, B[0](i, j) = 0 means R(i, j) <= 0,
+  // B[0](i, j) = 1 means R(i, j) >= 0
+  AddNotInSameOrOppositeOrthantConstraint(prog, B[0]);
+  AddNotInSameOrOppositeOrthantConstraint(prog, B[0].transpose());
 
   // Add angle limit constraints.
   // Bounding box will turn on/off an orthant.  It's sufficient to add the
   // constraints only to the positive orthant.
-  AddBoundingBoxConstraintsImpliedByRollPitchYawLimitsToBinary(prog, BRpos[0],
+  AddBoundingBoxConstraintsImpliedByRollPitchYawLimitsToBinary(prog, B[0],
                                                                limits);
 
   // Add constraints to the column and row vectors.
-  std::vector<MatrixDecisionVariable<3, 1>> cpos(num_intervals_per_half_axis),
-      cneg(num_intervals_per_half_axis);
+  std::vector<MatrixDecisionVariable<3, 1>> B_i(num_digits);
   for (int i = 0; i < 3; i++) {
     // Make lists of the decision variables in terms of column vectors and row
     // vectors to facilitate the calls below.
-    // TODO(russt): Consider reorganizing the original CRpos/CRneg variables to
-    // avoid this (albeit minor) cost?
-    for (int k = 0; k < num_intervals_per_half_axis; k++) {
-      cpos[k] = CRpos[k].col(i);
-      cneg[k] = CRneg[k].col(i);
+    for (int k = 0; k < num_digits; k++) {
+      B_i[k] = B[k].col(i);
     }
-    AddMcCormickVectorConstraints(prog, R.col(i), cpos, cneg,
+    AddMcCormickVectorConstraints(prog, R.col(i), B_i,
                                   R.col((i + 1) % 3), R.col((i + 2) % 3));
 
-    for (int k = 0; k < num_intervals_per_half_axis; k++) {
-      cpos[k] = CRpos[k].row(i).transpose();
-      cneg[k] = CRneg[k].row(i).transpose();
+    for (int k = 0; k < num_digits; k++) {
+      B_i[k] = B[k].row(i).transpose();
     }
-    AddMcCormickVectorConstraints(prog, R.row(i).transpose(), cpos, cneg,
+    AddMcCormickVectorConstraints(prog, R.row(i).transpose(), B_i,
                                   R.row((i + 1) % 3).transpose(),
                                   R.row((i + 2) % 3).transpose());
   }
-  return make_tuple(CRpos, CRneg, BRpos, BRneg);
+  return B;
 }
 
 }  // namespace solvers
