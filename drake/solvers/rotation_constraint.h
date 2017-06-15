@@ -90,11 +90,6 @@ void AddRotationMatrixOrthonormalSocpConstraint(
     MathematicalProgram* prog,
     const Eigen::Ref<const MatrixDecisionVariable<3, 3>>& R);
 
-using AddRotationMatrixMcCormickEnvelopeReturnType =
-std::tuple<std::vector<MatrixDecisionVariable<3, 3>>,
-           std::vector<MatrixDecisionVariable<3, 3>>,
-           std::vector<MatrixDecisionVariable<3, 3>>,
-           std::vector<MatrixDecisionVariable<3, 3>>>;
 /**
  * Adds binary variables that constrain the value of the column *and* row
  * vectors of R, in order to add the following (in some cases non-convex)
@@ -104,12 +99,19 @@ std::tuple<std::vector<MatrixDecisionVariable<3, 3>>,
  * - R2 = R0.cross(R1) ± envelope,
  *      and again for R0=R1.cross(R2), and R1=R2.cross(R0).
  * Then all of the same constraints are also added to R^T.  The size of the
- * envelope decreases quickly as num_binary_variables_per_half_axis is
+ * envelope decreases quickly as num_intervals_per_half_axis is
  * is increased.
  *
- * Note: Creates `9*2*num_binary_variables_per_half_axis binary` variables named
- * "BRpos*(*,*)" and "BRneg*(*,*)", and the same number of continuous variables
- * named "CRpos*(*,*)" and "CRneg*(*,*)".
+ * Note: We cut each axis into intervals, with the cuts at
+ * (-1, φ(1), ..., φ(N-1), 0, φ(N+1), ..., φ(2N-1), 1), where `N` is
+ * num_interval_per_half_axis. We then add binary variables to indicate which
+ * interval R(i, j) is in. For each entry R(i, j), we use binary variables
+ * B[0](i, j), ..., B[K](i, j), where K = ⌈log(num_intervals_per_half_axis)⌉.
+ * If the Gray code (B[0](i, j), ..., B[K](i, j)) represents integer m, then
+ * R(i, j) is within the interval [φ(m), φ(m + 1)]., where φ(0) = -1, φ(N) = 0,
+ * φ(2N) = 1.
+ *
+ * Note: Creates `9*(1 + ⌈log(num_intervals_per_half_axis)⌉` binary variables
  *
  * Note: The particular representation/algorithm here was developed in an
  * attempt:
@@ -122,7 +124,7 @@ std::tuple<std::vector<MatrixDecisionVariable<3, 3>>,
  *    the on other binary variables.
  * @param prog The mathematical program to which the constraints are added.
  * @param R The rotation matrix
- * @param num_intervals_per_half_axis number of binary variables for a half
+ * @param num_intervals_per_half_axis number of intervals along a half
  * axis.
  * @param limits The angle joints for space fixed z-y-x representation of the
  * rotation. @default is no constraint. @see RollPitchYawLimitOptions
@@ -137,7 +139,7 @@ std::tuple<std::vector<MatrixDecisionVariable<3, 3>>,
  *   BRpos[k](i, j) = 1 => R(i, j) >= k / N
  *   BRneg[k](i, j) = 1 => R(i, j) <= -k / N
  * </pre>
- * where `N` is `num_binary_vars_per_half_axis`.
+ * where `N` is `num_intervals_per_half_axis`.
  */
 
 AddRotationMatrixMcCormickEnvelopeReturnType
