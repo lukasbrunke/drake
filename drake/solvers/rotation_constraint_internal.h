@@ -22,6 +22,12 @@ bool AreAllVerticesCoPlanar(const std::vector<Eigen::Vector3d>& pts,
 void ComputeInnerFacetsForBoxSphereIntersection(
     const std::vector<Eigen::Vector3d>& pts,
     Eigen::Matrix<double, Eigen::Dynamic, 3>* A, Eigen::VectorXd* b);
+
+Vector3<symbolic::Expression> CalcBoxBinaryExpressionInOrthant(
+    int xi, int yi, int zi, int orthant,
+    const Eigen::Ref<const Eigen::MatrixXi>& gray_codes,
+    const std::array<VectorXDecisionVariable, 3>& B_vec,
+    int num_intervals_per_half_axis);
 }  // namespace internal
 }  // namespace solvers
 }  // namespace drake

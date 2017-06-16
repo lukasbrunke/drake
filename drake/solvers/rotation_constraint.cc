@@ -246,13 +246,25 @@ FlipVector(const Derived& vpos, int orthant) {
   return v;
 }
 
+/**
+ * Given an orthant index, return the vector indicating whether each axis has
+ * positive or negative value.
+ * @param orthant The index of the orthant
+ * @return mask If mask(i) = 1, then the i'th axis has positive value in the
+ * given orthant. If mask(i) = -1, then the i'th axis has negative value in the
+ * given orthant.
+ */
+Eigen::Vector3i OrthantToAxisMask(int orthant) {
+  return FlipVector(Eigen::Vector3i::Ones(), orthant);
+}
+
 // The half axis has interval (0, Φ(1), ..., Φ(N-1), 1). The full axis has
 // interval (-1, -Φ(N-1), ..., -Φ(1), 0, Φ(1), ..., Φ(N-1), 1).
 Eigen::Vector3i PositiveAxisIntervalIndexToFullAxisIntervalIndex(const Eigen::Ref<const Eigen::Vector3i>& interval_idx, int orthant, int num_intervals_per_half_axis) {
-  const Eigen::Vector3i mask = FlipVector(Eigen::Vector3i::Ones(), orthant);
+  const Eigen::Vector3i mask = OrthantToAxisMask(orthant);
   Eigen::Vector3i ret;
   for (int i = 0; i < 3; ++i) {
-    ret(i) = mask(i) > 0 ? interval_idx(i) + num_intervals_per_half_axis : num_intervals_per_half_axis - 1 - i;
+    ret(i) = mask(i) > 0 ? (interval_idx(i) + num_intervals_per_half_axis) : (num_intervals_per_half_axis - 1 - interval_idx(i));
   }
   return ret;
 }
@@ -269,17 +281,6 @@ symbolic::Expression PickBinaryExpressionGivenInterval(int interval_idx, const E
     ret += gray_codes(interval_idx, i) ? 1 - b(i) : b(i);
   }
   return ret;
-}
-
-// Return a vector `c` of integer-valued expressions, such that
-// c(0) = c(1) = c(2) = 0 if the box is active, otherwise ∃i, c(i) >= 1
-Vector3<symbolic::Expression> CalcBoxBinaryExpressionInOrthant(int xi, int yi, int zi, int orthant, const Eigen::Ref<const Eigen::MatrixXi>& gray_codes, const std::array<VectorXDecisionVariable, 3>& B_vec, int num_intervals_per_half_axis) {
-  Vector3<symbolic::Expression> orthant_c;
-  const Eigen::Vector3i orthant_box_interval_idx = PositiveAxisIntervalIndexToFullAxisIntervalIndex(Eigen::Vector3i(xi, yi, zi), orthant, num_intervals_per_half_axis);
-  for (int axis = 0; axis < 3; ++axis) {
-    orthant_c(axis) = PickBinaryExpressionGivenInterval(orthant_box_interval_idx(axis), gray_codes, B_vec[axis]);
-  }
-  return orthant_c;
 }
 
 // Given (an integer enumeration of) the orthant, return a vector c with
@@ -310,6 +311,27 @@ double Intercept(double x, double y) {
 }  // namespace
 
 namespace internal {
+// Return a vector `c` of positive-integer-valued expressions, such that
+// c(0) = c(1) = c(2) = 0 if the box is active, otherwise ∃i, c(i) >= 1
+// xi, yi, zi are the indices of the intervals in the positive orthant.
+// B_vec[i] are the binary variables along the i'th axis. These binary variables
+// indicate which interval is active along each axis.
+Vector3<symbolic::Expression> CalcBoxBinaryExpressionInOrthant(
+    int xi, int yi, int zi, int orthant,
+    const Eigen::Ref<const Eigen::MatrixXi>& gray_codes,
+    const std::array<VectorXDecisionVariable, 3>& B_vec,
+    int num_intervals_per_half_axis) {
+  Vector3<symbolic::Expression> orthant_c;
+  const Eigen::Vector3i orthant_box_interval_idx =
+      PositiveAxisIntervalIndexToFullAxisIntervalIndex(
+          Eigen::Vector3i(xi, yi, zi), orthant, num_intervals_per_half_axis);
+  for (int axis = 0; axis < 3; ++axis) {
+    orthant_c(axis) = PickBinaryExpressionGivenInterval(
+        orthant_box_interval_idx(axis), gray_codes, B_vec[axis]);
+  }
+  return orthant_c;
+}
+
 // Given an axis-aligned box in the first orthant, computes and returns all the
 // intersecting points between the edges of the box and the unit sphere.
 // @param bmin  The vertex of the box closest to the origin.
@@ -666,7 +688,7 @@ void AddMcCormickVectorConstraints(
             Eigen::Vector3d orthant_u;
             for (int o = 0; o < 8; o++) {  // iterate over orthants
               orthant_u = FlipVector(unique_intersection, o);
-              Vector3<symbolic::Expression> orthant_c = CalcBoxBinaryExpressionInOrthant(xi, yi, zi, o, gray_codes, B_i, num_intervals_per_half_axis);
+              Vector3<symbolic::Expression> orthant_c = internal::CalcBoxBinaryExpressionInOrthant(xi, yi, zi, o, gray_codes, B_i, num_intervals_per_half_axis);
 
               // TODO(hongkai.dai): remove this for loop when we can handle
               // Eigen::Array of symbolic formulae.
@@ -717,7 +739,7 @@ void AddMcCormickVectorConstraints(
             Eigen::RowVector3d orthant_normal;
             for (int o = 0; o < 8; o++) {  // iterate over orthants
               orthant_normal = FlipVector(normal, o).transpose();
-              Vector3<symbolic::Expression> orthant_c = CalcBoxBinaryExpressionInOrthant(xi, yi, zi, o, gray_codes, B_i, num_intervals_per_half_axis);
+              Vector3<symbolic::Expression> orthant_c = internal::CalcBoxBinaryExpressionInOrthant(xi, yi, zi, o, gray_codes, B_i, num_intervals_per_half_axis);
               const symbolic::Expression orthant_c_sum = orthant_c.sum();
               for (int i = 0; i < A.rows(); ++i) {
                 // Add the constraint that A * v <= b, representing the inner
@@ -811,7 +833,7 @@ void AddMcCormickVectorConstraints(
         } else {
           // This box does not intersect with the surface of the sphere.
           for (int o = 0; o < 8; ++o) {  // iterate over orthants
-            Vector3<symbolic::Expression> orthant_c = CalcBoxBinaryExpressionInOrthant(xi, yi, zi, o, gray_codes, B_i, num_intervals_per_half_axis);
+            Vector3<symbolic::Expression> orthant_c = internal::CalcBoxBinaryExpressionInOrthant(xi, yi, zi, o, gray_codes, B_i, num_intervals_per_half_axis);
             prog->AddLinearConstraint(orthant_c.sum() >= 1);
           }
         }
@@ -921,10 +943,12 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
 
   // Add constraints to the column and row vectors.
 
-
+/*
   for (int i = 0; i < 3; i++) {
     std::array<VectorXDecisionVariable, 3> B_vec;
-    B_vec[i].resize(num_digits);
+    for (int j = 0; j < 3; ++j) {
+      B_vec[j].resize(num_digits);
+    }
     // Make lists of the decision variables in terms of column vectors and row
     // vectors to facilitate the calls below.
     for (int k = 0; k < num_digits; k++) {
@@ -943,7 +967,7 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
     AddMcCormickVectorConstraints(prog, R.row(i).transpose(), B_vec,
                                   R.row((i + 1) % 3).transpose(),
                                   R.row((i + 2) % 3).transpose(), num_intervals_per_half_axis, gray_codes);
-  }
+  }*/
   return B;
 }
 
