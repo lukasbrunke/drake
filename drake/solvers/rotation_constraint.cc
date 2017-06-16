@@ -847,6 +847,15 @@ void AddMcCormickVectorConstraints(
  * t(i) >= B(i, 0) + B(i, 1) - 1 >= -t(i)
  * where t(i) is the auxiliary variable as an upper bound of
  * abs(B(i, 0) + B(i, 1))
+ * To impose the constraint that R.col(0) and R.col(1) are not in the opposite
+ * orthant, we use the fact that if R(i, 0) and R(i, 1) have the opposite sign,
+ * then B(i, 0) and B(i, 1) have different values, namely
+ * abs(B(i, 0) - B(i, 1)) = 1
+ * We then consider the following constraint
+ * sum_{i = 0, 1, 2} s(i) <= 2
+ * s(i) >= B(i, 0) - B(i, 1) >= s(i)
+ * where s(i) is the auxiliary variable as an upper bound of
+ * abs(B(i, 0) - B(i, 1))
  * @param prog Add the constraint to this mathematical program.
  * @param B. The binary variables. B(i, j) = 0
  * means R(i, j) <= 0, and B(i, j) = 1 means R(i, j) >= 0
@@ -860,10 +869,14 @@ void AddNotInSameOrOppositeOrthantConstraint(
     const int col_idx0 = column_pair.first;
     const int col_idx1 = column_pair.second;
     auto t = prog->NewContinuousVariables<3>("t");
+    auto s = prog->NewContinuousVariables<3>("s");
     prog->AddLinearConstraint(t.cast<symbolic::Expression>().sum() <= 2);
+    prog->AddLinearConstraint(s.cast<symbolic::Expression>().sum() <= 2);
     for (int i = 0; i < 3; ++i) {
       prog->AddLinearConstraint(t(i) >= B(i, col_idx0) + B(i, col_idx1) - 1);
       prog->AddLinearConstraint(B(i, col_idx0) + B(i, col_idx1) - 1 >= -t(i));
+      prog->AddLinearConstraint(s(i) >= B(i, col_idx0) - B(i, col_idx1));
+      prog->AddLinearConstraint(B(i, col_idx0) - B(i, col_idx1) >= -s(i));
     }
   }
 }
@@ -927,9 +940,8 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
   AddBoundingBoxConstraintsImpliedByRollPitchYawLimitsToBinary(prog, B[0],
                                                                limits);
 
+  if(0) {
   // Add constraints to the column and row vectors.
-
-  if (0) {
   for (int i = 0; i < 3; i++) {
     std::array<VectorXDecisionVariable, 3> B_vec;
     for (int j = 0; j < 3; ++j) {
