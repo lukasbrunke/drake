@@ -335,58 +335,81 @@ GTEST_TEST(RotationTest, TestIntersectBoxWithCircle) {
  * expression is 0, when the binary variable assignment, expressed in Gray code,
  * represents the active box index.
  */
-class TestCalcBoxBinaryExpressionInOrthant : public ::testing::TestWithParam<std::tuple<int, int, int, int>> {
+class TestCalcBoxBinaryExpressionInOrthant : public ::testing::TestWithParam<std::tuple<int, int, int, int, int>> {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(TestCalcBoxBinaryExpressionInOrthant)
 
   TestCalcBoxBinaryExpressionInOrthant()
       : prog_(),
         x_(prog_.NewContinuousVariables<3>("x")),
-        num_lambda_{5},
+        num_lambda_{std::get<0>(GetParam())},
         phi_{Eigen::VectorXd::LinSpaced(num_lambda_, -1, 1)},
-        xi_(std::get<0>(GetParam())),
-        yi_(std::get<1>(GetParam())),
-        zi_(std::get<2>(GetParam())),
-        orthant_(std::get<3>(GetParam())) {
-    for (int i = 0; i < 3; ++i) {
-      lambda_[i] = prog_.NewContinuousVariables(num_lambda_);
-      B_[i] = AddLogarithmicSOS2Constraint(&prog_, lambda_[i].cast<symbolic::Expression>());
-      prog_.AddLinearConstraint(phi_.dot(lambda_[i]) == x_(i));
-    }
+        xi_(std::get<1>(GetParam())),
+        yi_(std::get<2>(GetParam())),
+        zi_(std::get<3>(GetParam())),
+        orthant_(std::get<4>(GetParam())) {
     int num_intervals_per_half_axis = (num_lambda_ - 1) / 2;
+    if (xi_ < num_intervals_per_half_axis && yi_ < num_intervals_per_half_axis && zi_ < num_intervals_per_half_axis) {
+      for (int i = 0; i < 3; ++i) {
+        lambda_[i] = prog_.NewContinuousVariables(num_lambda_);
+        B_[i] = AddLogarithmicSOS2Constraint(&prog_,
+                                             lambda_[i].cast<symbolic::Expression>());
+        prog_.AddLinearConstraint(phi_.dot(lambda_[i]) == x_(i));
+      }
 
-    Eigen::Vector3d box_center;
-    std::array<int, 3> half_axis_interval{{xi_, yi_, zi_}};
-    for (int i = 0; i < 3; ++i) {
-      box_center(i) = (phi_(num_intervals_per_half_axis + half_axis_interval[i]) + phi_(num_intervals_per_half_axis + half_axis_interval[i] + 1)) / 2;
+      Eigen::Vector3d box_center;
+      std::array<int, 3> half_axis_interval{{xi_, yi_, zi_}};
+      for (int i = 0; i < 3; ++i) {
+        box_center(i) =
+            (phi_(num_intervals_per_half_axis + half_axis_interval[i])
+                + phi_(num_intervals_per_half_axis + half_axis_interval[i] + 1))
+                / 2;
+      }
+      const Eigen::Vector3d
+          orthant_box_center = internal::FlipVector(box_center, orthant_);
+      prog_.AddBoundingBoxConstraint(orthant_box_center,
+                                     orthant_box_center,
+                                     x_);
     }
-    const Eigen::Vector3d orthant_box_center = internal::FlipVector(box_center, orthant_);
-    prog_.AddBoundingBoxConstraint(orthant_box_center, orthant_box_center, x_);
   }
 
   void CheckSolution() {
-    auto result = prog_.Solve();
-    EXPECT_EQ(result, SolutionResult::kSolutionFound);
-    std::array<Eigen::VectorXd, 3> B_val;
-    for (int i = 0; i < 3; ++i) {
-      B_val[i] = prog_.GetSolution(B_[i]);
-    }
-    int num_digits = CeilLog2(num_lambda_ - 1);
-    const Eigen::MatrixXi gray_codes = internal::CalculateReflectedGrayCodes(num_digits);
-    int num_intervals_per_half_axis{(num_lambda_ - 1) / 2};
-    for (int o = 0; o < 8; ++o) {
-      for (int x = 0; x < num_intervals_per_half_axis; ++x) {
-        for (int y = 0; y < num_intervals_per_half_axis; ++y) {
-          for (int z = 0; z < num_intervals_per_half_axis; ++z) {
-            const Eigen::Vector3d
-                c = internal::CalcBoxBinaryExpressionInOrthant<double, double>(x, y, z, o, gray_codes, B_val, num_intervals_per_half_axis);
-            for (int i = 0; i < 3; ++i) {
-              EXPECT_GE(c(i), -1E-4);
-            }
-            if (x == xi_ && y == yi_ && z == zi_ && o == orthant_) {
-              EXPECT_TRUE(CompareMatrices(c, Eigen::Vector3d::Zero(), 1e-4, MatrixCompareType::absolute));
-            } else {
-              EXPECT_GE(c.sum(), 1 - 1E-4);
+    int num_intervals_per_half_axis = (num_lambda_ - 1) / 2;
+    if (xi_ < num_intervals_per_half_axis && yi_ < num_intervals_per_half_axis && zi_ < num_intervals_per_half_axis) {
+      auto result = prog_.Solve();
+      EXPECT_EQ(result, SolutionResult::kSolutionFound);
+      std::array<Eigen::VectorXd, 3> B_val;
+      for (int i = 0; i < 3; ++i) {
+        B_val[i] = prog_.GetSolution(B_[i]);
+      }
+      int num_digits = CeilLog2(num_lambda_ - 1);
+      const Eigen::MatrixXi
+          gray_codes = internal::CalculateReflectedGrayCodes(num_digits);
+      int num_intervals_per_half_axis{(num_lambda_ - 1) / 2};
+      for (int o = 0; o < 8; ++o) {
+        for (int x = 0; x < num_intervals_per_half_axis; ++x) {
+          for (int y = 0; y < num_intervals_per_half_axis; ++y) {
+            for (int z = 0; z < num_intervals_per_half_axis; ++z) {
+              const Eigen::Vector3d
+                  c =
+                  internal::CalcBoxBinaryExpressionInOrthant<double, double>(x,
+                                                                             y,
+                                                                             z,
+                                                                             o,
+                                                                             gray_codes,
+                                                                             B_val,
+                                                                             num_intervals_per_half_axis);
+              for (int i = 0; i < 3; ++i) {
+                EXPECT_GE(c(i), -1E-4);
+              }
+              if (x == xi_ && y == yi_ && z == zi_ && o == orthant_) {
+                EXPECT_TRUE(CompareMatrices(c,
+                                            Eigen::Vector3d::Zero(),
+                                            1e-4,
+                                            MatrixCompareType::absolute));
+              } else {
+                EXPECT_GE(c.sum(), 1 - 1E-4);
+              }
             }
           }
         }
@@ -413,9 +436,10 @@ TEST_P(TestCalcBoxBinaryExpressionInOrthant, TestBoxBinaryExpression) {
 
 INSTANTIATE_TEST_CASE_P(RotationTest, TestCalcBoxBinaryExpressionInOrthant,
 ::testing::Combine(
-    ::testing::ValuesIn<std::vector<int>>({0, 1}), // xi
-    ::testing::ValuesIn<std::vector<int>>({0, 1}), // yi
-    ::testing::ValuesIn<std::vector<int>>({0, 1}), // zi
+    ::testing::ValuesIn<std::vector<int>>({5, 7, 9}), // num_lambda
+    ::testing::ValuesIn<std::vector<int>>({0, 1, 2, 3}), // xi
+    ::testing::ValuesIn<std::vector<int>>({0, 1, 2, 3}), // yi
+    ::testing::ValuesIn<std::vector<int>>({0, 1, 2, 3}), // zi
     ::testing::ValuesIn<std::vector<int>>({0, 1, 2, 3, 4, 5, 6, 7}))); // orthant
 }  // namespace
 }  // namespace solvers
