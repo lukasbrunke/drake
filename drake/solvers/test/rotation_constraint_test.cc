@@ -607,7 +607,7 @@ GTEST_TEST(RotationTest, TestMcCormick) {
       EXPECT_FALSE(IsFeasible(R_test));
   }
 }
-
+/*
 // Test some corner cases of McCormick envelope.
 // The corner cases happens when either the innermost or the outermost corner
 // of the box bmin <= x <= bmax lies on the surface of the unit sphere.
@@ -719,7 +719,7 @@ INSTANTIATE_TEST_CASE_P(
                                                7}),             // Orthant
         ::testing::ValuesIn<std::vector<bool>>({true, false}),  // bmin or bmax
         ::testing::ValuesIn<std::vector<int>>({0, 1, 2})));     // column index
-
+*/
 // Make sure that no two row or column vectors in R, which satisfies the
 // McCormick relaxation, can lie in either the same or the opposite orthant.
 class TestMcCormickOrthant
