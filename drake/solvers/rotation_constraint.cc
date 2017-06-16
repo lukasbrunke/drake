@@ -230,22 +230,6 @@ double EnvelopeMinValue(int i, int num_binary_variables_per_half_axis) {
   return static_cast<double>(i) / num_binary_variables_per_half_axis;
 }
 
-// Given (an integer enumeration of) the orthant, takes a vector in the
-// positive orthant into that orthant by flipping the signs of the individual
-// elements.
-template<typename Derived>
-Eigen::Matrix<typename Derived::Scalar, 3, 1>
-FlipVector(const Derived& vpos, int orthant) {
-  DRAKE_ASSERT(vpos.rows() == 3 && vpos.cols() == 1);
-  DRAKE_ASSERT(vpos(0) >= 0 && vpos(1) >= 0 && vpos(2) >= 0);
-  DRAKE_DEMAND(orthant >= 0 && orthant <= 7);
-  Eigen::Matrix<typename Derived::Scalar, 3, 1> v = vpos;
-  if (orthant & (1 << 2)) v(0) = -v(0);
-  if (orthant & (1 << 1)) v(1) = -v(1);
-  if (orthant & 1) v(2) = -v(2);
-  return v;
-}
-
 /**
  * Given an orthant index, return the vector indicating whether each axis has
  * positive or negative value.
@@ -255,7 +239,7 @@ FlipVector(const Derived& vpos, int orthant) {
  * given orthant.
  */
 Eigen::Vector3i OrthantToAxisMask(int orthant) {
-  return FlipVector(Eigen::Vector3i::Ones(), orthant);
+  return internal::FlipVector(Eigen::Vector3i::Ones(), orthant);
 }
 
 // The half axis has interval (0, Φ(1), ..., Φ(N-1), 1). The full axis has
@@ -273,10 +257,11 @@ Eigen::Vector3i PositiveAxisIntervalIndexToFullAxisIntervalIndex(const Eigen::Re
 // binary variables, such that this expression is 0 if the binary variable b
 // assignment equals to `interval_idx` using Gray code, otherwise the expression
 // takes strictly positive value.
-symbolic::Expression PickBinaryExpressionGivenInterval(int interval_idx, const Eigen::Ref<const Eigen::MatrixXi>& gray_codes, const Eigen::Ref<const VectorX<symbolic::Variable>>& b) {
+template<typename Scalar, typename Derived>
+Scalar PickBinaryExpressionGivenInterval(int interval_idx, const Eigen::Ref<const Eigen::MatrixXi>& gray_codes, const Derived& b) {
   DRAKE_ASSERT(interval_idx >= 0 && interval_idx <= gray_codes.rows());
   DRAKE_ASSERT(b.rows() == gray_codes.cols());
-  symbolic::Expression ret{0};
+  Scalar ret{0};
   for (int i = 0; i < gray_codes.cols(); ++i) {
     ret += gray_codes(interval_idx, i) ? 1 - b(i) : b(i);
   }
@@ -291,7 +276,7 @@ Eigen::Matrix<Derived, 3, 1> PickPermutation(
     const Eigen::Matrix<Derived, 3, 1>& a,
     const Eigen::Matrix<Derived, 3, 1>& b, int orthant) {
   DRAKE_DEMAND(orthant >= 0 && orthant <= 7);
-  Eigen::Vector3i mask = FlipVector(Eigen::Vector3i::Ones(), orthant);
+  Eigen::Vector3i mask = internal::FlipVector(Eigen::Vector3i::Ones(), orthant);
   Eigen::Matrix<Derived, 3, 1> c = a;
   for (int i = 0; i < 3; ++i) {
     if (mask(i) < 0) {
@@ -316,17 +301,18 @@ namespace internal {
 // xi, yi, zi are the indices of the intervals in the positive orthant.
 // B_vec[i] are the binary variables along the i'th axis. These binary variables
 // indicate which interval is active along each axis.
-Vector3<symbolic::Expression> CalcBoxBinaryExpressionInOrthant(
+template<typename Scalar1, typename Scalar2>
+Vector3<Scalar1> CalcBoxBinaryExpressionInOrthant(
     int xi, int yi, int zi, int orthant,
     const Eigen::Ref<const Eigen::MatrixXi>& gray_codes,
-    const std::array<VectorXDecisionVariable, 3>& B_vec,
+    const std::array<VectorX<Scalar2>, 3>& B_vec,
     int num_intervals_per_half_axis) {
-  Vector3<symbolic::Expression> orthant_c;
+  Vector3<Scalar1> orthant_c;
   const Eigen::Vector3i orthant_box_interval_idx =
       PositiveAxisIntervalIndexToFullAxisIntervalIndex(
           Eigen::Vector3i(xi, yi, zi), orthant, num_intervals_per_half_axis);
   for (int axis = 0; axis < 3; ++axis) {
-    orthant_c(axis) = PickBinaryExpressionGivenInterval(
+    orthant_c(axis) = PickBinaryExpressionGivenInterval<Scalar1, VectorX<Scalar2>>(
         orthant_box_interval_idx(axis), gray_codes, B_vec[axis]);
   }
   return orthant_c;
@@ -687,8 +673,8 @@ void AddMcCormickVectorConstraints(
             }
             Eigen::Vector3d orthant_u;
             for (int o = 0; o < 8; o++) {  // iterate over orthants
-              orthant_u = FlipVector(unique_intersection, o);
-              Vector3<symbolic::Expression> orthant_c = internal::CalcBoxBinaryExpressionInOrthant(xi, yi, zi, o, gray_codes, B_i, num_intervals_per_half_axis);
+              orthant_u = internal::FlipVector(unique_intersection, o);
+              Vector3<symbolic::Expression> orthant_c = internal::CalcBoxBinaryExpressionInOrthant<symbolic::Expression, symbolic::Variable>(xi, yi, zi, o, gray_codes, B_i, num_intervals_per_half_axis);
 
               // TODO(hongkai.dai): remove this for loop when we can handle
               // Eigen::Array of symbolic formulae.
@@ -738,8 +724,8 @@ void AddMcCormickVectorConstraints(
 
             Eigen::RowVector3d orthant_normal;
             for (int o = 0; o < 8; o++) {  // iterate over orthants
-              orthant_normal = FlipVector(normal, o).transpose();
-              Vector3<symbolic::Expression> orthant_c = internal::CalcBoxBinaryExpressionInOrthant(xi, yi, zi, o, gray_codes, B_i, num_intervals_per_half_axis);
+              orthant_normal = internal::FlipVector(normal, o).transpose();
+              Vector3<symbolic::Expression> orthant_c = internal::CalcBoxBinaryExpressionInOrthant<symbolic::Expression, symbolic::Variable>(xi, yi, zi, o, gray_codes, B_i, num_intervals_per_half_axis);
               const symbolic::Expression orthant_c_sum = orthant_c.sum();
               for (int i = 0; i < A.rows(); ++i) {
                 // Add the constraint that A * v <= b, representing the inner
@@ -754,7 +740,7 @@ void AddMcCormickVectorConstraints(
                 // Otherwise
                 //   A.row(i) * v -b(i) is not constrained
                 Eigen::Vector3d orthant_a =
-                    -FlipVector(-A.row(i).transpose(), o);
+                    -internal::FlipVector(-A.row(i).transpose(), o);
                 prog->AddLinearConstraint(
                     orthant_a.dot(v) - b(i) <= (1 - b(i)) * orthant_c_sum);
               }
@@ -833,7 +819,7 @@ void AddMcCormickVectorConstraints(
         } else {
           // This box does not intersect with the surface of the sphere.
           for (int o = 0; o < 8; ++o) {  // iterate over orthants
-            Vector3<symbolic::Expression> orthant_c = internal::CalcBoxBinaryExpressionInOrthant(xi, yi, zi, o, gray_codes, B_i, num_intervals_per_half_axis);
+            Vector3<symbolic::Expression> orthant_c = internal::CalcBoxBinaryExpressionInOrthant<symbolic::Expression, symbolic::Variable>(xi, yi, zi, o, gray_codes, B_i, num_intervals_per_half_axis);
             prog->AddLinearConstraint(orthant_c.sum() >= 1);
           }
         }
@@ -943,7 +929,7 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
 
   // Add constraints to the column and row vectors.
 
-/*
+  if (0) {
   for (int i = 0; i < 3; i++) {
     std::array<VectorXDecisionVariable, 3> B_vec;
     for (int j = 0; j < 3; ++j) {
@@ -967,9 +953,21 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
     AddMcCormickVectorConstraints(prog, R.row(i).transpose(), B_vec,
                                   R.row((i + 1) % 3).transpose(),
                                   R.row((i + 2) % 3).transpose(), num_intervals_per_half_axis, gray_codes);
-  }*/
+  }}
   return B;
 }
 
+// Explicit instantiation
+template Vector3<symbolic::Expression> internal::CalcBoxBinaryExpressionInOrthant<symbolic::Expression, symbolic::Variable>(
+    int xi, int yi, int zi, int orthant,
+    const Eigen::Ref<const Eigen::MatrixXi>& gray_codes,
+    const std::array<VectorXDecisionVariable , 3>& B_vec,
+    int num_intervals_per_half_axis);
+
+template Eigen::Vector3d internal::CalcBoxBinaryExpressionInOrthant<double, double>(
+    int xi, int yi, int zi, int orthant,
+    const Eigen::Ref<const Eigen::MatrixXi>& gray_codes,
+    const std::array<Eigen::VectorXd , 3>& B_vec,
+    int num_intervals_per_half_axis);
 }  // namespace solvers
 }  // namespace drake

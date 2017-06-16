@@ -670,6 +670,19 @@ drake_cc_googletest(
     ],
 )
 
+drake_cc_googletest(
+    name = "rotation_constraint_internal_test",
+    # Excluding because an assertion fails in LLVM code. Issue #6179.
+    tags = gurobi_test_tags() + mosek_test_tags() + ["no_tsan"],
+    deps = [
+        ":gurobi_solver",
+        ":mathematical_program",
+        ":rotation_constraint",
+        "//drake/common:eigen_matrix_compare",
+        "//drake/math:geometric_transform",
+    ],
+)
+
 drake_cc_binary(
     name = "plot_feasible_rotation_matrices",
     testonly = 1,
