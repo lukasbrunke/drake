@@ -764,9 +764,9 @@ void AddMcCormickVectorConstraints(
               // Since normal and vi are both unit length,
               //     -sin(theta) <= normal.dot(vi) <= sin(theta).
               // To activate this only when this box is active, we use
-              //   -sin(theta)-2 * (c(0) + c(1) + c(2)) <=
+              //   -sin(theta) - (c(0) + c(1) + c(2)) <=
               //     normal.dot(vi) <=
-              //     sin(theta) + 2 * (c(0) + c(1) + c(2))
+              //     sin(theta) + (c(0) + c(1) + c(2))
               // Note: (An alternative tighter, but SOCP constraint)
               //   v, v1, v2 forms an orthornormal basis. So n'*v is the
               //   projection of n in the v direction, same for n'*v1, n'*v2.
@@ -782,10 +782,10 @@ void AddMcCormickVectorConstraints(
               //   we can impose a tighter Lorentz cone constraint
               //     [|sin(theta)|, n'*v1, n'*v2] is in the Lorentz cone.
               const double sin_theta = sin(theta);
-              prog->AddLinearConstraint(orthant_normal.dot(v1) <= sin_theta + 2 * orthant_c_sum);
-              prog->AddLinearConstraint(orthant_normal.dot(v1) >= -sin_theta - 2 * orthant_c_sum);
-              prog->AddLinearConstraint(orthant_normal.dot(v2) <= sin_theta + 2 * orthant_c_sum);
-              prog->AddLinearConstraint(orthant_normal.dot(v2) >= -sin_theta - 2 * orthant_c_sum);
+              prog->AddLinearConstraint(orthant_normal.dot(v1) <= sin_theta + orthant_c_sum);
+              prog->AddLinearConstraint(orthant_normal.dot(v1) >= -sin_theta - orthant_c_sum);
+              prog->AddLinearConstraint(orthant_normal.dot(v2) <= sin_theta + orthant_c_sum);
+              prog->AddLinearConstraint(orthant_normal.dot(v2) >= -sin_theta - orthant_c_sum);
 
               // Cross-product constraint: ideally v2 = v.cross(v1).
               // Since v is within theta of normal, we will prove that
@@ -812,8 +812,8 @@ void AddMcCormickVectorConstraints(
               //   |v2 - normal.cross(v1)| <= 2*sin(theta/2).
               Vector3<symbolic::Expression> v2_minus_normal_cross_v1 = v2.cast<symbolic::Expression>();
               v2_minus_normal_cross_v1 -= orthant_normal.cross(v1);
-              prog->AddLinearConstraint(v2_minus_normal_cross_v1 <= 2 * Eigen::Vector3d::Constant(sin(theta / 2)) + Vector3<symbolic::Expression>::Constant(orthant_c_sum));
-              prog->AddLinearConstraint(v2_minus_normal_cross_v1 >= -2 * Eigen::Vector3d::Constant(sin(theta / 2)) - Vector3<symbolic::Expression>::Constant(orthant_c_sum));
+              prog->AddLinearConstraint(v2_minus_normal_cross_v1 <= 2 * Eigen::Vector3d::Constant(sin(theta / 2)) + Vector3<symbolic::Expression>::Constant(2 * orthant_c_sum));
+              prog->AddLinearConstraint(v2_minus_normal_cross_v1 >= -2 * Eigen::Vector3d::Constant(sin(theta / 2)) - Vector3<symbolic::Expression>::Constant(2 * orthant_c_sum));
             }
           }
         } else {
@@ -940,7 +940,6 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
   AddBoundingBoxConstraintsImpliedByRollPitchYawLimitsToBinary(prog, B[0],
                                                                limits);
 
-  if(0) {
   // Add constraints to the column and row vectors.
   for (int i = 0; i < 3; i++) {
     std::array<VectorXDecisionVariable, 3> B_vec;
@@ -965,7 +964,7 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
     AddMcCormickVectorConstraints(prog, R.row(i).transpose(), B_vec,
                                   R.row((i + 1) % 3).transpose(),
                                   R.row((i + 2) % 3).transpose(), num_intervals_per_half_axis, gray_codes);
-  }}
+  }
   return B;
 }
 
