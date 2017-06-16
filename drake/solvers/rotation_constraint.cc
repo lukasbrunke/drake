@@ -244,6 +244,7 @@ Eigen::Vector3d FlipVector(const Eigen::Ref<const Eigen::Vector3d>& vpos,
   return v;
 }
 
+Vector3<symbolic::Expression> Pick
 // Given (an integer enumeration of) the orthant, return a vector c with
 // c(i) = a(i) if element i is positive in the indicated orthant, otherwise
 // c(i) = b(i).
@@ -565,10 +566,10 @@ namespace {
 
 void AddMcCormickVectorConstraints(
     MathematicalProgram* prog, const VectorDecisionVariable<3>& v,
-    const std::vector<MatrixDecisionVariable<3, 1>>& cpos,
-    const std::vector<MatrixDecisionVariable<3, 1>>& cneg,
-    const VectorDecisionVariable<3>& v1, const VectorDecisionVariable<3>& v2) {
-  const int N = cpos.size();  // number of discretization points.
+    const std::vector<MatrixDecisionVariable<3, 1>>& B_i
+    const VectorDecisionVariable<3>& v1, const VectorDecisionVariable<3>& v2,
+    int num_intervals_per_half_axis) {
+  const int& N{num_intervals_per_half_axis};
 
   // Iterate through regions.
   Eigen::Vector3d box_min, box_max;
