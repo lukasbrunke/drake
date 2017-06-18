@@ -10,6 +10,7 @@
 
 #include "drake/common/symbolic_expression.h"
 #include "drake/math/cross_product.h"
+#include "drake/math/gray_code.h"
 #include "drake/solvers/mixed_integer_optimization_util.h"
 
 using std::numeric_limits;
@@ -838,7 +839,8 @@ void AddMcCormickVectorConstraints(
  * orthant. But we can then assign the vector to a different orthant. The same
  * proof applies to the opposite orthant case.
  * To impose the constraint that R.col(0) and R.col(1) are not both in same
- * orthant, we use the fact that if R(i, 0) and R(i, 1) have the same sign, then
+ * orthant, we use the fact that if `num_intervals_per_half_axis` is a power of
+ * 2, and R(i, 0) and R(i, 1) have the same sign, then
  * B(i, 0) and B(i, 1) has to have the same value, namely
  * abs(B(i, 0) + B(i, 1) - 1) = 1, otherwise
  * abs(B(i, 0) + B(i, 1) - 1) = 0 if R(i, 0) and R(i, 1) have different
@@ -859,24 +861,28 @@ void AddMcCormickVectorConstraints(
  * @param prog Add the constraint to this mathematical program.
  * @param B. The binary variables. B(i, j) = 0
  * means R(i, j) <= 0, and B(i, j) = 1 means R(i, j) >= 0
+ * @num_intervals_per_half_axis Number of intervals per half axis.
  */
 void AddNotInSameOrOppositeOrthantConstraint(
     MathematicalProgram* prog,
-    const Eigen::Ref<const MatrixDecisionVariable<3, 3>>& B) {
-  const std::array<std::pair<int, int>, 3> column_idx = {
-      {{0, 1}, {0, 2}, {1, 2}}};
-  for (const auto& column_pair : column_idx) {
-    const int col_idx0 = column_pair.first;
-    const int col_idx1 = column_pair.second;
-    auto t = prog->NewContinuousVariables<3>("t");
-    auto s = prog->NewContinuousVariables<3>("s");
-    prog->AddLinearConstraint(t.cast<symbolic::Expression>().sum() <= 2);
-    prog->AddLinearConstraint(s.cast<symbolic::Expression>().sum() <= 2);
-    for (int i = 0; i < 3; ++i) {
-      prog->AddLinearConstraint(t(i) >= B(i, col_idx0) + B(i, col_idx1) - 1);
-      prog->AddLinearConstraint(B(i, col_idx0) + B(i, col_idx1) - 1 >= -t(i));
-      prog->AddLinearConstraint(s(i) >= B(i, col_idx0) - B(i, col_idx1));
-      prog->AddLinearConstraint(B(i, col_idx0) - B(i, col_idx1) >= -s(i));
+    const Eigen::Ref<const MatrixDecisionVariable<3, 3>>& B,
+    int num_intervals_per_half_axis) {
+  if (num_intervals_per_half_axis == (1 << CeilLog2(num_intervals_per_half_axis))) {
+    const std::array<std::pair<int, int>, 3> column_idx = {
+        {{0, 1}, {0, 2}, {1, 2}}};
+    for (const auto &column_pair : column_idx) {
+      const int col_idx0 = column_pair.first;
+      const int col_idx1 = column_pair.second;
+      auto t = prog->NewContinuousVariables<3>("t");
+      auto s = prog->NewContinuousVariables<3>("s");
+      prog->AddLinearConstraint(t.cast<symbolic::Expression>().sum() <= 2);
+      prog->AddLinearConstraint(s.cast<symbolic::Expression>().sum() <= 2);
+      for (int i = 0; i < 3; ++i) {
+        prog->AddLinearConstraint(t(i) >= B(i, col_idx0) + B(i, col_idx1) - 1);
+        prog->AddLinearConstraint(B(i, col_idx0) + B(i, col_idx1) - 1 >= -t(i));
+        prog->AddLinearConstraint(s(i) >= B(i, col_idx0) - B(i, col_idx1));
+        prog->AddLinearConstraint(B(i, col_idx0) - B(i, col_idx1) >= -s(i));
+      }
     }
   }
 }
@@ -910,7 +916,7 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
     phi_vec(k) = phi(k);
   }
   int num_digits = CeilLog2(num_lambda - 1);
-  const auto gray_codes = internal::CalculateReflectedGrayCodes(num_digits);
+  const auto gray_codes = math::CalculateReflectedGrayCodes(num_digits);
   std::vector<MatrixDecisionVariable<3, 3>> B(num_digits);
   for (int i = 0; i < 3; ++i) {
     for (int j = 0; j < 3; ++j) {
@@ -931,8 +937,8 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
   // orthant (or opposite orthant).
   // Due to the property of Gray code, B[0](i, j) = 0 means R(i, j) <= 0,
   // B[0](i, j) = 1 means R(i, j) >= 0
-  AddNotInSameOrOppositeOrthantConstraint(prog, B[0]);
-  AddNotInSameOrOppositeOrthantConstraint(prog, B[0].transpose());
+  AddNotInSameOrOppositeOrthantConstraint(prog, B[0], num_intervals_per_half_axis);
+  AddNotInSameOrOppositeOrthantConstraint(prog, B[0].transpose(), num_intervals_per_half_axis);
 
   // Add angle limit constraints.
   // Bounding box will turn on/off an orthant.  It's sufficient to add the
