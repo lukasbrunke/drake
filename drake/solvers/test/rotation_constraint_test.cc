@@ -198,7 +198,7 @@ GTEST_TEST(RotationTest, TestMcCormick) {
   std::normal_distribution<double> randn;
   std::uniform_int_distribution<> rand(0, 1 << 6);
 
-  for (int num_bins = 1; num_bins < 3; num_bins++) {
+  for (int num_bins = 1; num_bins <= 3; num_bins++) {
     MathematicalProgram prog;
     MatrixDecisionVariable<3, 3> R = NewRotationMatrixVars(&prog);
 
