@@ -970,7 +970,7 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
 
   for (int i = 0; i < 3; ++i) {
     AddUnitLengthConstraintWithLogarithmicSOS2(prog, phi_vec, lambda[0][i], lambda[1][i], lambda[2][i]);
-    AddUnitLengthConstraintWithLogarithmicSOS2(prog, phi_vec, lambda[i][0], lambda[i][0], lambda[i][2]);
+    AddUnitLengthConstraintWithLogarithmicSOS2(prog, phi_vec, lambda[i][0], lambda[i][1], lambda[i][2]);
   }
 
   // Add constraints to the column and row vectors.
