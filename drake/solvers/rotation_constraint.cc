@@ -886,6 +886,33 @@ void AddNotInSameOrOppositeOrthantConstraint(
     }
   }
 }
+
+/**
+ * Add a constraint that x(0)² + x(1)² + x(2)² = 1. For this non-convex
+ * constraint, we impose convex constraints as a relaxation. To do so, we cut
+ * the range of x(i) into intervals at (φ(0), φ(1)), (φ(1), φ(2)), ..., (φ(N-1),
+ * φ(N)). With sos2 constraint λ[i](k) >= 0, sum_k λ[i](k) = 1, at most two
+ * entries in φ can be strictly positive, and these two entries are adjacent, we
+ * can constrain that x(i) lies within one of the range. Moreover, we know that
+ * x(i)² <= λ[i](j)*φ²(j) + λ[i](j+1)*φ²(j+1) if x(i) ∈ [φ(j), φ(j+1)]. We can
+ * then impose the constraint that sum_{i = 0, 1, 2}sum_k λ[k](i) φ²(k) >= 1
+ */
+void AddUnitLengthConstraintWithLogarithmicSOS2(
+    MathematicalProgram* prog,
+    const Eigen::Ref<const Eigen::VectorXd>& phi_vec,
+    const Eigen::Ref<const VectorXDecisionVariable>& lambda0,
+const Eigen::Ref<const VectorXDecisionVariable>& lambda1,
+const Eigen::Ref<const VectorXDecisionVariable>& lambda2) {
+  symbolic::Expression x_sum_of_squares_ub{0};
+  DRAKE_ASSERT(phi_vec.rows() == lambda0.rows());
+  DRAKE_ASSERT(phi_vec.rows() == lambda1.rows());
+  DRAKE_ASSERT(phi_vec.rows() == lambda2.rows());
+  for (int i = 0; i < phi_vec.rows(); ++i) {
+    double phi_square = phi_vec(i) * phi_vec(i);
+    x_sum_of_squares_ub += (lambda0(i) + lambda1(i) + lambda2(i)) * phi_square;
+  }
+  prog->AddLinearConstraint(x_sum_of_squares_ub >= 1);
+}
 }  // namespace
 
 std::vector<MatrixDecisionVariable<3, 3>>
@@ -918,18 +945,19 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
   int num_digits = CeilLog2(num_lambda - 1);
   const auto gray_codes = math::CalculateReflectedGrayCodes(num_digits);
   std::vector<MatrixDecisionVariable<3, 3>> B(num_digits);
+  std::array<std::array<VectorXDecisionVariable, 3>, 3> lambda_ij;
   for (int i = 0; i < 3; ++i) {
     for (int j = 0; j < 3; ++j) {
-      VectorX<symbolic::Expression> lambda_ij(num_lambda);
+      lambda_ij[i][j].resize(num_lambda);
       for (int k = 0; k < num_lambda; ++k) {
-        lambda_ij(k) = lambda[k](i, j);
+        lambda_ij[i][j](k) = lambda[k](i, j);
       }
-      auto B_ij = AddLogarithmicSOS2Constraint(prog, lambda_ij);
+      auto B_ij = AddLogarithmicSOS2Constraint(prog, lambda_ij[i][j].cast<symbolic::Expression>());
       for (int k = 0; k < num_digits; ++k) {
         B[k](i, j) = B_ij(k);
       }
       // R(i, j) = sum_k phi_vec(k) * lambda[k](i, j)
-      prog->AddLinearConstraint(R(i, j) - phi_vec.dot(lambda_ij) == 0);
+      prog->AddLinearConstraint(R(i, j) - phi_vec.dot(lambda_ij[i][j].cast<symbolic::Expression>()) == 0);
     }
   }
 
@@ -945,6 +973,11 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
   // constraints only to the positive orthant.
   AddBoundingBoxConstraintsImpliedByRollPitchYawLimitsToBinary(prog, B[0],
                                                                limits);
+
+  for (int i = 0; i < 3; ++i) {
+    AddUnitLengthConstraintWithLogarithmicSOS2(prog, phi_vec, lambda_ij[0][i], lambda_ij[1][i], lambda_ij[2][i]);
+    AddUnitLengthConstraintWithLogarithmicSOS2(prog, phi_vec, lambda_ij[i][0], lambda_ij[i][0], lambda_ij[i][2]);
+  }
 
   // Add constraints to the column and row vectors.
   for (int i = 0; i < 3; i++) {
