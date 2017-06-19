@@ -929,35 +929,29 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
   auto phi = [&](int k) -> double {
     return EnvelopeMinValue(k, num_intervals_per_half_axis) - 1;
   };
-  // We add auxiliary variables λ, such that λ[k](i, j),
+  // We add auxiliary variables λ, such that λ[i][j](k),
   // k = 0, ..., 2 * num_intervals_per_half_axis satisfy the special ordered set
-  // 2 constraint. Namely sum_k λ[k](i, j) = 1, λ[k](i, j) >= 0, and at most
-  // two λ[k](i, j) can be strictly positive among all k, and these two entries
-  // have to be adjacent, namely they should be λ[m](i, j) and λ[m+1](i, j).
-  std::vector<MatrixDecisionVariable<3, 3>> lambda;
+  // 2 constraint. Namely sum_k λ[i][j](k) = 1, λ[i][j](k) >= 0, and at most
+  // two λ[i][j](k) can be strictly positive among all k, and these two entries
+  // have to be adjacent, namely they should be λ[i][j](m) and λ[i][j](m+1).
   int num_lambda = 2 * num_intervals_per_half_axis + 1;
-  lambda.reserve(num_lambda);
   Eigen::VectorXd phi_vec(num_lambda);
   for (int k = 0; k < num_lambda; ++k) {
-    lambda.push_back(prog->NewContinuousVariables(3, 3, "lambda[" + std::to_string(k) + "]"));
     phi_vec(k) = phi(k);
   }
   int num_digits = CeilLog2(num_lambda - 1);
   const auto gray_codes = math::CalculateReflectedGrayCodes(num_digits);
   std::vector<MatrixDecisionVariable<3, 3>> B(num_digits);
-  std::array<std::array<VectorXDecisionVariable, 3>, 3> lambda_ij;
+  std::array<std::array<VectorXDecisionVariable, 3>, 3> lambda;
   for (int i = 0; i < 3; ++i) {
     for (int j = 0; j < 3; ++j) {
-      lambda_ij[i][j].resize(num_lambda);
-      for (int k = 0; k < num_lambda; ++k) {
-        lambda_ij[i][j](k) = lambda[k](i, j);
-      }
-      auto B_ij = AddLogarithmicSOS2Constraint(prog, lambda_ij[i][j].cast<symbolic::Expression>());
+      lambda[i][j] = prog->NewContinuousVariables(num_lambda, "lambda[" + std::to_string(i) +"][" + std::to_string(j) + "]");
+      auto B_ij = AddLogarithmicSOS2Constraint(prog, lambda[i][j].cast<symbolic::Expression>());
       for (int k = 0; k < num_digits; ++k) {
         B[k](i, j) = B_ij(k);
       }
       // R(i, j) = sum_k phi_vec(k) * lambda[k](i, j)
-      prog->AddLinearConstraint(R(i, j) - phi_vec.dot(lambda_ij[i][j].cast<symbolic::Expression>()) == 0);
+      prog->AddLinearConstraint(R(i, j) - phi_vec.dot(lambda[i][j].cast<symbolic::Expression>()) == 0);
     }
   }
 
@@ -975,8 +969,8 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
                                                                limits);
 
   for (int i = 0; i < 3; ++i) {
-    AddUnitLengthConstraintWithLogarithmicSOS2(prog, phi_vec, lambda_ij[0][i], lambda_ij[1][i], lambda_ij[2][i]);
-    AddUnitLengthConstraintWithLogarithmicSOS2(prog, phi_vec, lambda_ij[i][0], lambda_ij[i][0], lambda_ij[i][2]);
+    AddUnitLengthConstraintWithLogarithmicSOS2(prog, phi_vec, lambda[0][i], lambda[1][i], lambda[2][i]);
+    AddUnitLengthConstraintWithLogarithmicSOS2(prog, phi_vec, lambda[i][0], lambda[i][0], lambda[i][2]);
   }
 
   // Add constraints to the column and row vectors.
