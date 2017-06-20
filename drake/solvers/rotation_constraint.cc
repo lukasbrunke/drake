@@ -927,20 +927,95 @@ const Eigen::Ref<const VectorXDecisionVariable>& lambda2) {
  * @param By
  * @return
  */
-symbolic::Variable AddBilinearProductMcCormickEnvelopeSOS2(
-    const symbolic::Variable x,
-    const symbolic::Variable y,
+void AddBilinearProductMcCormickEnvelopeSOS2(
+    MathematicalProgram* prog,
+    const symbolic::Variable& x,
+    const symbolic::Variable& y,
+    const symbolic::Expression& w,
     const Eigen::Ref<const Eigen::VectorXd>& phi_x,
     const Eigen::Ref<const Eigen::VectorXd>& phi_y,
     const Eigen::Ref<const VectorXDecisionVariable>& Bx,
     const Eigen::Ref<const VectorXDecisionVariable>& By) {
   const int num_phi_x = phi_x.rows();
   const int num_phi_y = phi_y.rows();
-  auto lambda
+  auto lambda = prog->NewContinuousVariables(num_phi_x, num_phi_y, "lambda");
+
+  symbolic::Expression x_convex_combination{0};
+  symbolic::Expression y_convex_combination{0};
+  symbolic::Expression w_convex_combination{0};
+  for (int i = 0; i < num_phi_x; ++i) {
+    for (int j = 0; j < num_phi_y; ++j) {
+      x_convex_combination += lambda(i, j) * phi_x(i);
+      y_convex_combination += lambda(i, j) * phi_y(j);
+      w_convex_combination += lambda(i, j) * phi_x(i) * phi_y(j);
+    }
+  }
+  prog->AddLinearConstraint(x == x_convex_combination);
+  prog->AddLinearConstraint(y == y_convex_combination);
+  prog->AddLinearConstraint(w == w_convex_combination);
+
+  AddLogarithmicSOS2Constraint(prog, lambda.cast<symbolic::Expression>().rowwise().sum(), Bx);
+  AddLogarithmicSOS2Constraint(prog, lambda.cast<symbolic::Expression>().colwise().sum().transpose(), By);
+}
+
+std::pair<int, int> Index2Subscripts(int index, int num_rows, int num_cols) {
+  int col_idx = index  / num_rows;
+  int row_idx = index - col_idx * num_rows;
+  return std::make_pair(row_idx, col_idx);
+};
+
+int Subscripts2Index(int row_idx, int col_idx, int num_rows, int num_cols) {
+  DRAKE_ASSERT(row_idx >= 0 && row_idx < num_rows);
+  DRAKE_ASSERT(col_idx >= 0 && col_idx < num_cols);
+  return col_idx * num_rows + row_idx;
+}
+
+void AddOrthogonalConstraintRelaxationWithMcCormickEnvelopeOnBilinearProduct(
+    MathematicalProgram* prog, int idx0, int idx1, const Eigen::Ref<const MatrixDecisionVariable<9, 9>>& W, bool row_flag) {
+  symbolic::Expression product{0};
+  for (int i = 0; i < 3; ++i) {
+    if (row_flag) {
+      product += W(Subscripts2Index(idx0, i, 3, 3), Subscripts2Index(idx1, i, 3, 3));
+    } else {
+      product += W(Subscripts2Index(i, idx0, 3, 3), Subscripts2Index(i, idx1, 3, 3));
+    }
+  }
+  prog->AddLinearConstraint(product == 0);
+}
+
+void AddRotationConstrantRelaxationWithMcCormickEnvelopeOnBilinearProduct(
+    MathematicalProgram* prog,
+    const Eigen::Ref<const Eigen::VectorXd>& phi_vec,
+    const Eigen::Ref<const MatrixDecisionVariable<3, 3>>& R,
+    const std::array<std::array<VectorXDecisionVariable, 3>, 3>& B) {
+  auto W = prog->NewSymmetricContinuousVariables<9>("R_times_R'");
+  for (int i = 0; i < 9; ++i) {
+    for (int j = i + 1; j < 9; ++j) {
+      const auto x_subscripts = Index2Subscripts(i, 3, 3);
+      const auto y_subscripts = Index2Subscripts(j, 3, 3);
+      AddBilinearProductMcCormickEnvelopeSOS2(
+          prog, R(x_subscripts.first, x_subscripts.second), R(y_subscripts.first, y_subscripts.second), W(i, j), phi_vec, phi_vec, B[x_subscripts.first][x_subscripts.second], B[y_subscripts.first][y_subscripts.second]);
+    }
+  }
+
+  // Now add the constraint that R.col(i).dot(R.col(j)) = 0
+  AddOrthogonalConstraintRelaxationWithMcCormickEnvelopeOnBilinearProduct(
+      prog, 0, 1, W, false);
+  AddOrthogonalConstraintRelaxationWithMcCormickEnvelopeOnBilinearProduct(
+      prog, 0, 2, W, false);
+  AddOrthogonalConstraintRelaxationWithMcCormickEnvelopeOnBilinearProduct(
+      prog, 1, 2, W, false);
+  AddOrthogonalConstraintRelaxationWithMcCormickEnvelopeOnBilinearProduct(
+      prog, 0, 1, W, true);
+  AddOrthogonalConstraintRelaxationWithMcCormickEnvelopeOnBilinearProduct(
+      prog, 0, 2, W, true);
+  AddOrthogonalConstraintRelaxationWithMcCormickEnvelopeOnBilinearProduct(
+      prog, 1, 2, W, true);
+
 }
 }  // namespace
 
-std::vector<MatrixDecisionVariable<3, 3>>
+std::array<std::array<VectorXDecisionVariable, 3>, 3>
 AddRotationMatrixMcCormickEnvelopeMilpConstraints(
     MathematicalProgram* prog,
     const Eigen::Ref<const MatrixDecisionVariable<3, 3>>& R,
@@ -966,15 +1041,12 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
   }
   int num_digits = CeilLog2(num_lambda - 1);
   const auto gray_codes = math::CalculateReflectedGrayCodes(num_digits);
-  std::vector<MatrixDecisionVariable<3, 3>> B(num_digits);
+  std::array<std::array<VectorXDecisionVariable, 3>, 3> B;
   std::array<std::array<VectorXDecisionVariable, 3>, 3> lambda;
   for (int i = 0; i < 3; ++i) {
     for (int j = 0; j < 3; ++j) {
       lambda[i][j] = prog->NewContinuousVariables(num_lambda, "lambda[" + std::to_string(i) +"][" + std::to_string(j) + "]");
-      auto B_ij = AddLogarithmicSOS2Constraint(prog, lambda[i][j].cast<symbolic::Expression>());
-      for (int k = 0; k < num_digits; ++k) {
-        B[k](i, j) = B_ij(k);
-      }
+      B[i][j] = AddLogarithmicSOS2Constraint(prog, lambda[i][j].cast<symbolic::Expression>());
       // R(i, j) = sum_k phi_vec(k) * lambda[k](i, j)
       prog->AddLinearConstraint(R(i, j) - phi_vec.dot(lambda[i][j].cast<symbolic::Expression>()) == 0);
     }
@@ -982,21 +1054,28 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
 
   // Add constraint that no two rows (or two columns) can lie in the same
   // orthant (or opposite orthant).
-  // Due to the property of Gray code, B[0](i, j) = 0 means R(i, j) <= 0,
-  // B[0](i, j) = 1 means R(i, j) >= 0
-  AddNotInSameOrOppositeOrthantConstraint(prog, B[0], num_intervals_per_half_axis);
-  AddNotInSameOrOppositeOrthantConstraint(prog, B[0].transpose(), num_intervals_per_half_axis);
+  MatrixDecisionVariable<3, 3> B0;
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 3; ++j) {
+      B0(i, j) = B[i][j](0);
+    }
+  }
+  AddNotInSameOrOppositeOrthantConstraint(prog, B0, num_intervals_per_half_axis);
+  AddNotInSameOrOppositeOrthantConstraint(prog, B0.transpose(), num_intervals_per_half_axis);
 
   // Add angle limit constraints.
   // Bounding box will turn on/off an orthant.  It's sufficient to add the
   // constraints only to the positive orthant.
-  AddBoundingBoxConstraintsImpliedByRollPitchYawLimitsToBinary(prog, B[0],
+  AddBoundingBoxConstraintsImpliedByRollPitchYawLimitsToBinary(prog, B0,
                                                                limits);
 
   for (int i = 0; i < 3; ++i) {
     AddUnitLengthConstraintWithLogarithmicSOS2(prog, phi_vec, lambda[0][i], lambda[1][i], lambda[2][i]);
     AddUnitLengthConstraintWithLogarithmicSOS2(prog, phi_vec, lambda[i][0], lambda[i][1], lambda[i][2]);
   }
+
+  // Add the constraint R.col(i).dot(R.col(j)) and R.col(i).cross(R.col(j)) = R.col(k)
+  AddRotationConstrantRelaxationWithMcCormickEnvelopeOnBilinearProduct(prog, phi_vec, R, B);
 
   // Add constraints to the column and row vectors.
   for (int i = 0; i < 3; i++) {
@@ -1008,7 +1087,7 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
     // vectors to facilitate the calls below.
     for (int k = 0; k < num_digits; k++) {
       for (int j = 0; j < 3; ++j) {
-        B_vec[j](k) = B[k](j, i);
+        B_vec[j](k) = B[j][i](k);
       }
     }
     AddMcCormickVectorConstraints(prog, R.col(i), B_vec,
@@ -1016,7 +1095,7 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
 
     for (int k = 0; k < num_digits; k++) {
       for (int j = 0; j < 3; ++j) {
-        B_vec[j](k) = B[k](i, j);
+        B_vec[j](k) = B[i][j](k);
       }
     }
     AddMcCormickVectorConstraints(prog, R.row(i).transpose(), B_vec,
