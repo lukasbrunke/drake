@@ -106,8 +106,8 @@ void AddRotationMatrixOrthonormalSocpConstraint(
  * (-1, φ(1), ..., φ(N-1), 0, φ(N+1), ..., φ(2N-1), 1), where `N` is
  * `num_interval_per_half_axis`. We then add binary variables to indicate which
  * interval R(i, j) is in. For each entry R(i, j), we use binary variables
- * B[0](i, j), ..., B[K](i, j), where K = ⌈log(num_intervals_per_half_axis)⌉.
- * If the Gray code (B[0](i, j), ..., B[K](i, j)) represents integer m, then
+ * B[i][j](0), ..., B[i][j](K), where K = ⌈log(num_intervals_per_half_axis)⌉.
+ * If the Gray code (B[i][j](0), ..., B[i][j](K)) represents integer m, then
  * R(i, j) is within the interval [φ(m), φ(m + 1)], where φ(0) = -1, φ(N) = 0,
  * φ(2N) = 1.
  *
@@ -131,7 +131,7 @@ void AddRotationMatrixOrthonormalSocpConstraint(
  * @retval The newly added binary variables.
  */
 
-std::vector<MatrixDecisionVariable<3, 3>>
+std::array<std::array<VectorXDecisionVariable, 3>, 3>
 AddRotationMatrixMcCormickEnvelopeMilpConstraints(
     MathematicalProgram* prog,
     const Eigen::Ref<const MatrixDecisionVariable<3, 3>>& R,
