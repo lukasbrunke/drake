@@ -913,6 +913,31 @@ const Eigen::Ref<const VectorXDecisionVariable>& lambda2) {
   }
   prog->AddLinearConstraint(x_sum_of_squares_ub >= 1);
 }
+
+/**
+ * Returns a variable `w` to approximate the bilinear product x * y. We know
+ * that x is in one of the intervals [φx(i), φx(i+1)], [φy(j), φy(j+1)]. The
+ * variable `w` is constrained to be in the convex hull of x * y for x in
+ * [φx(i), φx(i+1)], y in [φy(j), φy(j+1)]
+ * @param x
+ * @param y
+ * @param phi_x
+ * @param phi_y
+ * @param Bx
+ * @param By
+ * @return
+ */
+symbolic::Variable AddBilinearProductMcCormickEnvelopeSOS2(
+    const symbolic::Variable x,
+    const symbolic::Variable y,
+    const Eigen::Ref<const Eigen::VectorXd>& phi_x,
+    const Eigen::Ref<const Eigen::VectorXd>& phi_y,
+    const Eigen::Ref<const VectorXDecisionVariable>& Bx,
+    const Eigen::Ref<const VectorXDecisionVariable>& By) {
+  const int num_phi_x = phi_x.rows();
+  const int num_phi_y = phi_y.rows();
+  auto lambda
+}
 }  // namespace
 
 std::vector<MatrixDecisionVariable<3, 3>>
