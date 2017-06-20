@@ -919,13 +919,6 @@ const Eigen::Ref<const VectorXDecisionVariable>& lambda2) {
  * that x is in one of the intervals [φx(i), φx(i+1)], [φy(j), φy(j+1)]. The
  * variable `w` is constrained to be in the convex hull of x * y for x in
  * [φx(i), φx(i+1)], y in [φy(j), φy(j+1)]
- * @param x
- * @param y
- * @param phi_x
- * @param phi_y
- * @param Bx
- * @param By
- * @return
  */
 void AddBilinearProductMcCormickEnvelopeSOS2(
     MathematicalProgram* prog,
@@ -983,6 +976,34 @@ void AddOrthogonalConstraintRelaxationWithMcCormickEnvelopeOnBilinearProduct(
   prog->AddLinearConstraint(product == 0);
 }
 
+/**
+ * Adds the constraint R.col(idx0).cross(R.col(idx1)) = R.col(idx2)
+ * or R.row(idx0).cross(R.row(idx1)) = R.row(idx2)
+ */
+void AddCrossProductConstraintRelaxationWithMcCormickEnvelopeOnBilinearProduct(
+    MathematicalProgram* prog, int idx0, int idx1, const Eigen::Ref<const VectorDecisionVariable<3>>& v, const Eigen::Ref<const MatrixDecisionVariable<9, 9>>& W, bool row_flag) {
+  Vector3<symbolic::Expression> cross_product{0, 0, 0};
+  Eigen::Vector3i v0_idx;
+  Eigen::Vector3i v1_idx;
+
+  if (row_flag) {
+    for (int i = 0; i < 3; ++i) {
+      v0_idx(i) = Subscripts2Index(idx0, i, 3, 3);
+      v1_idx(i) = Subscripts2Index(idx1, i, 3, 3);
+    }
+
+  } else {
+    for (int i = 0; i < 3; ++i) {
+      v0_idx(i) = Subscripts2Index(i, idx0, 3, 3);
+      v1_idx(i) = Subscripts2Index(i, idx1, 3, 3);
+    }
+  }
+  cross_product << W(v0_idx(1), v1_idx(2)) - W(v0_idx(2), v1_idx(1)),
+      W(v0_idx(2), v1_idx(0)) - W(v0_idx(0), v1_idx(2)),
+      W(v0_idx(0), v1_idx(1)) - W(v0_idx(1), v1_idx(0));
+  prog->AddLinearConstraint(v.cast<symbolic::Expression>() == cross_product);
+}
+
 void AddRotationConstrantRelaxationWithMcCormickEnvelopeOnBilinearProduct(
     MathematicalProgram* prog,
     const Eigen::Ref<const Eigen::VectorXd>& phi_vec,
@@ -1012,6 +1033,12 @@ void AddRotationConstrantRelaxationWithMcCormickEnvelopeOnBilinearProduct(
   AddOrthogonalConstraintRelaxationWithMcCormickEnvelopeOnBilinearProduct(
       prog, 1, 2, W, true);
 
+  AddCrossProductConstraintRelaxationWithMcCormickEnvelopeOnBilinearProduct(prog, 0, 1, R.col(2), W, false);
+  AddCrossProductConstraintRelaxationWithMcCormickEnvelopeOnBilinearProduct(prog, 1, 2, R.col(0), W, false);
+  AddCrossProductConstraintRelaxationWithMcCormickEnvelopeOnBilinearProduct(prog, 2, 0, R.col(1), W, false);
+  AddCrossProductConstraintRelaxationWithMcCormickEnvelopeOnBilinearProduct(prog, 0, 1, R.row(2).transpose(), W, true);
+  AddCrossProductConstraintRelaxationWithMcCormickEnvelopeOnBilinearProduct(prog, 1, 2, R.row(0).transpose(), W, true);
+  AddCrossProductConstraintRelaxationWithMcCormickEnvelopeOnBilinearProduct(prog, 2, 0, R.row(1).transpose(), W, true);
 }
 }  // namespace
 
