@@ -1104,7 +1104,7 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
 
   // Add the constraint R.col(i).dot(R.col(j)) and R.col(i).cross(R.col(j)) = R.col(k)
   AddRotationConstrantRelaxationWithMcCormickEnvelopeOnBilinearProduct(prog, phi_vec, R, B);
-
+if(0) {
   // Add constraints to the column and row vectors.
   for (int i = 0; i < 3; i++) {
     std::array<VectorXDecisionVariable, 3> B_vec;
@@ -1129,7 +1129,7 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
     AddMcCormickVectorConstraints(prog, R.row(i).transpose(), B_vec,
                                   R.row((i + 1) % 3).transpose(),
                                   R.row((i + 2) % 3).transpose(), num_intervals_per_half_axis, gray_codes);
-  }
+  }}
   return B;
 }
 
