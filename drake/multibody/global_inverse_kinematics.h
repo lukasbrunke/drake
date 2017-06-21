@@ -233,6 +233,14 @@ class GlobalInverseKinematics : public solvers::MathematicalProgram {
       int body_index, const Eigen::Ref<const Eigen::Vector3d>& p_BQ,
       const std::vector<Eigen::Matrix3Xd>& region_vertices);
 
+  /**
+   * Adds joint limits on a specified joint.
+   * @param body_index The joint connecting the parent link to this body will be
+   * constrained.
+   * @param joint_lower_bound
+   * @param joint_upper_bound
+   */
+  void AddJointLimitConstraint(int body_index, double joint_lower_bound, double joint_upper_bound);
  private:
   const RigidBodyTree<double> *robot_;
 
