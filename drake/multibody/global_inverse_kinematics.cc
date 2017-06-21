@@ -505,6 +505,10 @@ void GlobalInverseKinematics::AddJointLimitConstraint(int body_index, double joi
               V << v_basis[0], v_basis[1];
               const Eigen::Matrix<symbolic::Expression, 2, 2> M = V.transpose() * (R_joint_beta  + R_joint_beta.transpose()) / 2 * V - std::cos(joint_bound) * Eigen::Matrix2d::Identity();
               AddRotatedLorentzConeConstraint(Vector3<symbolic::Expression>(M(0, 0), M(1, 1), M(1, 0)));
+
+              // Due to the Rodriguez formula, we also know that
+              // trace(R(k, β)) >= 1 + 2 * cosα, due to the bounds on the angle β
+              AddLinearConstraint(R_joint_beta.trace() >= 1 + 2 * cos(joint_bound));
             }
           }
         } else {
