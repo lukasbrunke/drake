@@ -932,6 +932,7 @@ void AddBilinearProductMcCormickEnvelopeSOS2(
   const int num_phi_x = phi_x.rows();
   const int num_phi_y = phi_y.rows();
   auto lambda = prog->NewContinuousVariables(num_phi_x, num_phi_y, "lambda");
+  prog->AddBoundingBoxConstraint(0, 1, lambda);
 
   symbolic::Expression x_convex_combination{0};
   symbolic::Expression y_convex_combination{0};
