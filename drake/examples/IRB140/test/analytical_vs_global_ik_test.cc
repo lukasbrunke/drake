@@ -168,7 +168,7 @@ class DUT {
 
   RigidBodyTreed* robot() const {return analytical_ik_.robot();}
 
-  void SolveAnalyticalIK(const Eigen::Vector3d& link6_pos, IKresult* ik_result) {
+  void SolveAnalyticalIK(const Eigen::Vector3d& link6_pos, IKresult* ik_result) const {
     // Solve IK analytically
     Eigen::Isometry3d link6_pose;
     link6_pose.linear() = ee_orient_.toRotationMatrix();
@@ -203,7 +203,7 @@ class DUT {
 
   void SolveNonlinearIK(const Eigen::Vector3d& link6_pos, IKresult* ik_result,
                         const Eigen::Ref<const Eigen::Matrix<double, 6, 1>>& q_guess,
-                        bool resolve_flag) {
+                        bool resolve_flag) const {
     WorldPositionConstraint nl_ik_pos_cnstr(analytical_ik_.robot(), ee_idx_,
                                             Eigen::Vector3d::Zero(), link6_pos,
                                             link6_pos);
@@ -515,11 +515,10 @@ void DebugOutputFile(int argc, char* argv[]) {
       dut.SolveGlobalIK(ik_result.ee_pose().translation(), &ik_result);
       ik_result.printToFile(&output_file1);
     }*/
-    if (ik_result.analytical_ik_status() == solvers::SolutionResult::kInfeasibleConstraints
-        && ik_result.global_ik_status() == solvers::SolutionResult::kSolutionFound) {
+    /*if (ik_result.analytical_ik_status() == solvers::SolutionResult::kInfeasibleConstraints) {
       dut.SolveGlobalIK(ik_result.ee_pose().translation(), &ik_result);
       ik_result.printToFile(&output_file1);
-    }
+    }*/
     /*if (ik_result.global_ik_status() == solvers::SolutionResult::kSolutionFound
         && ik_result.analytical_ik_status() == solvers::SolutionResult::kSolutionFound) {
       cache.initialize(ik_result.q_global_ik());
@@ -711,8 +710,8 @@ void AnalyzeOutputFile(int argc, char* argv[]) {
 }  // namespace drake
 
 int main(int argc, char* argv[]) {
-  //drake::examples::IRB140::DoMain(argc, argv);
+  drake::examples::IRB140::DoMain(argc, argv);
   //drake::examples::IRB140::DebugOutputFile(argc, argv);
-  drake::examples::IRB140::AnalyzeOutputFile(argc, argv);
+  //drake::examples::IRB140::AnalyzeOutputFile(argc, argv);
   return 0;
 }
