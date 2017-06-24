@@ -1005,7 +1005,7 @@ void AddRotationConstrantRelaxationWithMcCormickEnvelopeOnBilinearProduct(
 }
 }  // namespace
 
-std::array<std::array<VectorXDecisionVariable, 3>, 3>
+std::pair<std::array<std::array<VectorXDecisionVariable, 3>, 3>, Eigen::VectorXd>
 AddRotationMatrixMcCormickEnvelopeMilpConstraints(
     MathematicalProgram* prog,
     const Eigen::Ref<const MatrixDecisionVariable<3, 3>>& R,
@@ -1092,7 +1092,7 @@ if(0) {
                                   R.row((i + 1) % 3).transpose(),
                                   R.row((i + 2) % 3).transpose(), num_intervals_per_half_axis, gray_codes);
   }}
-  return B;
+  return std::make_pair(B, phi_vec);
 }
 
 // Explicit instantiation

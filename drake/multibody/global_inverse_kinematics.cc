@@ -5,6 +5,7 @@
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/joints/drake_joints.h"
 #include "drake/solvers/rotation_constraint.h"
+#include "drake/solvers/mixed_integer_optimization_util.h"
 
 using Eigen::Isometry3d;
 using Eigen::Vector3d;
@@ -23,6 +24,8 @@ GlobalInverseKinematics::GlobalInverseKinematics(
   const int num_bodies = robot_->get_num_bodies();
   R_WB_.resize(num_bodies);
   p_WBo_.resize(num_bodies);
+  body_binary_vars_.resize(num_bodies);
+  body_rotmat_phi_.resize(num_bodies);
   // Loop through each body in the robot, to add the constraint that the bodies
   // are welded by joints.
   for (int body_idx = 1; body_idx < num_bodies; ++body_idx) {
@@ -94,7 +97,8 @@ GlobalInverseKinematics::GlobalInverseKinematics(
             if (dynamic_cast<const RevoluteJoint*>(joint) != nullptr) {
               // Adding McCormick Envelope will add binary variables into
               // the program.
-              solvers::AddRotationMatrixMcCormickEnvelopeMilpConstraints(
+              std::tie(body_binary_vars_[body_idx], body_rotmat_phi_[body_idx])
+                  = solvers::AddRotationMatrixMcCormickEnvelopeMilpConstraints(
                   this, R_WB_[body_idx], num_binary_vars_per_half_axis);
 
               const RevoluteJoint
@@ -310,7 +314,7 @@ void GlobalInverseKinematics::AddPostureCost(
     // http://www.euclideanspace.com/maths/geometry/rotations/conversions/matrixToAngle/
     orient_err_sum +=
         body_orientation_cost(i) *
-        (1 - ((X_WB_desired.linear() * R_WB_[i].transpose()).trace() - 1) / 2);
+        (1 - 0.5 * ((X_WB_desired.linear() * R_WB_[i].transpose()).trace() - 1));
   }
 
   // The total cost is the summation of the position error and the orientation
@@ -503,12 +507,37 @@ void GlobalInverseKinematics::AddJointLimitConstraint(int body_index, double joi
                       .transpose() * R_WB_[body_index];
               Eigen::Matrix<double, 3, 2> V;
               V << v_basis[0], v_basis[1];
-              const Eigen::Matrix<symbolic::Expression, 2, 2> M = V.transpose() * (R_joint_beta  + R_joint_beta.transpose()) / 2 * V - std::cos(joint_bound) * Eigen::Matrix2d::Identity();
+              const Eigen::Matrix<symbolic::Expression, 2, 2> M = V.transpose() * (R_joint_beta  + R_joint_beta.transpose()) * 0.5 * V - std::cos(joint_bound) * Eigen::Matrix2d::Identity();
               AddRotatedLorentzConeConstraint(Vector3<symbolic::Expression>(M(0, 0), M(1, 1), M(1, 0)));
 
               // Due to the Rodriguez formula, we also know that
               // trace(R(k, β)) >= 1 + 2 * cosα, due to the bounds on the angle β
               AddLinearConstraint(R_joint_beta.trace() >= 1 + 2 * cos(joint_bound));
+            } else {
+              // We can also impose the joint limit constraint, by first
+              // computing R(k, β) = R(k,(a+b)/2)ᵀ * R_PFᵀ * R_WPᵀ * R_WC.
+              // From Rodriguez formula, we know that
+              // trace(R(k, β)) >= 1 + 2 * cos(α). Notice that to compute
+              // R(k, β), we need to compute the bilinear product between
+              // R_WP and R_WC. To this end, we introduce a new matrix W
+              // representing the bilinear product, and constraint the entry of
+              // W(i, j) to be in the McCormick envelope of R_WP(i) * R_WC(j)
+              Eigen::Matrix<symbolic::Expression, 3, 3> R_joint_beta = (R_WB_[parent_idx] * X_PF.linear() * rotmat_joint_offset).transpose() * R_WB_[body_index];
+              // R_shift = R(k,(a+b)/2)ᵀ * R_PFᵀ
+              Eigen::Matrix3d R_shift = (X_PF.linear() * rotmat_joint_offset).transpose();
+              symbolic::Expression R_joint_beta_trace{0};
+              for (int i = 0; i < 3; ++i) {
+                for (int j = 0; j < 3; ++j) {
+                  if (std::abs(R_shift(i, j)) > 1E-10) {
+                    for (int k = 0; k < 3; ++k) {
+                      auto w = NewContinuousVariables<1>()(0);
+                      AddBilinearProductMcCormickEnvelopeSOS2(this, R_WB_[parent_idx](k, j), R_WB_[body_index](k, i), w, body_rotmat_phi_[parent_idx], body_rotmat_phi_[body_index], body_binary_vars_[parent_idx][k][j], body_binary_vars_[body_index][k][i]);
+                      R_joint_beta_trace += R_shift(i, j) * w;
+                    }
+                  }
+                }
+              }
+              AddLinearConstraint(R_joint_beta_trace >= 1 + 2 * cos(joint_bound));
             }
           }
         } else {

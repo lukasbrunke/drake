@@ -131,7 +131,7 @@ void AddRotationMatrixOrthonormalSocpConstraint(
  * @retval The newly added binary variables.
  */
 
-std::array<std::array<VectorXDecisionVariable, 3>, 3>
+std::pair<std::array<std::array<VectorXDecisionVariable, 3>, 3>, Eigen::VectorXd>
 AddRotationMatrixMcCormickEnvelopeMilpConstraints(
     MathematicalProgram* prog,
     const Eigen::Ref<const MatrixDecisionVariable<3, 3>>& R,

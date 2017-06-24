@@ -241,6 +241,7 @@ class GlobalInverseKinematics : public solvers::MathematicalProgram {
    * @param joint_upper_bound
    */
   void AddJointLimitConstraint(int body_index, double joint_lower_bound, double joint_upper_bound);
+
  private:
   const RigidBodyTree<double> *robot_;
 
@@ -251,6 +252,12 @@ class GlobalInverseKinematics : public solvers::MathematicalProgram {
   // p_WBo_[i] is the position of the origin Bo of body frame B for the i'th
   // body, measured and expressed in the world frame.
   std::vector<solvers::VectorDecisionVariable<3>> p_WBo_;
+
+  // body_binary_vars_[i] is the binary variables related to the rotation matrix
+  // R_WB_[i].
+  std::vector<std::array<std::array<solvers::VectorXDecisionVariable, 3>, 3>> body_binary_vars_;
+
+  std::vector<Eigen::VectorXd> body_rotmat_phi_;
 };
 }  // namespace multibody
 }  // namespace drake
