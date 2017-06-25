@@ -128,7 +128,7 @@ class DUT {
       global_ik_.AddBoundingBoxConstraint(
           ee_rotmat_des.col(i), ee_rotmat_des.col(i), ee_rotmat.col(i));
     }
-
+/*
     for (int i = 1; i < robot()->get_num_bodies(); ++i) {
       const auto &body_R = global_ik_.body_rotation_matrix(i);
       Eigen::Matrix<symbolic::Expression, 5, 1> cone_expr;
@@ -150,7 +150,7 @@ class DUT {
       global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
       cone_expr.tail<3>() = body_R.row(0) - body_R.row(1) - body_R.row(2);
       global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
-    }
+    }*/
 
     const auto R_02 = global_ik_.body_rotation_matrix(2);
     global_ik_.AddBoundingBoxConstraint(0, 0, R_02(2, 0));
@@ -187,7 +187,7 @@ class DUT {
     solvers::GurobiSolver gurobi_solver;
     solvers::MosekSolver mosek_solver;
 
-    global_ik_.SetSolverOption(solvers::SolverType::kGurobi, "FeasibilityTol", 1E-5);
+    global_ik_.SetSolverOption(solvers::SolverType::kGurobi, "FeasibilityTol", 8E-6);
     //global_ik_.SetSolverOption(solvers::SolverType::kGurobi, "OutputFlag", 1);
     solvers::SolutionResult global_ik_status = gurobi_solver.Solve(global_ik_);
     //solvers::SolutionResult global_ik_status = mosek_solver.Solve(global_ik_);
@@ -515,10 +515,15 @@ void DebugOutputFile(int argc, char* argv[]) {
       dut.SolveGlobalIK(ik_result.ee_pose().translation(), &ik_result);
       ik_result.printToFile(&output_file1);
     }*/
-    /*if (ik_result.analytical_ik_status() == solvers::SolutionResult::kInfeasibleConstraints) {
+    /*if (ik_result.analytical_ik_status() == solvers::SolutionResult::kInfeasibleConstraints &&
+        ik_result.global_ik_status() == solvers::SolutionResult::kSolutionFound) {
       dut.SolveGlobalIK(ik_result.ee_pose().translation(), &ik_result);
       ik_result.printToFile(&output_file1);
     }*/
+    if (ik_result.global_ik_status() == solvers::SolutionResult::kSolutionFound) {
+      dut.SolveGlobalIK(ik_result.ee_pose().translation(), &ik_result);
+      ik_result.printToFile(&output_file1);
+    }
     /*if (ik_result.global_ik_status() == solvers::SolutionResult::kSolutionFound
         && ik_result.analytical_ik_status() == solvers::SolutionResult::kSolutionFound) {
       cache.initialize(ik_result.q_global_ik());
@@ -710,8 +715,8 @@ void AnalyzeOutputFile(int argc, char* argv[]) {
 }  // namespace drake
 
 int main(int argc, char* argv[]) {
-  drake::examples::IRB140::DoMain(argc, argv);
+  //drake::examples::IRB140::DoMain(argc, argv);
   //drake::examples::IRB140::DebugOutputFile(argc, argv);
-  //drake::examples::IRB140::AnalyzeOutputFile(argc, argv);
+  drake::examples::IRB140::AnalyzeOutputFile(argc, argv);
   return 0;
 }
