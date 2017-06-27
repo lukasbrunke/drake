@@ -139,7 +139,8 @@ GlobalInverseKinematics::GlobalInverseKinematics(
           case 6 : {
             // This is the floating base case, just add the rotation matrix
             // constraint.
-            solvers::AddRotationMatrixMcCormickEnvelopeMilpConstraints(
+            std::tie(body_binary_vars_[body_idx], body_rotmat_phi_[body_idx]) =
+                solvers::AddRotationMatrixMcCormickEnvelopeMilpConstraints(
                 this, R_WB_[body_idx], num_binary_vars_per_half_axis);
             break;
           }
