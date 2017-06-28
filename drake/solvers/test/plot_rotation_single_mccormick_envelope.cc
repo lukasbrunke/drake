@@ -94,6 +94,24 @@ MatlabRemoteVariable DrawSurfacePatch(const std::vector<Eigen::Vector3d>& inters
   return h_sphere[0];
 }
 
+// Suppose the points are in the clockwise / counter-clockwise order
+void DrawQuadrilateral(const Eigen::Ref<const Eigen::Matrix<double, 3, 4>>& pts, const Eigen::RowVector3d& color, const Eigen::RowVector3d& line_color) {
+  auto h0 = DrawTriangle(pts.col(0), pts.col(1), pts.col(2), color);
+  auto h1 = DrawTriangle(pts.col(0), pts.col(2), pts.col(3), color);
+  CallMatlab("set", h0, "LineStyle", "none");
+  CallMatlab("set", h1, "LineStyle", "none");
+  CallMatlab("set", h0, "FaceAlpha", 0.3);
+  CallMatlab("set", h1, "FaceAlpha", 0.3);
+  for (int i = 0; i < 4; ++i) {
+    auto h = DrawLineBetweenPoints(pts.col(i), pts.col((i + 1) % 4));
+    CallMatlab("set", h, "Color", line_color);
+  }
+}
+// Return the intersection point between a plane normal' * x = d and a line x = line_pt + line_dir * t
+Eigen::Vector3d ComputePlaneLineIntersection(const Eigen::Ref<const Eigen::Vector3d>& normal, double d, const Eigen::Ref<const Eigen::Vector3d>& line_dir, const Eigen::Ref<const Eigen::Vector3d>& line_pt) {
+  double t = (d - normal.dot(line_pt)) / (normal.dot(line_dir));
+  return line_pt + line_dir * t;
+}
 
 // Draw one mccormick envelope for 2 binary variables per half axis case.
 // Draw the convex hull of the intersection region, between the surface of the
@@ -108,10 +126,54 @@ void DrawSingleMcCormickEnvelopes(const Eigen::Vector3d& bmin, const Eigen::Vect
   // [0.5 sqrt(3)/2 0]
   // [0   sqrt(3)/2 0.5]
   // [0.5 sqrt(2)/2 0.5]
-  DrawLineBetweenPoints(intersection_pts[0], intersection_pts[1]);
+  /*DrawLineBetweenPoints(intersection_pts[0], intersection_pts[1]);
   DrawLineBetweenPoints(intersection_pts[0], intersection_pts[2]);
   DrawLineBetweenPoints(intersection_pts[1], intersection_pts[3]);
-  DrawLineBetweenPoints(intersection_pts[2], intersection_pts[3]);
+  DrawLineBetweenPoints(intersection_pts[2], intersection_pts[3]);*/
+
+  Eigen::RowVector3d plane_color(0, 1, 1);
+  Eigen::RowVector3d line_color(0, 0.3, 0.3);
+  // Compute the outer McCormick Envelope.
+  double d(0);
+  Eigen::Vector3d normal{};
+  internal::ComputeHalfSpaceRelaxationForBoxSphereIntersection(intersection_pts, &normal, &d);
+  // Compute the intersection between the outer plane normal' * [x;y;z] = 1, and the along the y axis direction
+  // and passting the intersection points
+  std::array<Eigen::Vector3d, 4> outer_plane_pts;
+  for (int i = 0; i < 4; ++i) {
+    outer_plane_pts[i] = ComputePlaneLineIntersection(normal, 1, Eigen::Vector3d(0, 1, 0), intersection_pts[i]);
+  }
+  Eigen::Matrix<double, 3, 4> face_pts;
+  // Draw outer plane.
+  face_pts.col(0) = outer_plane_pts[0];
+  face_pts.col(1) = outer_plane_pts[1];
+  face_pts.col(2) = outer_plane_pts[3];
+  face_pts.col(3) = outer_plane_pts[2];
+  DrawQuadrilateral(face_pts, plane_color, line_color);
+  // Draw top plane.
+  face_pts.col(0) = intersection_pts[2];
+  face_pts.col(1) = intersection_pts[3];
+  face_pts.col(2) = outer_plane_pts[3];
+  face_pts.col(3) = outer_plane_pts[2];
+  DrawQuadrilateral(face_pts, plane_color, line_color);
+  // Draw bottom plane.
+  face_pts.col(0) = intersection_pts[0];
+  face_pts.col(1) = intersection_pts[1];
+  face_pts.col(2) = outer_plane_pts[1];
+  face_pts.col(3) = outer_plane_pts[0];
+  DrawQuadrilateral(face_pts, plane_color, line_color);
+  // Draw left plane
+  face_pts.col(0) = intersection_pts[1];
+  face_pts.col(1) = intersection_pts[3];
+  face_pts.col(2) = outer_plane_pts[3];
+  face_pts.col(3) = outer_plane_pts[1];
+  DrawQuadrilateral(face_pts, plane_color, line_color);
+  // Draw right plane
+  face_pts.col(0) = intersection_pts[0];
+  face_pts.col(1) = intersection_pts[2];
+  face_pts.col(2) = outer_plane_pts[2];
+  face_pts.col(3) = outer_plane_pts[0];
+  DrawQuadrilateral(face_pts, plane_color, line_color);
 
   // Draw the patch on the surface
   DrawSurfacePatch(intersection_pts, sphere_color);
@@ -124,10 +186,11 @@ void DrawSingleMcCormickEnvelopes(const Eigen::Vector3d& bmin, const Eigen::Vect
   std::cout << "n' * x >= d: " << n1.transpose() << "* x >= " << d1 << std::endl;
   internal::ComputeTriangleOutwardNormal(intersection_pts[0], intersection_pts[1], intersection_pts[3], &n2, &d2);
   std::cout << "n' * x >= d: " << n2.transpose() << "* x >= " << d2 << std::endl;
-  DrawLineBetweenPoints(intersection_pts[0], intersection_pts[3]);
+  auto h_pts03 = DrawLineBetweenPoints(intersection_pts[0], intersection_pts[3]);
+  CallMatlab("set", h_pts03, "Color", line_color);
 
   // Draw the inner facets
-  Eigen::RowVector3d plane_color = sphere_color;
+
   DrawTriangle(intersection_pts[0], intersection_pts[1], intersection_pts[3], plane_color);
   DrawTriangle(intersection_pts[0], intersection_pts[2], intersection_pts[3], plane_color);
 
