@@ -98,7 +98,7 @@ Eigen::Matrix<double, 3, 4> AddBoxSteppingStone(RigidBodyTreed* tree, const Eige
   X_box_to_world.translation() << xy_pos, box_size(2) / 2;
   AddBoxToBody(tree, 0, X_box_to_world, box_size, box_name, color);
   Eigen::Matrix<double, 3, 4> box_top_corners;
-  double top_scale_factor = 0.7;
+  double top_scale_factor = 0.6;
   box_top_corners.row(0) << box_size(0) / 2, box_size(0) / 2, -box_size(0) / 2, -box_size(0) / 2;
   box_top_corners.row(1) << box_size(1) / 2, -box_size(1) / 2, box_size(1) / 2, -box_size(1) / 2;
   box_top_corners.block<2, 4>(0, 0) *= top_scale_factor;
@@ -137,10 +137,10 @@ GTEST_TEST(GlobalIKTest, LittleDogTest) {
   int front_left_lower_leg_idx = tree->FindBodyIndex("front_left_lower_leg");
   int front_right_lower_leg_idx = tree->FindBodyIndex("front_right_lower_leg");
 
-  Eigen::Vector3d back_r_toe(0.02, 0, -0.1);
-  Eigen::Vector3d back_l_toe(0.02, 0, -0.1);
-  Eigen::Vector3d front_r_toe(-0.02, 0, -0.1);
-  Eigen::Vector3d front_l_toe(-0.02, 0, -0.1);
+  Eigen::Vector3d back_r_toe(0.02, 0, -0.102);
+  Eigen::Vector3d back_l_toe(0.02, 0, -0.102);
+  Eigen::Vector3d front_r_toe(-0.02, 0, -0.102);
+  Eigen::Vector3d front_l_toe(-0.02, 0, -0.102);
   AddPointToBody(tree.get(), back_right_lower_leg_idx, back_r_toe, "back_r_toe");
   AddPointToBody(tree.get(), back_left_lower_leg_idx, back_l_toe, "back_l_toe");
   AddPointToBody(tree.get(), front_right_lower_leg_idx, front_r_toe, "front_r_toe");
