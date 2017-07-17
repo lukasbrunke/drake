@@ -17,6 +17,7 @@ drake_cc_library(
     hdrs = ["IRB140_analytical_kinematics.h"],
     deps = [
         "//drake/common",
+        "//drake/common:find_resource",
         "//drake/common:symbolic",
         "//drake/multibody:rigid_body_tree",
         "//drake/multibody:rigid_body_tree_construction",
@@ -30,7 +31,6 @@ drake_cc_library(
     srcs = ["test/irb140_common.cc"],
     hdrs = ["test/irb140_common.h"],
     deps = [
-        "@gtest//:main",
         "//drake/common:eigen_matrix_compare",
     ],
 )
@@ -63,7 +63,7 @@ drake_cc_binary(
     deps = [
         ":IRB140_analytical_kinematics",
         ":IRB140_common",
-        "//drake/common:call_matlab",
+        "//drake/common/proto:call_matlab",
         "//drake/multibody:global_inverse_kinematics",
         "//drake/multibody:inverse_kinematics",
     ],

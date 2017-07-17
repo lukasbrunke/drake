@@ -2,7 +2,7 @@
 
 #include <queue>
 
-#include "drake/common/drake_path.h"
+#include "drake/common/find_resource.h"
 #include "drake/multibody/parsers/urdf_parser.h"
 #include "drake/multibody/rigid_body_tree_construction.h"
 
@@ -31,7 +31,7 @@ IRB140AnalyticalKinematics::IRB140AnalyticalKinematics()
       l4_var_("l4"),
       c23_var_("c23"),
       s23_var_("s23") {
-  const std::string model_path = drake::GetDrakePath() + "/examples/IRB140/urdf/irb_140_shift.urdf";
+  const std::string model_path = *(drake::FindResource("drake/examples/IRB140/urdf/irb_140_shift.urdf").get_absolute_path());
   parsers::urdf::AddModelInstanceFromUrdfFile(
       model_path,
       drake::multibody::joints::kFixed,

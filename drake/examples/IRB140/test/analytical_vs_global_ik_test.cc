@@ -13,7 +13,7 @@
 #include "drake/multibody/rigid_body_ik.h"
 #include "drake/solvers/gurobi_solver.h"
 #include "drake/solvers/mosek_solver.h"
-#include "drake/common/call_matlab.h"
+#include "drake/common/proto/call_matlab.h"
 
 using Eigen::Isometry3d;
 
@@ -187,7 +187,7 @@ class DUT {
     solvers::GurobiSolver gurobi_solver;
     solvers::MosekSolver mosek_solver;
 
-    global_ik_.SetSolverOption(solvers::SolverType::kGurobi, "FeasibilityTol", 1E-5);
+    global_ik_.SetSolverOption(solvers::GurobiSolver::id(), "FeasibilityTol", 1E-5);
     //global_ik_.SetSolverOption(solvers::SolverType::kGurobi, "OutputFlag", 1);
     solvers::SolutionResult global_ik_status = gurobi_solver.Solve(global_ik_);
     //solvers::SolutionResult global_ik_status = mosek_solver.Solve(global_ik_);
@@ -711,8 +711,8 @@ void AnalyzeOutputFile(int argc, char* argv[]) {
 }  // namespace drake
 
 int main(int argc, char* argv[]) {
-  //drake::examples::IRB140::DoMain(argc, argv);
+  drake::examples::IRB140::DoMain(argc, argv);
   //drake::examples::IRB140::DebugOutputFile(argc, argv);
-  drake::examples::IRB140::AnalyzeOutputFile(argc, argv);
+  //drake::examples::IRB140::AnalyzeOutputFile(argc, argv);
   return 0;
 }
