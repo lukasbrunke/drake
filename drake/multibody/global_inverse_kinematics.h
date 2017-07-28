@@ -4,6 +4,7 @@
 
 #include "drake/multibody/rigid_body_tree.h"
 #include "drake/solvers/mathematical_program.h"
+#include "drake/solvers/rotation_constraint.h"
 
 namespace drake {
 namespace multibody {
@@ -20,6 +21,11 @@ class GlobalInverseKinematics : public solvers::MathematicalProgram {
 // inverseKin(), that accepts RigidBodyConstraint objects and cost function.
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(GlobalInverseKinematics)
+
+  enum ConstraintType {
+    kLinear,
+    kSecondOrderCone
+  };
 
   /**
    * Parses the robot kinematics tree. The decision variables include the
@@ -239,9 +245,13 @@ class GlobalInverseKinematics : public solvers::MathematicalProgram {
    * constrained.
    * @param joint_lower_bound The lower bound for the joint.
    * @param joint_upper_bound The upper bound for the joint.
+   * @param constraint_type Choose whether to formulate the joint limits as
+   * linear constraints, or second-order cone constraints, or both. @default is
+   * linear constraints.
    */
-  void AddJointLimitConstraint(int body_index, double joint_lower_bound,
-                               double joint_upper_bound);
+  void AddJointLimitConstraint(
+      int body_index, double joint_lower_bound, double joint_upper_bound,
+      std::set<ConstraintType> constraint_types = {ConstraintType::kLinear});
 
  private:
   // This is an utility function for `ReconstructGeneralizedPositionSolution`.
@@ -270,6 +280,15 @@ class GlobalInverseKinematics : public solvers::MathematicalProgram {
   // p_WBo_[i] is the position of the origin Bo of body frame B for the i'th
   // body, measured and expressed in the world frame.
   std::vector<solvers::VectorDecisionVariable<3>> p_WBo_;
+
+  // For each entry in the body rotation matrix, R_WB_[i](m, n), we divide its
+  // range [-1, 1] into smaller intervals, in the form
+  // [R_WB_phi_(M), R_WB_phi_(M + 1)]. This helps us to relax the non-convex
+  // SO(3) constraint, to a set of mixed-integer constraint. Check
+  // AddRotationMatrixBilinearMcCormickMilpConstraints for more details.
+  // R_WB_binary[i](m, n) contains the binary variables, that determines in which interval R_WB_[i](m, n) is in.
+  std::vector<solvers::AddRotationMatrixBilinearMcCormickMilpConstraintsReturn<2>::BinaryVarType> R_WB_binary_;
+  std::vector<solvers::AddRotationMatrixBilinearMcCormickMilpConstraintsReturn<2>::PhiType> R_WB_phi_;
 };
 }  // namespace multibody
 }  // namespace drake
