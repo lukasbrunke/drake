@@ -452,31 +452,40 @@ void GlobalInverseKinematics::AddJointLimitConstraint(
                                  2;
 
             if (joint_bound < M_PI) {
-              if (constraint_types.find(ConstraintType::kSecondOrderCone) != constraint_types.end()) {
+              // If the rotation angle θ satisfies
+              // a <= θ <= b
+              // This is equivalent to
+              // -α <= θ - (a+b)/2 <= α
+              // where α = (b-a) / 2, (a+b) / 2 is the joint offset, such that
+              // the bounds on β = θ - (a+b)/2 are symmetric.
+              // We use the following notation:
+              // R_WP     The rotation matrix of parent frame `P` to world
+              //          frame `W`.
+              // R_WC     The rotation matrix of child frame `C` to world
+              //          frame `W`.
+              // R_PF     The rotation matrix of joint frame `F` to parent
+              //          frame `P`.
+              // R(k, β)  The rotation matrix along joint axis k by angle β.
+              // The kinematics constraint is
+              // R_WP * R_PF * R(k, θ) = R_WC.
+              // This is equivalent to
+              // R_WP * R_PF * R(k, (a+b)/2) * R(k, β)) = R_WC.
+
+              // rotmat_joint_offset is R(k, (a+b)/2) explained above.
+              const Matrix3d rotmat_joint_offset =
+                  Eigen::AngleAxisd((joint_lower_bounds_[joint_idx] +
+                                     joint_upper_bounds_[joint_idx]) /
+                                        2,
+                                    axis_F)
+                      .toRotationMatrix();
+              if (constraint_types.find(ConstraintType::kSecondOrderCone) !=
+                  constraint_types.end()) {
                 // We use the fact that if the angle between two unit length
                 // vectors u and v is smaller than α, it is equivalent to
                 // |u - v| <= 2*sin(α/2)
                 // which is a second order cone constraint.
 
-                // If the rotation angle θ satisfies
-                // a <= θ <= b
-                // This is equivalent to
-                // -α <= θ - (a+b)/2 <= α
-                // where α = (b-a) / 2, (a+b) / 2 is the joint offset, such that
-                // the bounds on β = θ - (a+b)/2 are symmetric.
-                // We use the following notation:
-                // R_WP     The rotation matrix of parent frame `P` to world
-                //          frame `W`.
-                // R_WC     The rotation matrix of child frame `C` to world
-                //          frame `W`.
-                // R_PF     The rotation matrix of joint frame `F` to parent
-                //          frame `P`.
-                // R(k, β)  The rotation matrix along joint axis k by angle β.
-                // The kinematics constraint is
-                // R_WP * R_PF * R(k, θ) = R_WC.
-                // This is equivalent to
-                // R_WP * R_PF * R(k, (a+b)/2) * R(k, β)) = R_WC.
-                // So to constrain that -α <= β <= α,
+                // To constrain that -α <= β <= α,
                 // we can constrain the angle between the two vectors
                 // R_WC * v and R_WP * R_PF * R(k,(a+b)/2) * v is no larger than
                 // α, where v is a unit length vector perpendicular to
@@ -484,7 +493,6 @@ void GlobalInverseKinematics::AddJointLimitConstraint(
                 // Thus we can constrain that
                 // |R_WC*v - R_WP * R_PF * R(k,(a+b)/2)*v | <= 2*sin (α / 2)
                 // as we explained above.
-
 
                 // First generate a vector v_C that is perpendicular to rotation
                 // axis, in child frame.
@@ -517,14 +525,6 @@ void GlobalInverseKinematics::AddJointLimitConstraint(
                 v_samples[2] /= v_samples[2].norm();
                 v_samples[3] = v_basis[0] - v_basis[1];
                 v_samples[3] /= v_samples[3].norm();
-
-                // rotmat_joint_offset is R(k, (a+b)/2) explained above.
-                const Matrix3d rotmat_joint_offset =
-                    Eigen::AngleAxisd((joint_lower_bounds_[joint_idx] +
-                                          joint_upper_bounds_[joint_idx]) /
-                                          2,
-                                      axis_F)
-                        .toRotationMatrix();
 
                 // joint_limit_expr is going to be within the Lorentz cone.
                 Eigen::Matrix<Expression, 4, 1> joint_limit_expr;
@@ -582,7 +582,9 @@ void GlobalInverseKinematics::AddJointLimitConstraint(
                   AddRotatedLorentzConeConstraint(
                       Vector3<symbolic::Expression>(M(0, 0), M(1, 1), M(1, 0)));
                 }
-              } else if (constraint_types.find(ConstraintType::kSecondOrderCone) != constraint_types.end()) {
+              } else if (constraint_types.find(
+                             ConstraintType::kSecondOrderCone) !=
+                         constraint_types.end()) {
                 // From the documentation above, namely
                 // R_WP * R_PF * R(k, (a+b)/2) * R(k, β)) = R_WC,
                 // we know that R(k, β) = R(k, (a+b)/2)ᵀ * R_PFᵀ * R_WPᵀ * R_WC
@@ -593,6 +595,50 @@ void GlobalInverseKinematics::AddJointLimitConstraint(
                 // Note that we have the bilinear product between R_WP and R_WC,
                 // so we will replace the bilinear product, with another
                 // variable in its McCormick envelope.
+
+                // R_offset = R(k, (a+b)/2)ᵀ * R_PFᵀ
+                const Eigen::Matrix3d R_offset =
+                    rotmat_joint_offset.transpose() * X_PF.linear().transpose();
+                // trace(R_offset * R_WPᵀ * R_WC)
+                // = ∑ᵢⱼ R_offset(i, j) * (∑ₖ R_WP(k, i) * R_WC(k, j))
+                // If R_offset(i, j) ≠ 0, then trace(R_offset * R_WPᵀ * R_WC)
+                // has a bilinear term
+                // R_offset(i, j) * (∑ₖ R_WP(k, i) * R_WC(k, j))
+                VectorDecisionVariable<9> R_WP_flat, R_WC_flat;
+                R_WP_flat << R_WB_[parent_idx].col(0), R_WB_[parent_idx].col(1),
+                    R_WB_[parent_idx].col(2);
+                R_WC_flat << R_WB_[body_index].col(0), R_WB_[body_index].col(1),
+                    R_WB_[body_index].col(2);
+                // W_bilinear(i, j) will replace the bilinear product
+                // R_WP_flat(i) * R_WC_flat(j)
+                Eigen::Matrix<symbolic::Variable, 9, 9> W_bilinear;
+                // We will replace the bilinear product in
+                // trace(R_offset * R_WPᵀ * R_WC), and the result would be
+                // trace_rotmat;
+                symbolic::Expression trace_rotmat{0};
+                for (int i = 0; i < 3; ++i) {
+                  for (int j = 0; j < 3; ++j) {
+                    if (std::abs(R_offset(i, j)) >=
+                        std::numeric_limits<double>::epsilon()) {
+                      for (int k = 0; k < 3; ++k) {
+                        W_bilinear(i * 3 + k, j * 3 + k) =
+                            NewContinuousVariables<1>()(0);
+                        AddBilinearProductMcCormickEnvelopeSos2(
+                            this, R_WB_[parent_idx](k, i),
+                            R_WB_[body_index](k, j),
+                            W_bilinear(i * 3 + k, j * 3 + k),
+                            R_WB_phi_[parent_idx], R_WB_phi_[body_index],
+                            R_WB_binary_[parent_idx][k][i],
+                            R_WB_binary_[body_index][k][j]);
+                        trace_rotmat +=
+                            R_offset(i, j) * W_bilinear(i * 3 + k, j * 3 + k);
+                      }
+                    }
+                  }
+                }
+                AddLinearConstraint(trace_rotmat >=
+                                    1 + 2 * std::cos(joint_bound));
+                AddLinearConstraint(trace_rotmat <= 3);
               }
             }
           } else {
