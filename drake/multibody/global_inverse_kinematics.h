@@ -249,9 +249,10 @@ class GlobalInverseKinematics : public solvers::MathematicalProgram {
    * linear constraints, or second-order cone constraints, or both. @default is
    * linear constraints.
    */
-  void AddJointLimitConstraint(
-      int body_index, double joint_lower_bound, double joint_upper_bound,
-      std::set<ConstraintType> constraint_types = {ConstraintType::kLinear});
+  void AddJointLimitConstraint(int body_index, double joint_lower_bound,
+                               double joint_upper_bound,
+                               std::set<ConstraintType> constraint_types = {
+                                   ConstraintType::kSecondOrderCone});
 
  private:
   // This is an utility function for `ReconstructGeneralizedPositionSolution`.

@@ -596,10 +596,10 @@ void GlobalInverseKinematics::AddJointLimitConstraint(
                 // so we will replace the bilinear product, with another
                 // variable in its McCormick envelope.
 
-                // R_offset = R(k, (a+b)/2)ᵀ * R_PFᵀ
+                // R_offset = R_PF * R(k, (a+b)/2)
                 const Eigen::Matrix3d R_offset =
-                    rotmat_joint_offset.transpose() * X_PF.linear().transpose();
-                // trace(R_offset * R_WPᵀ * R_WC)
+                    X_PF.linear() * rotmat_joint_offset;
+                // trace(R_offsetᵀ * R_WPᵀ * R_WC)
                 // = ∑ᵢⱼ R_offset(i, j) * (∑ₖ R_WP(k, i) * R_WC(k, j))
                 // If R_offset(i, j) ≠ 0, then trace(R_offset * R_WPᵀ * R_WC)
                 // has a bilinear term
@@ -609,36 +609,32 @@ void GlobalInverseKinematics::AddJointLimitConstraint(
                     R_WB_[parent_idx].col(2);
                 R_WC_flat << R_WB_[body_index].col(0), R_WB_[body_index].col(1),
                     R_WB_[body_index].col(2);
-                // W_bilinear(i, j) will replace the bilinear product
-                // R_WP_flat(i) * R_WC_flat(j)
-                Eigen::Matrix<symbolic::Variable, 9, 9> W_bilinear;
                 // We will replace the bilinear product in
-                // trace(R_offset * R_WPᵀ * R_WC), and the result would be
-                // trace_rotmat;
-                symbolic::Expression trace_rotmat{0};
+                // trace(R_offsetᵀ * R_WPᵀ * R_WC), and the result would be
+                // R_joint_beta_trace;
+                symbolic::Expression R_joint_beta_trace{0};
                 for (int i = 0; i < 3; ++i) {
                   for (int j = 0; j < 3; ++j) {
                     if (std::abs(R_offset(i, j)) >=
                         std::numeric_limits<double>::epsilon()) {
                       for (int k = 0; k < 3; ++k) {
-                        W_bilinear(i * 3 + k, j * 3 + k) =
+                        auto R_WP_ki_times_R_WC_kj =
                             NewContinuousVariables<1>()(0);
                         AddBilinearProductMcCormickEnvelopeSos2(
                             this, R_WB_[parent_idx](k, i),
                             R_WB_[body_index](k, j),
-                            W_bilinear(i * 3 + k, j * 3 + k),
+                            R_WP_ki_times_R_WC_kj,
                             R_WB_phi_[parent_idx], R_WB_phi_[body_index],
                             R_WB_binary_[parent_idx][k][i],
                             R_WB_binary_[body_index][k][j]);
-                        trace_rotmat +=
-                            R_offset(i, j) * W_bilinear(i * 3 + k, j * 3 + k);
+                        R_joint_beta_trace += R_offset(i, j) * R_WP_ki_times_R_WC_kj;
                       }
                     }
                   }
                 }
-                AddLinearConstraint(trace_rotmat >=
+                AddLinearConstraint(R_joint_beta_trace >=
                                     1 + 2 * std::cos(joint_bound));
-                AddLinearConstraint(trace_rotmat <= 3);
+                AddLinearConstraint(R_joint_beta_trace <= 3);
               }
             }
           } else {
