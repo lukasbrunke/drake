@@ -98,6 +98,8 @@ GlobalInverseKinematics::GlobalInverseKinematics(
                   solvers::AddRotationMatrixBilinearMcCormickMilpConstraints<2>(
                       this, R_WB_[body_idx]);
 
+              solvers::AddRotationMatrixOrthonormalSocpConstraint(
+                  this, R_WB_[body_idx]);
               const RevoluteJoint* revolute_joint =
                   dynamic_cast<const RevoluteJoint*>(joint);
               // axis_F is the vector of the rotation axis in the joint
