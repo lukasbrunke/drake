@@ -1,8 +1,8 @@
-#include "drake/examples/IRB140/IRB140_analytical_kinematics.h"
+#include "drake/examples/irb140/IRB140_analytical_kinematics.h"
 
 #include <queue>
 
-#include "drake/common/drake_path.h"
+#include "drake/common/find_resource.h"
 #include "drake/multibody/parsers/urdf_parser.h"
 #include "drake/multibody/rigid_body_tree_construction.h"
 
@@ -31,11 +31,11 @@ IRB140AnalyticalKinematics::IRB140AnalyticalKinematics()
       l4_var_("l4"),
       c23_var_("c23"),
       s23_var_("s23") {
-  const std::string model_path = drake::GetDrakePath() + "/examples/IRB140/urdf/irb_140_shift.urdf";
-  parsers::urdf::AddModelInstanceFromUrdfFile(
-      model_path,
+  const char* kModelPath = "drake/examples/irb140/urdf/irb_140_shift.urdf";
+  const std::string urdf = FindResourceOrThrow(kModelPath);
+  parsers::urdf::AddModelInstanceFromUrdfFileToWorld(
+      urdf,
       drake::multibody::joints::kFixed,
-      nullptr,
       robot_.get());
 
   for (int i = 0; i < 6; ++i) {
