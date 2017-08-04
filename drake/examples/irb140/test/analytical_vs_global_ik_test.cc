@@ -6,14 +6,14 @@
 
 #include <gtest/gtest.h>
 
-#include "drake/examples/IRB140/IRB140_analytical_kinematics.h"
-#include "drake/examples/IRB140/test/irb140_common.h"
+#include "drake/examples/irb140/IRB140_analytical_kinematics.h"
+#include "drake/examples/irb140/test/irb140_common.h"
 #include "drake/multibody/constraint/rigid_body_constraint.h"
 #include "drake/multibody/global_inverse_kinematics.h"
 #include "drake/multibody/rigid_body_ik.h"
 #include "drake/solvers/gurobi_solver.h"
 #include "drake/solvers/mosek_solver.h"
-#include "drake/common/call_matlab.h"
+#include "drake/common/proto/call_matlab.h"
 
 using Eigen::Isometry3d;
 
@@ -128,7 +128,7 @@ class DUT {
       global_ik_.AddBoundingBoxConstraint(
           ee_rotmat_des.col(i), ee_rotmat_des.col(i), ee_rotmat.col(i));
     }
-
+/*
     for (int i = 1; i < robot()->get_num_bodies(); ++i) {
       const auto &body_R = global_ik_.body_rotation_matrix(i);
       Eigen::Matrix<symbolic::Expression, 5, 1> cone_expr;
@@ -150,7 +150,7 @@ class DUT {
       global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
       cone_expr.tail<3>() = body_R.row(0) - body_R.row(1) - body_R.row(2);
       global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
-    }
+    }*/
 
     const auto R_02 = global_ik_.body_rotation_matrix(2);
     global_ik_.AddBoundingBoxConstraint(0, 0, R_02(2, 0));
@@ -187,7 +187,7 @@ class DUT {
     solvers::GurobiSolver gurobi_solver;
     solvers::MosekSolver mosek_solver;
 
-    global_ik_.SetSolverOption(solvers::SolverType::kGurobi, "FeasibilityTol", 1E-5);
+    global_ik_.SetSolverOption(solvers::GurobiSolver::id(), "FeasibilityTol", 1E-5);
     //global_ik_.SetSolverOption(solvers::SolverType::kGurobi, "OutputFlag", 1);
     solvers::SolutionResult global_ik_status = gurobi_solver.Solve(global_ik_);
     //solvers::SolutionResult global_ik_status = mosek_solver.Solve(global_ik_);
