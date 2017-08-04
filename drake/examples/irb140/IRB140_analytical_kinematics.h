@@ -4,8 +4,7 @@
 #include <Eigen/Geometry>
 
 #include "drake/common/drake_copyable.h"
-#include "drake/common/symbolic_variable.h"
-#include "drake/common/symbolic_expression.h"
+#include "drake/common/symbolic.h"
 
 #include "drake/multibody/rigid_body_tree.h"
 

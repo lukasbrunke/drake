@@ -1,4 +1,4 @@
-#include "drake/examples/IRB140/test/irb140_common.h"
+#include "drake/examples/irb140/test/irb140_common.h"
 
 #include <gtest/gtest.h>
 
