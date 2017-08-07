@@ -128,7 +128,7 @@ class DUT {
       global_ik_.AddBoundingBoxConstraint(
           ee_rotmat_des.col(i), ee_rotmat_des.col(i), ee_rotmat.col(i));
     }
-/*
+
     for (int i = 1; i < robot()->get_num_bodies(); ++i) {
       const auto &body_R = global_ik_.body_rotation_matrix(i);
       Eigen::Matrix<symbolic::Expression, 5, 1> cone_expr;
@@ -150,7 +150,7 @@ class DUT {
       global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
       cone_expr.tail<3>() = body_R.row(0) - body_R.row(1) - body_R.row(2);
       global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
-    }*/
+    }
 
     const auto R_02 = global_ik_.body_rotation_matrix(2);
     global_ik_.AddBoundingBoxConstraint(0, 0, R_02(2, 0));
