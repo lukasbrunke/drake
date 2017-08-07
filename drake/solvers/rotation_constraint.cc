@@ -929,7 +929,7 @@ void AddUnitLengthConstraintWithSos2Lambda(
         symbolic::Expression x_sum_of_squares_lb{x0_square_lb + x1_square_lb +
                                                  x2_square_lb};
         if (!is_constant(x_sum_of_squares_lb)) {
-          prog->AddLinearConstraint(x_sum_of_squares_lb <= 1);
+          //prog->AddLinearConstraint(x_sum_of_squares_lb <= 1);
         }
       }
     }
@@ -1008,7 +1008,7 @@ void AddOrthogonalAndCrossProductConstraintRelaxationReplacingBilinearProduct(
       // R[Rj_row][Rj_col] = φᵀ * lambda[Rj_row][Rj_col]
       // So sum_n lambda_bilinear(m, n) = lambda[Ri_row][Ri_col]
       //    sum_m lambda_bilinear(m, n).transpose() = lambda[Rj_row][Rj_col]
-      prog->AddLinearConstraint(
+      /*prog->AddLinearConstraint(
           lambda_bilinear.template cast<symbolic::Expression>()
               .rowwise()
               .sum() == lambda[Ri_row][Ri_col]);
@@ -1016,7 +1016,7 @@ void AddOrthogonalAndCrossProductConstraintRelaxationReplacingBilinearProduct(
           lambda_bilinear.template cast<symbolic::Expression>()
               .colwise()
               .sum()
-              .transpose() == lambda[Rj_row][Rj_col]);
+              .transpose() == lambda[Rj_row][Rj_col]);*/
       W(j, i) = W(i, j);
       W_expr(j, i) = W_expr(i, j);
     }
