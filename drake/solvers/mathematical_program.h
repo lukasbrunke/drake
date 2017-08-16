@@ -34,6 +34,7 @@
 #include "drake/solvers/function.h"
 #include "drake/solvers/indeterminate.h"
 #include "drake/solvers/mathematical_program_solver_interface.h"
+#include "drake/solvers/nonlinear_complementary_constraint.h"
 
 namespace drake {
 namespace solvers {
@@ -1781,7 +1782,7 @@ class MathematicalProgram {
 
   /**
    * Adds constraints that a given symbolic expression @p e is a sums-of-squares
-   * (SOS), that is, @p e can be decomposed into `xTQx`. Note that it decomposes
+   * (SOS), that is, @p e can be decomposed into `xᵀQx`. Note that it decomposes
    * @p e into a polynomial with respect to `indeterminates()` in this
    * mathematical program. It returns a pair of
    * constraint bindings expressing:
@@ -1791,6 +1792,23 @@ class MathematicalProgram {
   std::pair<Binding<PositiveSemidefiniteConstraint>,
             Binding<LinearEqualityConstraint>>
   AddSosConstraint(const symbolic::Expression& e);
+
+
+  template<typename G, typename H>
+  std::tuple<Binding<Constraint>, Binding<BoundingBoxConstraint>, VectorXDecisionVariable>
+  AddGeneralNonlinearComplementaryCondition(G&& g, H&& h, const VariableRefList& vars) {
+    auto general_nonlinear_complementary_condition_evaluator = std::make_shared<GeneralNonlinearComplementaryConditionNonlinearEvaluator>(g, h);
+    const int num_complementary = general_nonlinear_complementary_condition_evaluator->num_complementary();
+    auto slack = NewContinuousVariables(2 * num_complementary);
+    // The slack variables are all non-negative.
+    auto slack_nonnegative_constraint = AddBoundingBoxConstraint(0, std::numeric_limits<double>::infinity(), slack);
+    Eigen::VectorXd lb(general_nonlinear_complementary_condition_evaluator->num_outputs());
+    lb.setZero();
+    Eigen::VectorXd ub = lb;
+    auto general_nonlinear_complementary_condition_constraint = std::make_shared<EvaluatorConstraint<>>(general_nonlinear_complementary_condition_evaluator, lb, ub);
+    auto general_nonlinear_complementary_condition_binding = AddConstraint(general_nonlinear_complementary_condition_constraint, {ConcatenateVariableRefList(vars), slack});
+    return std::make_tuple(general_nonlinear_complementary_condition_binding, slack_nonnegative_constraint, slack);
+  }
 
   // template <typename FunctionType>
   // void AddCost(std::function..);
