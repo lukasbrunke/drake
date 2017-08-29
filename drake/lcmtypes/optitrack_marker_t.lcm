@@ -1,0 +1,11 @@
+// This message is derived from the sMarker message
+// contained in the NetNat SDK version 2.10.0
+
+package optitrack;
+
+struct optitrack_marker_t {
+  int32_t id;     // Unique identifier
+  float xyz[3];  // Position
+  float size;    // marker size
+  int16_t params; // host defined parameters
+}

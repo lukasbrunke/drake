@@ -1,0 +1,24 @@
+// This message is derived from the sFrameOfMocapData message
+// contained in the NetNat SDK version 2.10.0
+
+package optitrack;
+
+struct optitrack_frame_t {
+  int64_t utime;
+  int32_t frame;                                 // host defined frame number
+  int32_t num_marker_sets;                       // # of marker sets in this frame of data
+  optitrack_marker_set_t marker_sets[num_marker_sets]; // MarkerSet data
+  int32_t num_other_markers;                     // # of undefined markers
+  float other_markers[num_other_markers][3];     // undefined marker data
+  int32_t num_rigid_bodies;                      // # of rigid bodies
+  optitrack_rigid_body_t rigid_bodies[num_rigid_bodies]; // Rigid body data
+  // Skipped skeletons.
+  int32_t num_labeled_markers;                   // # of Labeled Markers
+  optitrack_marker_t labeled_markers[num_labeled_markers]; // Labeled Marker data (labeled markers not associated with a "MarkerSet")
+  // Skipped force plates
+  float latency;                                // host defined time difference between capture and send, not necessarily frame accurate.
+  int64_t timecode;                              // SMPTE timecode (if available)
+  int64_t timecode_subframe;                     // timecode sub-frame data
+  double timestamp;                              // FrameGroup timestamp
+  int16_t params;                                // host defined parameters
+}

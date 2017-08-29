@@ -1,0 +1,16 @@
+// This message is derived from the sRigidBodyData message
+// contained in the NetNat SDK version 2.10.0
+
+package optitrack;
+
+struct optitrack_rigid_body_t {
+  int32_t id;                        // RigidBody identifier
+  float xyz[3];                     // Position
+  float quat[4];                    // Orientation
+  int32_t num_markers;               // Number of markers associated with this rigid body
+  float marker_xyz[num_markers][3]; // Array of marker data ( [nMarkers][3] )
+  int32_t marker_ids[num_markers];   // Array of marker IDs
+  float marker_sizes[num_markers];  // Array of marker sizes
+  float mean_error;                 // Mean measure-to-solve deviation
+  int16_t params;                    // Host defined tracking flags
+}

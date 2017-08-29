@@ -1,0 +1,11 @@
+// This message is derived from the sRigidBodyData message
+// contained in the NetNat SDK version 2.10.0
+
+package optitrack;
+
+struct optitrack_data_descriptions_t {
+  int32_t num_marker_sets;
+  optitrack_marker_set_description_t marker_sets[num_marker_sets];
+  int32_t num_rigid_bodies;
+  optitrack_rigid_body_description_t rigid_bodies[num_rigid_bodies];
+}

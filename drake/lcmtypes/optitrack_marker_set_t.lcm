@@ -1,0 +1,10 @@
+// This message is derived from the sMarkerSetDescription message
+// contained in the NetNat SDK version 2.10.0
+
+package optitrack;
+
+struct optitrack_marker_set_t {
+  string name;
+  int32_t num_markers;
+  float xyz[num_markers][3];
+}

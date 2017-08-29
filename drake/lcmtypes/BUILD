@@ -239,6 +239,22 @@ lcm_cc_library(
     ],
 )
 
+
+lcm_cc_library(
+    name = "optitrack",
+    lcm_package = "drake",
+    lcm_srcs = [
+        "optitrack_data_descriptions_t.lcm",
+        "optitrack_frame_t.lcm",
+        "optitrack_marker_set_description_t.lcm",
+        "optitrack_marker_set_t.lcm",
+        "optitrack_marker_t.lcm",
+        "optitrack_rigid_body_t.lcm",
+        "optitrack_rigid_body_description_t.lcm",
+    ],
+)
+
+
 # TODO(jwnimmer-tri) Many more C++ messages are missing ...
 
 lcm_py_library(
@@ -276,6 +292,7 @@ DRAKE_LCMTYPES = [
     ":inverse_dynamics_debug_info",
     ":joint_pd_override",
     ":manipulator_plan_move_end_effector",
+    ":optitrack",
     ":piecewise_polynomial",
     ":plan_eval_debug_info",
     ":polynomial",

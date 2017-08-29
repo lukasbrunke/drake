@@ -1,0 +1,11 @@
+// This message is derived from the sRigidBodyData message
+// contained in the NetNat SDK version 2.10.0
+
+package optitrack;
+
+struct optitrack_rigid_body_description_t {
+  string name;
+  int32_t id;
+  int32_t parent_id; // ID of parent Rigid Body (if hierarchy exists)
+  float offset_xyz[3]; // offset position relative to parent body
+}
