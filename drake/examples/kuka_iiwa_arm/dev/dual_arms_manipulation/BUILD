@@ -14,6 +14,7 @@ drake_cc_library(
     srcs = ["dual_arms_rotate_box_planner.cc"],
     hdrs = ["dual_arms_rotate_box_planner.h"],
     deps = [
+        "//drake/common:find_resource",
         "//drake/lcm",
         "//drake/multibody:rigid_body_tree",
         "//drake/multibody/parsers",
@@ -87,6 +88,17 @@ drake_cc_binary(
     deps = [
         "dual_arms_box_ik_planner_util",
         "dual_arms_box_util",
+        "//drake/manipulation/util:simple_tree_visualizer",
+    ],
+)
+
+drake_cc_binary(
+    name = "dual_arms_box_planner_demo",
+    srcs = ["test/dual_arms_box_planner_demo.cc"],
+    deps = [
+        "dual_arms_box_ik_planner_util",
+        "dual_arms_box_util",
+        "//drake/lcmtypes:optitrack",
         "//drake/manipulation/util:simple_tree_visualizer",
     ],
 )

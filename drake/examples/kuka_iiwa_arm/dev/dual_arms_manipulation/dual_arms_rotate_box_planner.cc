@@ -1,6 +1,6 @@
 #include "drake/examples/kuka_iiwa_arm/dev/dual_arms_manipulation/dual_arms_rotate_box_planner.h"
 
-#include "drake/common/drake_path.h"
+#include "drake/common/find_resource.h"
 #include "drake/multibody/parsers/urdf_parser.h"
 #include "drake/multibody/parsers/sdf_parser.h"
 #include "drake/multibody/joints/fixed_joint.h"
@@ -16,17 +16,17 @@ namespace kuka_iiwa_arm {
 std::unique_ptr<RigidBodyTreed> ConstructDualArmAndBox() {
   std::unique_ptr<RigidBodyTree<double>> rigid_body_tree =
       std::make_unique<RigidBodyTree<double>>();
-  const std::string model_path = drake::GetDrakePath() +
-                                 "/manipulation/models/iiwa_description/urdf/"
-                                 "dual_iiwa14_polytope_collision.urdf";
+  const std::string model_path = drake::FindResourceOrThrow(
+                                 "drake/manipulation/models/iiwa_description/urdf/"
+                                 "dual_iiwa14_polytope_collision.urdf");
 
   parsers::urdf::AddModelInstanceFromUrdfFile(model_path,
                                               drake::multibody::joints::kFixed,
                                               nullptr, rigid_body_tree.get());
 
   const std::string box_path =
-      drake::GetDrakePath() +
-      "/examples/kuka_iiwa_arm/dev/dual_arms_manipulation/box.urdf";
+      drake::FindResourceOrThrow()
+      "drake/examples/kuka_iiwa_arm/de/dual_arms_manipulation/box.urdf");
 
   parsers::urdf::AddModelInstanceFromUrdfFile(
       box_path, drake::multibody::joints::kQuaternion, nullptr,

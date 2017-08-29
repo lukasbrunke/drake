@@ -1,7 +1,7 @@
 // This message is derived from the sRigidBodyData message
 // contained in the NetNat SDK version 2.10.0
 
-package optitrack;
+package drake;
 
 struct optitrack_marker_set_description_t {
   string name;

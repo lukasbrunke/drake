@@ -239,7 +239,6 @@ lcm_cc_library(
     ],
 )
 
-
 lcm_cc_library(
     name = "optitrack",
     lcm_package = "drake",
@@ -253,7 +252,6 @@ lcm_cc_library(
         "optitrack_rigid_body_description_t.lcm",
     ],
 )
-
 
 # TODO(jwnimmer-tri) Many more C++ messages are missing ...
 
@@ -325,13 +323,13 @@ java_binary(
 
 install(
     name = "install",
-    targets = DRAKE_LCMTYPES + [
-        ":lcmtypes_drake_java",
-        ":lcmtypes_py",
-    ],
-    hdr_dest = "include/drake/lcmtypes",
     guess_hdrs = "PACKAGE",
+    hdr_dest = "include/drake/lcmtypes",
     rename = {"share/java/liblcmtypes_drake_java.jar": "lcmtypes_drake.jar"},
+    targets = DRAKE_LCMTYPES + [
+        ":lcmtypes_py",
+        ":lcmtypes_drake_java",
+    ],
 )
 
 # === test/ ===

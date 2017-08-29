@@ -145,6 +145,7 @@ _LIBDRAKE_COMPONENTS = [
     "//drake/multibody:rigid_body_tree_construction",
     "//drake/multibody/constraint:constraint",
     "//drake/multibody/shapes:shapes",
+"//drake/optitrack-driver/lcmtypes:optitrack_lcmtypes",
     "//drake/solvers:binding",
     "//drake/solvers:constraint",
     "//drake/solvers:cost",
