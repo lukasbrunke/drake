@@ -2,6 +2,8 @@
 
 #include <gtest/gtest.h>
 
+#include "drake/common/test_utilities/eigen_matrix_compare.h"
+
 namespace drake {
 namespace examples {
 namespace kuka_iiwa_arm {
@@ -76,10 +78,33 @@ std::vector<ContactFacet> ConstructContactFacets(double box_size, double mu) {
   return contact_facets;
 }
 
+GTEST_TEST(TestContactFacet, WrenchConeEdgeTest) {
+  double box_size = 0.5;
+  double mu = 0.4;
+  auto contact_facets = ConstructContactFacets(box_size, mu);
+  for (int i = 0; i < 6; ++i) {
+    auto wrench_cone_edges = contact_facets[i].CalcWrenchConeEdges();
+    EXPECT_EQ(wrench_cone_edges.size(), 4);
+    for (int j = 0; j < 4; ++j) {
+      EXPECT_EQ(wrench_cone_edges[j].cols(), contact_facets[i].NumFrictionConeEdges());
+      for (int k = 0; k < contact_facets[i].NumFrictionConeEdges(); ++k) {
+        Eigen::Matrix<double, 6, 1> wrench_expected;
+        wrench_expected.topRows<3>() = contact_facets[i].friction_cone_edges().col(k);
+        wrench_expected.bottomRows<3>() = contact_facets[i].vertices().col(j).cross(wrench_expected.topRows<3>());
+        EXPECT_TRUE(CompareMatrices(wrench_cone_edges[j].col(k), wrench_expected, 1E-10, MatrixCompareType::absolute));
+      }
+    }
+  }
+}
+
 Eigen::Matrix3d ConstructInertiaMatrix(double mass, double box_size) {
   Eigen::Matrix3d inertia =
       (mass / 6 * box_size * box_size * Eigen::Vector3d::Ones()).asDiagonal();
   return inertia;
+}
+
+class MultiContactTimeOptimalPlannerTest : public ::testing::Test {
+
 }
 
 GTEST_TEST(MultiContactTimeOptimalPlannerTest, TestRotation) {

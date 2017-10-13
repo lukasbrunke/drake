@@ -11,18 +11,24 @@ class ContactFacet {
   ContactFacet(const Eigen::Ref<const Eigen::Matrix3Xd>& vertices,
                const Eigen::Ref<const Eigen::Matrix3Xd>& friction_cone_edges);
 
-  std::vector<Eigen::Matrix<double, 6, Eigen::Dynamic>> WrenchConeEdges() const;
+  std::vector<Eigen::Matrix<double, 6, Eigen::Dynamic>> CalcWrenchConeEdges()
+      const;
 
-  int num_vertices() const { return vertices_.cols(); }
+  int NumVertices() const { return vertices_.cols(); }
 
-  int num_friction_cone_edges() const { return friction_cone_edges_.cols(); }
+  int NumFrictionConeEdges() const { return friction_cone_edges_.cols(); }
 
   const Eigen::Matrix3Xd& vertices() const { return vertices_; }
+
+  const Eigen::Matrix3Xd& friction_cone_edges() const {return friction_cone_edges_;}
 
  private:
   Eigen::Matrix3Xd vertices_;
   Eigen::Matrix3Xd friction_cone_edges_;
 };
+
+// forward declaration
+class MultiContactTimeOptimalPlannerTest;
 
 class MultiContactTimeOptimalPlanner : public solvers::MathematicalProgram {
  public:
@@ -42,20 +48,27 @@ class MultiContactTimeOptimalPlanner : public solvers::MathematicalProgram {
   void SetObjectPoseSequence(const std::vector<Eigen::Isometry3d>& object_pose);
 
  protected:
+  friend MultiContactTimeOptimalPlannerTest;
+
   symbolic::Expression s_ddot(int i) const {
     return (theta_(i + 1) - theta_(i)) / (2 * (s_(i + 1) - s_(i)));
   }
 
   // Given x' (∂x/∂s) and x'' (∂x²/∂²s), compute the acceleration of x.
-  Eigen::Matrix<symbolic::Expression, 3, 1> x_accel(
+  Eigen::Matrix<symbolic::Expression, 3, 1> VecAccel(
       int i, const Eigen::Ref<const Eigen::Vector3d>& x_prime,
       const Eigen::Ref<const Eigen::Vector3d>& x_double_prime) const;
 
   // Given CoM position along the path, compute r' (∂r/∂s) and r'' (∂r²/∂²s)
-  std::pair<Eigen::Matrix3Xd, Eigen::Matrix3Xd> com_path_prime(const Eigen::Ref<const Eigen::Matrix3Xd>& com_path) const;
+  std::pair<Eigen::Matrix3Xd, Eigen::Matrix3Xd> ComPathPrime(
+      const Eigen::Ref<const Eigen::Matrix3Xd>& com_path) const;
 
   // Given orientation along the path, compute ω_bar and ω_bar'
-  std::pair<Eigen::Matrix3Xd, Eigen::Matrix3Xd> angular_path_prime(const std::vector<Eigen::Matrix3d>& orient_path) const;
+  std::pair<Eigen::Matrix3Xd, Eigen::Matrix3Xd> AngularPathPrime(
+      const std::vector<Eigen::Matrix3d>& orient_path) const;
+
+  Eigen::Matrix<symbolic::Expression, 6, 1> ContactFacetWrench(
+      int facet_index, int time_index) const;
 
  private:
   double m_;

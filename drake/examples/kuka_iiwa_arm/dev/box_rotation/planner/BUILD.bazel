@@ -10,6 +10,7 @@ drake_cc_library(
     srcs = ["multicontact_time_optimal_planner.cc"],
     hdrs = ["multicontact_time_optimal_planner.h"],
     deps = [
+        "//drake/common/trajectories/qp_spline:spline_generation",
         "//drake/solvers:mathematical_program",
     ],
 )
@@ -18,6 +19,7 @@ drake_cc_googletest(
     name = "multicontact_time_optimal_planner_test",
     deps = [
         ":multicontact_time_optimal_planner",
+        "//drake/common/test_utilities:eigen_matrix_compare",
     ],
 )
 

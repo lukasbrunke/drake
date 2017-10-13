@@ -1,5 +1,6 @@
 #include "drake/examples/kuka_iiwa_arm/dev/box_rotation/planner/multicontact_time_optimal_planner.h"
 
+#include "drake/common/trajectories/qp_spline/spline_generation.h"
 namespace drake {
 namespace examples {
 namespace kuka_iiwa_arm {
@@ -10,11 +11,11 @@ ContactFacet::ContactFacet(
     : vertices_{vertices}, friction_cone_edges_{friction_cone_edges} {}
 
 std::vector<Eigen::Matrix<double, 6, Eigen::Dynamic>>
-ContactFacet::WrenchConeEdges() const {
+ContactFacet::CalcWrenchConeEdges() const {
   std::vector<Eigen::Matrix<double, 6, Eigen::Dynamic>> wrench_edges(
-      num_vertices());
-  for (int i = 0; i < num_vertices(); ++i) {
-    wrench_edges[i].resize(6, num_friction_cone_edges());
+      NumVertices());
+  for (int i = 0; i < NumVertices(); ++i) {
+    wrench_edges[i].resize(6, NumFrictionConeEdges());
     wrench_edges[i].topRows<3>() = friction_cone_edges_;
     // vertex_tilde represents the cross product with vertex, namely
     // vertex_tilde * a = vertex.cross(a) for any vector a.
@@ -45,8 +46,8 @@ MultiContactTimeOptimalPlanner::MultiContactTimeOptimalPlanner(
   lambda_.reserve(num_facets);
   for (int i = 0; i < num_facets; ++i) {
     lambda_.push_back(
-        NewContinuousVariables(contact_facets_[i].num_vertices() *
-                                   contact_facets_[i].num_friction_cone_edges(),
+        NewContinuousVariables(contact_facets_[i].NumVertices() *
+                                   contact_facets_[i].NumFrictionConeEdges(),
                                nT_, "lambda[" + std::to_string(i) + "]"));
     // This is the contact wrench cone constraint, that the weight has to be
     // non-negative.
@@ -71,23 +72,103 @@ MultiContactTimeOptimalPlanner::MultiContactTimeOptimalPlanner(
 }
 
 Eigen::Matrix<symbolic::Expression, 3, 1>
-MultiContactTimeOptimalPlanner::x_accel(
+MultiContactTimeOptimalPlanner::VecAccel(
     int i, const Eigen::Ref<const Eigen::Vector3d>& x_prime,
     const Eigen::Ref<const Eigen::Vector3d>& x_double_prime) const {
   return x_double_prime * theta_(i) + x_prime * s_ddot(i);
 }
 
 std::pair<Eigen::Matrix3Xd, Eigen::Matrix3Xd>
-MultiContactTimeOptimalPlanner::com_path_prime(
+MultiContactTimeOptimalPlanner::ComPathPrime(
     const Eigen::Ref<const Eigen::Matrix3Xd>& com_path) const {
-  // We assume that
+  // We assume that the CoM path is a cubic spline with continuous first and
+  // second derivatives. We further assume that the first and second derivatives
+  // at the final point are both 0.
+  Eigen::Matrix3Xd r_prime, r_double_prime;
+  r_prime.resize(3, nT_);
+  r_double_prime.resize(3, nT_);
+  std::vector<int> segment_polynomial_orders(nT_ - 1, 3);
+  std::vector<double> breaks(s_.data(), s_.data() + nT_);
+  for (int row = 0; row < 3; ++row) {
+    SplineInformation spline_info(segment_polynomial_orders, breaks);
+    spline_info.addValueConstraint(
+        0, ValueConstraint(0, spline_info.getStartTime(0), com_path(row, 0)));
+    for (int i = 0; i < nT_; ++i) {
+      spline_info.addValueConstraint(
+          i + 1, ValueConstraint(0, spline_info.getStartTime(i + 1),
+                                 com_path(row, i)));
+      for (int derivative_order = 0; derivative_order < 3; ++derivative_order) {
+        spline_info.addContinuityConstraint(
+            ContinuityConstraint(derivative_order, i, i + 1));
+      }
+    }
+    spline_info.addValueConstraint(
+        nT_ - 1, ValueConstraint(1, spline_info.getEndTime(nT_ - 1), 0));
+    spline_info.addValueConstraint(
+        nT_ - 1, ValueConstraint(2, spline_info.getEndTime(nT_ - 1), 0));
+    auto spline_traj = generateSpline(spline_info);
+    auto spline_deriv = spline_traj.derivative(1);
+    auto spline_dderiv = spline_deriv.derivative(1);
+    for (int i = 0; i < nT_; ++i) {
+      r_prime(row, i) = spline_deriv.value(s_(i))(0);
+      r_double_prime(row, i) = spline_dderiv.value(s_(i))(0);
+    }
+  }
+  return std::make_pair(r_prime, r_double_prime);
+}
+
+Eigen::Matrix<symbolic::Expression, 6, 1>
+MultiContactTimeOptimalPlanner::ContactFacetWrench(int facet_index,
+                                                   int time_index) const {
+  const std::vector<Eigen::Matrix<double, 6, Eigen::Dynamic>>
+      wrench_cone_edges = contact_facets_[facet_index].CalcWrenchConeEdges();
+  Eigen::Matrix<symbolic::Expression, 6, 1> facet_wrench;
+  facet_wrench << 0, 0, 0, 0, 0, 0;
+  for (int i = 0; i < contact_facets_[facet_index].NumVertices(); ++i) {
+    facet_wrench +=
+        wrench_cone_edges[i] *
+        lambda_[facet_index].block(
+            contact_facets_[facet_index].NumFrictionConeEdges() * i, time_index,
+            contact_facets_[facet_index].NumFrictionConeEdges(), 1);
+  }
+  return facet_wrench;
 }
 
 void MultiContactTimeOptimalPlanner::SetObjectPoseSequence(
     const std::vector<Eigen::Isometry3d>& object_pose) {
-  // First compute dr_ds and ddr_dds
-  // Suppose that CoM position r is a piecewise linear function of s,
-  // and s is evenly spaced between 0 and 1.
+  Eigen::Matrix3Xd r_prime, r_double_prime, omega_bar, omega_bar_prime;
+  Eigen::Matrix3Xd com_path(3, nT_);
+  std::vector<Eigen::Matrix3d> orient_path(nT_);
+  for (int i = 0; i < nT_; ++i) {
+    com_path.col(i) = object_pose[i].translation();
+    orient_path[i] = object_pose[i].linear();
+  }
+  std::tie(r_prime, r_double_prime) = ComPathPrime(com_path);
+  std::tie(omega_bar, omega_bar_prime) = AngularPathPrime(orient_path);
+
+  // Now add the Newton's law as constraint
+  for (int i = 0; i < nT_; ++i) {
+    Eigen::Matrix<symbolic::Expression, 6, 1> dynamics_constraint_lhs,
+        dynamics_constraint_rhs;
+    dynamics_constraint_lhs.topRows<3>() =
+        m_ * VecAccel(i, r_prime.col(i), r_double_prime.col(i));
+    dynamics_constraint_rhs.bottomRows<3>() =
+        I_B_ * VecAccel(i, omega_bar.col(i), omega_bar_prime.col(i)) +
+        omega_bar.col(i).cross(I_B_ * omega_bar.col(i)) * theta_(i);
+    dynamics_constraint_rhs << 0, 0, 0, 0, 0, 0;
+    dynamics_constraint_rhs.topRows<3>() = m_ * gravity_;
+    for (int facet_index = 0;
+         facet_index < static_cast<int>(contact_facets_.size());
+         ++facet_index) {
+      const Eigen::Matrix<symbolic::Expression, 6, 1> contact_facet_wrench =
+          ContactFacetWrench(facet_index, i);
+      dynamics_constraint_rhs.topRows<3>() +=
+          orient_path[i] * contact_facet_wrench.topRows<3>();
+      dynamics_constraint_rhs.bottomRows<3>() +=
+          contact_facet_wrench.bottomRows<3>();
+    }
+    AddLinearConstraint(dynamics_constraint_lhs == dynamics_constraint_rhs);
+  }
 }
 }  // namespace box_rotation
 }  // namespace kuka_iiwa_arm
