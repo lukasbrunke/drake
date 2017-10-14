@@ -1,6 +1,8 @@
 #include "drake/examples/kuka_iiwa_arm/dev/box_rotation/planner/multicontact_time_optimal_planner.h"
 
 #include "drake/common/trajectories/qp_spline/spline_generation.h"
+#include "drake/common/eigen_types.h"
+
 namespace drake {
 namespace examples {
 namespace kuka_iiwa_arm {
@@ -37,7 +39,7 @@ MultiContactTimeOptimalPlanner::MultiContactTimeOptimalPlanner(
       gravity_(0, 0, -9.81),
       nT_(nT),
       num_arms_(num_arms),
-      s_(Eigen::VectorXd::LinSpaced(nT - 1, 0, 1)) {
+      s_(Eigen::VectorXd::LinSpaced(nT, 0, 1)) {
   theta_ = NewContinuousVariables(nT_, "theta");
   // θ = ṡ², so θ >= 0.
   AddBoundingBoxConstraint(0, std::numeric_limits<double>::infinity(), theta_);
@@ -69,6 +71,25 @@ MultiContactTimeOptimalPlanner::MultiContactTimeOptimalPlanner(
   AddLinearConstraint(
       B_.cast<symbolic::Expression>().colwise().sum().transpose() <=
       num_arms_ * Eigen::VectorXd::Ones(nT_));
+
+  // Add the time interval upper bound variable
+  AddTimeIntervalBoundVariables();
+}
+
+void MultiContactTimeOptimalPlanner::AddTimeIntervalBoundVariables() {
+  t_bar_ = NewContinuousVariables(nT_ - 1, "t_bar");
+  solvers::VectorXDecisionVariable z = NewContinuousVariables(nT_, "z");
+  // z is the slack variable here, θ(i) >= z(i)²
+  for (int i = 0; i < nT_; ++i) {
+    Vector3<symbolic::Expression> expr;
+    expr << theta_(i), 1, z(i);
+    AddRotatedLorentzConeConstraint(expr);
+  }
+  for (int i = 0; i < nT_ - 1; ++i) {
+    Vector3<symbolic::Expression> expr1;
+    expr1 << t_bar_(i), (z(i) + z(i + 1)), std::sqrt(2 * (s_(i + 1) - s_(i)));
+    AddRotatedLorentzConeConstraint(expr1);
+  }
 }
 
 Eigen::Matrix<symbolic::Expression, 3, 1>
@@ -92,20 +113,21 @@ MultiContactTimeOptimalPlanner::ComPathPrime(
   for (int row = 0; row < 3; ++row) {
     SplineInformation spline_info(segment_polynomial_orders, breaks);
     spline_info.addValueConstraint(
-        0, ValueConstraint(0, spline_info.getStartTime(0), com_path(row, 0)));
-    for (int i = 0; i < nT_; ++i) {
+        nT_ - 2, ValueConstraint(0, spline_info.getEndTime(nT_ - 2), com_path(row, nT_ - 1)));
+    for (int i = 0; i < nT_ - 1; ++i) {
       spline_info.addValueConstraint(
-          i + 1, ValueConstraint(0, spline_info.getStartTime(i + 1),
-                                 com_path(row, i)));
+          i, ValueConstraint(0, spline_info.getStartTime(i), com_path(row, i)));
+    }
+    for (int i = 0; i < nT_ - 2; ++i) {
       for (int derivative_order = 0; derivative_order < 3; ++derivative_order) {
         spline_info.addContinuityConstraint(
             ContinuityConstraint(derivative_order, i, i + 1));
       }
     }
     spline_info.addValueConstraint(
-        nT_ - 1, ValueConstraint(1, spline_info.getEndTime(nT_ - 1), 0));
+        nT_ - 2, ValueConstraint(1, spline_info.getEndTime(nT_ - 2), 0));
     spline_info.addValueConstraint(
-        nT_ - 1, ValueConstraint(2, spline_info.getEndTime(nT_ - 1), 0));
+        nT_ - 2, ValueConstraint(2, spline_info.getEndTime(nT_ - 2), 0));
     auto spline_traj = generateSpline(spline_info);
     auto spline_deriv = spline_traj.derivative(1);
     auto spline_dderiv = spline_deriv.derivative(1);
@@ -115,6 +137,38 @@ MultiContactTimeOptimalPlanner::ComPathPrime(
     }
   }
   return std::make_pair(r_prime, r_double_prime);
+}
+
+std::pair<Eigen::Matrix3Xd, Eigen::Matrix3Xd>
+MultiContactTimeOptimalPlanner::AngularPathPrime(
+    const std::vector<Eigen::Matrix3d>& orient_path) const {
+  // This is a naive hack. We compute the average angular velocity in each
+  // segment, and treat it as the mean of the angular velocity in each segment.
+  Eigen::Matrix3Xd omega_bar(3, nT_);
+  Eigen::Matrix3Xd omega_bar_prime(3, nT_);
+  Eigen::Matrix3Xd omega_bar_average(3, nT_ - 1);
+  for (int i = 0; i < nT_ - 1; ++i) {
+    Eigen::AngleAxisd angle_diff(orient_path[i].transpose() *
+                                 orient_path[i + 1]);
+    omega_bar_average.col(i) =
+        angle_diff.axis() * angle_diff.angle() / (s_(i + 1) - s_(i));
+  }
+
+  // Assume that the final angular velocity is zero
+  omega_bar.col(nT_ - 1) = Eigen::Vector3d::Zero();
+  for (int i = nT_ - 2; i >= 0; --i) {
+    omega_bar.col(i) = 2 * omega_bar_average.col(i) - omega_bar.col(i + 1);
+  }
+
+  // Assume that the starting and ending accelerations are 0.
+  omega_bar_prime.col(0) = Eigen::Vector3d::Zero();
+  omega_bar_prime.col(nT_ - 1) = Eigen::Vector3d::Zero();
+  for (int i = 1; i < nT_ - 1; ++i) {
+    omega_bar_prime.col(i) =
+        (omega_bar_average.col(i) - omega_bar_average.col(i - 1)) /
+        ((s_(i + 1) - s_(i)) / 2);
+  }
+  return std::make_pair(omega_bar, omega_bar_prime);
 }
 
 Eigen::Matrix<symbolic::Expression, 6, 1>

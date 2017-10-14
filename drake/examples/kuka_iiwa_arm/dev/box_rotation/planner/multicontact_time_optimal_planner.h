@@ -47,11 +47,20 @@ class MultiContactTimeOptimalPlanner : public solvers::MathematicalProgram {
 
   void SetObjectPoseSequence(const std::vector<Eigen::Isometry3d>& object_pose);
 
+  const solvers::VectorXDecisionVariable& t_bar() const {return t_bar_;}
+
  protected:
   friend MultiContactTimeOptimalPlannerTest;
+  const solvers::VectorXDecisionVariable& theta() const {return theta_;}
+
+  const Eigen::VectorXd& s() const {return s_;}
 
   symbolic::Expression s_ddot(int i) const {
-    return (theta_(i + 1) - theta_(i)) / (2 * (s_(i + 1) - s_(i)));
+    if (i < nT_ - 1) {
+      return (theta_(i + 1) - theta_(i)) / (2 * (s_(i + 1) - s_(i)));
+    } else {
+      return (theta_(i) - theta_(i - 1)) / (2 * (s_(i) - s_(i - 1)));
+    }
   }
 
   // Given x' (∂x/∂s) and x'' (∂x²/∂²s), compute the acceleration of x.
@@ -69,6 +78,8 @@ class MultiContactTimeOptimalPlanner : public solvers::MathematicalProgram {
 
   Eigen::Matrix<symbolic::Expression, 6, 1> ContactFacetWrench(
       int facet_index, int time_index) const;
+
+  void AddTimeIntervalBoundVariables();
 
  private:
   double m_;
@@ -89,6 +100,9 @@ class MultiContactTimeOptimalPlanner : public solvers::MathematicalProgram {
   // B_ is a num_facets x nT matrix. B(i, j) = 1 if the i'th facet is active
   // at j'th time point.
   solvers::MatrixXDecisionVariable B_;
+  // t_bar_ is a nT - 1 x 1 vector. t_bar[i] is an upper bound on the duration
+  // of the i'th segment.
+  solvers::VectorXDecisionVariable t_bar_;
 };
 }  // namespace box_rotation
 }  // namespace kuka_iiwa_arm
