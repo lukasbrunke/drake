@@ -49,6 +49,17 @@ class MultiContactTimeOptimalPlanner : public solvers::MathematicalProgram {
 
   const solvers::VectorXDecisionVariable& t_bar() const {return t_bar_;}
 
+  /**
+   * Add an upper bound for a segment's time interval. Notice due to our
+   * parameterization, the constraint dt <= b would be a non-convex constraint.
+   * Here we impose a sufficient condition for dt <= b, such that this
+   * sufficient condition is convex.
+   * @param interval_index interval_index should be an integer between 0 and
+   * nT_ - 2
+   * @param dt_lower_bound The upper bound for the time interval
+   */
+  void AddTimeIntervalLowerBound(int interval_index, double dt_lower_bound);
+
  protected:
   friend MultiContactTimeOptimalPlannerTest;
   const solvers::VectorXDecisionVariable& theta() const {return theta_;}

@@ -1,7 +1,7 @@
 #include "drake/examples/kuka_iiwa_arm/dev/box_rotation/planner/multicontact_time_optimal_planner.h"
 
-#include "drake/common/trajectories/qp_spline/spline_generation.h"
 #include "drake/common/eigen_types.h"
+#include "drake/common/trajectories/qp_spline/spline_generation.h"
 
 namespace drake {
 namespace examples {
@@ -113,7 +113,8 @@ MultiContactTimeOptimalPlanner::ComPathPrime(
   for (int row = 0; row < 3; ++row) {
     SplineInformation spline_info(segment_polynomial_orders, breaks);
     spline_info.addValueConstraint(
-        nT_ - 2, ValueConstraint(0, spline_info.getEndTime(nT_ - 2), com_path(row, nT_ - 1)));
+        nT_ - 2, ValueConstraint(0, spline_info.getEndTime(nT_ - 2),
+                                 com_path(row, nT_ - 1)));
     for (int i = 0; i < nT_ - 1; ++i) {
       spline_info.addValueConstraint(
           i, ValueConstraint(0, spline_info.getStartTime(i), com_path(row, i)));
@@ -186,6 +187,25 @@ MultiContactTimeOptimalPlanner::ContactFacetWrench(int facet_index,
             contact_facets_[facet_index].NumFrictionConeEdges(), 1);
   }
   return facet_wrench;
+}
+
+void MultiContactTimeOptimalPlanner::AddTimeIntervalLowerBound(
+    int interval_index, double dt_lower_bound) {
+  if (interval_index < 0 || interval_index >= nT_ - 1) {
+    throw std::runtime_error("interval_index is out of range.");
+  }
+  if (dt_lower_bound < 0) {
+    throw std::runtime_error("dt_lower_bound is out of range.");
+  }
+  // The time interval is computed as
+  // dt = 2 * (s(i+1) - s(i)) / (sqrt(θ(i+1)) + sqrt(θ(i))
+  // The constraint dt >= lower_bound is a non-convex constraint on
+  // θ. We thus impose a convex constraint as a sufficient condition
+  // θ(i) <= (s(i+1)-s(i)/lower_bound)²
+  // θ(i+1) <= (s(i+1)-s(i)/lower_bound)²
+  double theta_upper_bound = std::pow(
+      (s_(interval_index + 1) - s_(interval_index)) / dt_lower_bound, 2);
+  AddBoundingBoxConstraint(0, theta_upper_bound, theta_.block<2, 1>(interval_index, 0));
 }
 
 void MultiContactTimeOptimalPlanner::SetObjectPoseSequence(

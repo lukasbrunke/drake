@@ -155,6 +155,11 @@ TEST_F(MultiContactTimeOptimalPlannerTest, TestRotation) {
   }
   planner_.SetObjectPoseSequence(box_poses);
 
+  double dt_lower_bound = 0.1;
+  for (int i = 0; i < nT_ - 1; ++i) {
+    planner_.AddTimeIntervalLowerBound(i, dt_lower_bound);
+  }
+
   planner_.AddCost(planner_.t_bar().cast<symbolic::Expression>().sum());
 
   solvers::GurobiSolver gurobi_solver;
@@ -168,13 +173,14 @@ TEST_F(MultiContactTimeOptimalPlannerTest, TestRotation) {
     auto theta_sol = planner_.GetSolution(theta());
     EXPECT_TRUE((theta_sol.array() >= 0).all());
     // Now check if t_bar is equal to the interval.
-    Eigen::VectorXd delta_t_expected =
+    Eigen::VectorXd delta_t =
         (2 * (s().bottomRows(nT_ - 1) - s().topRows(nT_ - 1)).array() /
          (theta_sol.topRows(nT_ - 1).array().sqrt() +
           theta_sol.bottomRows(nT_ - 1).array().sqrt()))
             .matrix();
-    EXPECT_TRUE(CompareMatrices(delta_t_expected, t_bar_sol, 1E-2,
+    EXPECT_TRUE(CompareMatrices(delta_t, t_bar_sol, 1E-2,
                                 MatrixCompareType::absolute));
+    EXPECT_TRUE((delta_t.array() >= dt_lower_bound - 1E-3).all());
   }
 }
 }  // namespace box_rotation
