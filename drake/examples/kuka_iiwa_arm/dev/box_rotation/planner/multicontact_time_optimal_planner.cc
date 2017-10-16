@@ -78,16 +78,16 @@ MultiContactTimeOptimalPlanner::MultiContactTimeOptimalPlanner(
 
 void MultiContactTimeOptimalPlanner::AddTimeIntervalBoundVariables() {
   t_bar_ = NewContinuousVariables(nT_ - 1, "t_bar");
-  solvers::VectorXDecisionVariable z = NewContinuousVariables(nT_, "z");
+  z_ = NewContinuousVariables(nT_, "z");
   // z is the slack variable here, θ(i) >= z(i)²
   for (int i = 0; i < nT_; ++i) {
     Vector3<symbolic::Expression> expr;
-    expr << theta_(i), 1, z(i);
+    expr << theta_(i), 1, z_(i);
     AddRotatedLorentzConeConstraint(expr);
   }
   for (int i = 0; i < nT_ - 1; ++i) {
     Vector3<symbolic::Expression> expr1;
-    expr1 << t_bar_(i), (z(i) + z(i + 1)), std::sqrt(2 * (s_(i + 1) - s_(i)));
+    expr1 << t_bar_(i), (z_(i) + z_(i + 1)), std::sqrt(2 * (s_(i + 1) - s_(i)));
     AddRotatedLorentzConeConstraint(expr1);
   }
 }
@@ -205,6 +205,7 @@ void MultiContactTimeOptimalPlanner::AddTimeIntervalLowerBound(
   // θ(i+1) <= (s(i+1)-s(i)/lower_bound)²
   double theta_upper_bound = std::pow(
       (s_(interval_index + 1) - s_(interval_index)) / dt_lower_bound, 2);
+  std::cout << "theta_upper_bound: " << theta_upper_bound << std::endl;
   AddBoundingBoxConstraint(0, theta_upper_bound, theta_.block<2, 1>(interval_index, 0));
 }
 

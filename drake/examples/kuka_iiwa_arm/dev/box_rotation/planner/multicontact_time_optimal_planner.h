@@ -60,6 +60,7 @@ class MultiContactTimeOptimalPlanner : public solvers::MathematicalProgram {
    */
   void AddTimeIntervalLowerBound(int interval_index, double dt_lower_bound);
 
+  solvers::VectorXDecisionVariable z_;
  protected:
   friend MultiContactTimeOptimalPlannerTest;
   const solvers::VectorXDecisionVariable& theta() const {return theta_;}

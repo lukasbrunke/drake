@@ -121,9 +121,11 @@ class MultiContactTimeOptimalPlannerTest : public ::testing::Test {
         planner_(mass_, ConstructInertiaMatrix(mass_, box_size_),
                  ConstructContactFacets(box_size_, mu_), nT_, num_arms_) {}
 
-  const solvers::VectorXDecisionVariable& theta() const {return planner_.theta();}
+  const solvers::VectorXDecisionVariable& theta() const {
+    return planner_.theta();
+  }
 
-  const Eigen::VectorXd& s() const {return planner_.s();}
+  const Eigen::VectorXd& s() const { return planner_.s(); }
 
  protected:
   double mass_;
@@ -155,7 +157,7 @@ TEST_F(MultiContactTimeOptimalPlannerTest, TestRotation) {
   }
   planner_.SetObjectPoseSequence(box_poses);
 
-  double dt_lower_bound = 0.1;
+  double dt_lower_bound = 0.01;
   for (int i = 0; i < nT_ - 1; ++i) {
     planner_.AddTimeIntervalLowerBound(i, dt_lower_bound);
   }
@@ -171,15 +173,27 @@ TEST_F(MultiContactTimeOptimalPlannerTest, TestRotation) {
 
     auto t_bar_sol = planner_.GetSolution(planner_.t_bar());
     auto theta_sol = planner_.GetSolution(theta());
+    auto z_sol = planner_.GetSolution(planner_.z_);
+    Eigen::VectorXd delta_s = s().bottomRows(nT_ - 1) - s().topRows(nT_ - 1);
     EXPECT_TRUE((theta_sol.array() >= 0).all());
+    EXPECT_TRUE(CompareMatrices(theta_sol, z_sol.array().square().matrix(),
+                                1E-5, MatrixCompareType::absolute));
+    std::cout << "sqrt(theta_sol) | z_sol:\n";
+    for (int i = 0; i < nT_; ++i) {
+      std::cout << std::sqrt(theta_sol(i)) << " " << z_sol(i) << std::endl;
+    }
+
+    EXPECT_TRUE(CompareMatrices(
+        2 * delta_s,
+        (t_bar_sol.array() * (z_sol.topRows(nT_ - 1).array() + z_sol.bottomRows(nT_ - 1).array())).matrix(),
+        1e-3, MatrixCompareType::absolute));
     // Now check if t_bar is equal to the interval.
     Eigen::VectorXd delta_t =
-        (2 * (s().bottomRows(nT_ - 1) - s().topRows(nT_ - 1)).array() /
-         (theta_sol.topRows(nT_ - 1).array().sqrt() +
-          theta_sol.bottomRows(nT_ - 1).array().sqrt()))
+        (2 * delta_s.array() / (theta_sol.topRows(nT_ - 1).array().sqrt() +
+                                theta_sol.bottomRows(nT_ - 1).array().sqrt()))
             .matrix();
-    EXPECT_TRUE(CompareMatrices(delta_t, t_bar_sol, 1E-2,
-                                MatrixCompareType::absolute));
+    EXPECT_TRUE(
+        CompareMatrices(delta_t, t_bar_sol, 1E-2, MatrixCompareType::absolute));
     EXPECT_TRUE((delta_t.array() >= dt_lower_bound - 1E-3).all());
   }
 }
