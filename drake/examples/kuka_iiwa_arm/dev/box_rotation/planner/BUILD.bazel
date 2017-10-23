@@ -1,0 +1,25 @@
+load(
+    "//tools:drake.bzl",
+    "drake_cc_library",
+    "drake_cc_googletest",
+)
+load("//tools/lint:lint.bzl", "add_lint_tests")
+
+drake_cc_library(
+    name = "multi_contact_approximated_dynamics_planner",
+    srcs = ["multi_contact_approximated_dynamics_planner.cc"],
+    hdrs = ["multi_contact_approximated_dynamics_planner.h"],
+    deps = [
+        "//drake/solvers:mathematical_program",
+    ],
+)
+
+drake_cc_googletest(
+    name = "multi_contact_approximated_dynamics_planner_test",
+    deps = [
+        ":multi_contact_approximated_dynamics_planner",
+        "//drake/common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+add_lint_tests()
