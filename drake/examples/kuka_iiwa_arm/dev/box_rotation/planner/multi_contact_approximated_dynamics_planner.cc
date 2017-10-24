@@ -1,6 +1,10 @@
 #include "drake/examples/kuka_iiwa_arm/dev/box_rotation/planner/multi_contact_approximated_dynamics_planner.h"
 
 namespace drake {
+using solvers::MatrixXDecisionVariable;
+using solvers::MatrixDecisionVariable;
+using solvers::VectorXDecisionVariable;
+using solvers::VectorDecisionVariable;
 namespace examples {
 namespace kuka_iiwa_arm {
 namespace box_rotation {
@@ -68,23 +72,37 @@ MultiContactApproximatedDynamicsPlanner::
         NewContinuousVariables(contact_facets_[i].NumVertices() *
                                    contact_facets_[i].NumFrictionConeEdges(),
                                nT_, "wrench_weight");
+    // The weights are all non-negative.
+    AddBoundingBoxConstraint(0, std::numeric_limits<double>::infinity(),
+                             contact_wrench_weight_[i]);
   }
+
+  total_contact_wrench_ =
+      NewContinuousVariables<6, Eigen::Dynamic>(6, nT_, "w_total");
+  Vector6<symbolic::Expression> total_contact_wrench_expected;
+  total_contact_wrench_expected << 0, 0, 0, 0, 0, 0;
+  for (int i = 0; i < num_facets; ++i) {
+    const auto friction_cone_edge_wrenches_i =
+        contact_facets_[i].CalcWrenchConeEdges();
+    total_contact_wrench_expected +=
+        friction_cone_edge_wrenches_i * contact_wrench_weight_[i];
+  }
+  AddLinearConstraint(total_contact_wrench_.array() ==
+                      total_contact_wrench_expected.array());
 }
 
-Vector6<symbolic::Expression>
-MultiContactApproximatedDynamicsPlanner::ContactFacetWrench(
-    int facet_index, int time_index) const {
-  Vector6<symbolic::Expression> wrench;
-  wrench << 0, 0, 0, 0, 0, 0;
-  const auto friction_cone_edge_wrenches =
-      contact_facets_[facet_index].CalcWrenchConeEdges();
-  for (int i = 0; i < contact_facets_[facet_index].NumVertices(); ++i) {
-    wrench += friction_cone_edge_wrenches[i] *
-              contact_wrench_weight_[facet_index].block(
-                  contact_facets_[facet_index].NumFrictionConeEdges() * i, 0,
-                  contact_facets_[facet_index].NumFrictionConeEdges(), 1);
+void MultiContactApproximatedDynamicsPlanner::AddLinearDynamicConstraint() {
+  for (int i = 0; i < nT_; ++i) {
+    VectorDecisionVariable<9, 1> R_WB_flat;
+    R_WB_flat << R_WB_[i].col(0), R_WB_[i].col(1), R_WB_[i].col(2);
+    // R_WB_plus_force_plus(i, j) should be equal to (R_WB_flat(i) + force(j))²
+    auto R_WB_times_force_plus = NewContinuousVariables<9, 3>(
+        "R_WB_times_force_+[" + std::to_string(i) + "]");
+    auto R_WB_times_force_minus = NewContinuousVariables<9, 3>(
+        "R_WB_times_force_-[" + std::to_string(i) + "]");
+    Vector3<symbolic::Expression> R_WB_times_force =
+        R_WB_[i] * total_contact_wrench_.block<3, 1>(0, i);
   }
-  return wrench;
 }
 }  // namespace box_rotation
 }  // namespace kuka_iiwa_arm

@@ -46,7 +46,13 @@ class MultiContactApproximatedDynamicsPlanner
       int num_arm_patches);
 
  private:
-  Vector6<symbolic::Expression> ContactFacetWrench(int facet_index, int time_index) const;
+  /**
+   * Add the constraint on the linear dynamics
+   * m * com_accel = R_WB * force + m * gravity;
+   * Notice that there is the bilinear product between R_WB and the contact
+   * force. We will need to relax this bilinear product to convex constraints.
+   */
+  void AddLinearDynamicConstraint();
 
   double m_;             // mass of the box.
   Eigen::Matrix3d I_B_;  // Inertia of the box, in the body frame.
@@ -81,6 +87,9 @@ class MultiContactApproximatedDynamicsPlanner
   // contact_facets_[i].NumFrictionConeEdges() rows,
   // and nT_ columns.
   std::vector<solvers::MatrixXDecisionVariable> contact_wrench_weight_;
+  // total_contact_wrench_ is a 6 x nT_ matrix. The first three rows for contact
+  // force, the bottom three rows for contact torque.
+  solvers::MatrixDecisionVariable<6, Eigen::Dynamic> total_contact_wrench_;
 };
 }  // namespace box_rotation
 }  // namespace kuka_iiwa_arm
