@@ -230,7 +230,7 @@ GTEST_TEST(GlobalIKTest, LittleDogInfeasibleTest) {
 
   solvers::GurobiSolver gurobi_solver;
   if (gurobi_solver.available()) {
-    global_ik.SetSolverOption(solvers::SolverType::kGurobi, "OutputFlag", 1);
+    global_ik.SetSolverOption(gurobi_solver.id(), "OutputFlag", 1);
     auto sol_result = gurobi_solver.Solve(global_ik);
     EXPECT_TRUE(sol_result == solvers::SolutionResult::kInfeasible_Or_Unbounded
     || sol_result == solvers::SolutionResult::kInfeasibleConstraints);
