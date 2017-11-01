@@ -4,8 +4,8 @@
 
 #include <gtest/gtest.h>
 
-#include "drake/common/drake_path.h"
-#include "drake/common/eigen_matrix_compare.h"
+#include "drake/common/find_resource.h"
+#include "drake/common/test_utilities/eigen_matrix_compare.h"
 #include "drake/multibody/parsers/urdf_parser.h"
 #include "drake/multibody/rigid_body_tree_construction.h"
 #include "drake/multibody/rigid_body_plant/create_load_robot_message.h"
@@ -15,7 +15,7 @@
 #include "drake/multibody/shapes/geometry.h"
 #include "drake/multibody/joints/fixed_joint.h"
 #include "drake/systems/framework/basic_vector.h"
-#include "drake/lcmtypes/drake/lcmt_viewer_load_robot.hpp"
+#include "drake/manipulation/util/simple_tree_visualizer.h"
 
 using Eigen::Vector3d;
 using Eigen::Isometry3d;
@@ -29,8 +29,8 @@ namespace {
 std::unique_ptr<RigidBodyTreed> ConstructLittleDog() {
   std::unique_ptr<RigidBodyTree<double>> rigid_body_tree =
       std::make_unique<RigidBodyTree<double>>();
-  const std::string model_path = drake::GetDrakePath() +
-      "/examples/LittleDog/LittleDog.urdf";
+  const std::string model_path = FindResourceOrThrow("drake/examples/LittleDog/LittleDog.urdf");
+
 
   parsers::urdf::AddModelInstanceFromUrdfFile(
       model_path,
@@ -45,22 +45,8 @@ std::unique_ptr<RigidBodyTreed> ConstructLittleDog() {
 
 void VisualizePosture(const RigidBodyTreed& tree, const Eigen::Ref<const Eigen::VectorXd>& q) {
   lcm::DrakeLcm lcm;
-  Eigen::VectorXd x(tree.get_num_positions() + tree.get_num_velocities());
-  x.head(q.size()) = q;
-  systems::BasicVector<double> x_draw(x);
-  std::vector<uint8_t> message_bytes;
-
-  lcmt_viewer_load_robot load_msg = multibody::CreateLoadRobotMessage<double>(tree);
-  const int length = load_msg.getEncodedSize();
-  message_bytes.resize(length);
-  load_msg.encode(message_bytes.data(), 0, length);
-  lcm.Publish("DRAKE_VIEWER_LOAD_ROBOT", message_bytes.data(),
-              message_bytes.size());
-
-  systems::ViewerDrawTranslator posture_drawer(tree);
-  posture_drawer.Serialize(0, x_draw, &message_bytes);
-  lcm.Publish("DRAKE_VIEWER_DRAW", message_bytes.data(),
-              message_bytes.size());
+  manipulation::SimpleTreeVisualizer simple_tree_visualizer(tree, &lcm);
+  simple_tree_visualizer.visualize(q);
 }
 
 void AddPointToBody(RigidBodyTreed* tree, int link_idx, const Eigen::Vector3d& pt, const std::string& name) {
@@ -146,6 +132,9 @@ GTEST_TEST(GlobalIKTest, LittleDogTest) {
   AddPointToBody(tree.get(), front_right_lower_leg_idx, front_r_toe, "front_r_toe");
   AddPointToBody(tree.get(), front_left_lower_leg_idx, front_l_toe, "front_l_toe");
 
+  Eigen::VectorXd q0(tree->get_num_positions());
+  q0(3) = 1.0;
+  VisualizePosture(*tree, q0);
   GlobalInverseKinematics global_ik(*tree, 2);
 
   auto front_left_toe_stepping_stone = global_ik.BodyPointInOneOfRegions(front_left_lower_leg_idx, front_l_toe, stepping_regions);
@@ -187,7 +176,7 @@ GTEST_TEST(GlobalIKTest, LittleDogTest) {
 
   solvers::GurobiSolver gurobi_solver;
   if (gurobi_solver.available()) {
-    global_ik.SetSolverOption(solvers::SolverType::kGurobi, "OutputFlag", 1);
+    global_ik.SetSolverOption(solvers::GurobiSolver::id(), "OutputFlag", 1);
     auto sol_result = gurobi_solver.Solve(global_ik);
     EXPECT_EQ(sol_result, solvers::SolutionResult::kSolutionFound);
     const auto q_ik = global_ik.ReconstructGeneralizedPositionSolution();
