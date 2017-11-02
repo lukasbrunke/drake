@@ -93,15 +93,8 @@ MultiContactApproximatedDynamicsPlanner::
 
 void MultiContactApproximatedDynamicsPlanner::AddLinearDynamicConstraint() {
   for (int i = 0; i < nT_; ++i) {
-    VectorDecisionVariable<9, 1> R_WB_flat;
-    R_WB_flat << R_WB_[i].col(0), R_WB_[i].col(1), R_WB_[i].col(2);
-    // R_WB_plus_force_plus(i, j) should be equal to (R_WB_flat(i) + force(j))²
-    auto R_WB_times_force_plus = NewContinuousVariables<9, 3>(
-        "R_WB_times_force_+[" + std::to_string(i) + "]");
-    auto R_WB_times_force_minus = NewContinuousVariables<9, 3>(
-        "R_WB_times_force_-[" + std::to_string(i) + "]");
-    Vector3<symbolic::Expression> R_WB_times_force =
-        R_WB_[i] * total_contact_wrench_.block<3, 1>(0, i);
+    Vector3<symbolic::Expression> linear_dynamics = m_ * com_accel_ -
+    solvers::Binding<solvers::QuadraticConstraint> = solvers::internal::ParseQuadraticCost
   }
 }
 }  // namespace box_rotation

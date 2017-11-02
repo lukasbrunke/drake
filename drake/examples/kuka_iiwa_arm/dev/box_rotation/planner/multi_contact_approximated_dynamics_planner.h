@@ -54,6 +54,19 @@ class MultiContactApproximatedDynamicsPlanner
    */
   void AddLinearDynamicConstraint();
 
+  /**
+   * Stores the non-convex quadratic constraint
+   * lb <= x'Q1x - x'Q2x + p'x <= ub
+   */
+  struct NonConvexQuadraticConstraint {
+    Eigen::MatrixXd Q1;
+    Eigen::MatrixXd Q2;
+    solvers::VectorXDecisionVariable x;
+    Eigen::VectorXd p;
+    double lb;
+    double ub;
+  };
+
   double m_;             // mass of the box.
   Eigen::Matrix3d I_B_;  // Inertia of the box, in the body frame.
   Eigen::Vector3d gravity_;
@@ -90,6 +103,8 @@ class MultiContactApproximatedDynamicsPlanner
   // total_contact_wrench_ is a 6 x nT_ matrix. The first three rows for contact
   // force, the bottom three rows for contact torque.
   solvers::MatrixDecisionVariable<6, Eigen::Dynamic> total_contact_wrench_;
+
+  std::vector<NonConvexQuadraticConstraint> non_convex_quadratic_constraints_;
 };
 }  // namespace box_rotation
 }  // namespace kuka_iiwa_arm
