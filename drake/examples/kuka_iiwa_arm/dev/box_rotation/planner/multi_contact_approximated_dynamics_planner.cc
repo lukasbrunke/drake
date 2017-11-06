@@ -1,10 +1,12 @@
 #include "drake/examples/kuka_iiwa_arm/dev/box_rotation/planner/multi_contact_approximated_dynamics_planner.h"
 
+#include "drake/solvers/non_convex_optimization_util.h"
 namespace drake {
 using solvers::MatrixXDecisionVariable;
 using solvers::MatrixDecisionVariable;
 using solvers::VectorXDecisionVariable;
 using solvers::VectorDecisionVariable;
+using solvers::Binding;
 namespace examples {
 namespace kuka_iiwa_arm {
 namespace box_rotation {
@@ -79,22 +81,72 @@ MultiContactApproximatedDynamicsPlanner::
 
   total_contact_wrench_ =
       NewContinuousVariables<6, Eigen::Dynamic>(6, nT_, "w_total");
-  Vector6<symbolic::Expression> total_contact_wrench_expected;
-  total_contact_wrench_expected << 0, 0, 0, 0, 0, 0;
+  Eigen::Matrix<symbolic::Expression, 6, Eigen::Dynamic>
+      total_contact_wrench_expected =
+          Eigen::Matrix<double, 6, Eigen::Dynamic>::Zero(6, nT_);
   for (int i = 0; i < num_facets; ++i) {
     const auto friction_cone_edge_wrenches_i =
         contact_facets_[i].CalcWrenchConeEdges();
-    total_contact_wrench_expected +=
-        friction_cone_edge_wrenches_i * contact_wrench_weight_[i];
+    for (int j = 0; j < contact_facets_[i].NumVertices(); ++j) {
+      total_contact_wrench_expected +=
+          friction_cone_edge_wrenches_i[j] *
+          contact_wrench_weight_[i].block(
+              j * contact_facets_[i].NumFrictionConeEdges(), 0,
+              contact_facets_[i].NumFrictionConeEdges(), nT_);
+    }
   }
-  AddLinearConstraint(total_contact_wrench_.array() ==
-                      total_contact_wrench_expected.array());
+
+  AddDynamicConstraint();
 }
 
-void MultiContactApproximatedDynamicsPlanner::AddLinearDynamicConstraint() {
+void MultiContactApproximatedDynamicsPlanner::AddDynamicConstraint() {
   for (int i = 0; i < nT_; ++i) {
-    Vector3<symbolic::Expression> linear_dynamics = m_ * com_accel_ -
-    solvers::Binding<solvers::QuadraticConstraint> = solvers::internal::ParseQuadraticCost
+    Vector6<symbolic::Expression> dynamics_linear;
+    Vector6<symbolic::Expression> dynamics_quadratic;
+    // We write the quadratic and linear part of the dynamics separately.
+    // We want the expression
+    // m * com_accel - R_WB * force - m * gravity
+    // I * omega_dot + omega.cross(I * omega) - torque
+    // being zero. This expression can be decomposed as the sum of a quadratic
+    // part and a linear part.
+    dynamics_linear << m_ * com_accel_.col(i) - m_ * gravity_,
+        I_B_ * omega_dot_BpB_.col(i) - total_contact_wrench_.block<3, 1>(3, i);
+    dynamics_quadratic << -R_WB_[i].cast<symbolic::Expression>() *
+                              total_contact_wrench_.block<3, 1>(0, i),
+        0, 0, 0;
+    // It is possible that omega.cross(I * omega) is not a quadratic expression,
+    // for example, when the inertia matrix I is the identity matrix (the box
+    // is a cuboid with identical length along each edge.)
+    const Vector3<symbolic::Expression> omega_cross_inertia_times_omega = omega_BpB_.col(i).cross(I_B_ * omega_BpB_.col(i));
+    for (int j = 0; j < 3; ++j) {
+      if (!is_zero(omega_cross_inertia_times_omega(j))) {
+        dynamics_quadratic(3 + j) = omega_cross_inertia_times_omega(j);
+      }
+    }
+
+    for (int j = 0; j < 6; ++j) {
+      if (!is_zero(dynamics_quadratic(j))) {
+        Binding<solvers::QuadraticCost> quadratic_expr =
+            solvers::internal::ParseQuadraticCost(dynamics_quadratic(j));
+        Binding<solvers::LinearCost> linear_expr =
+            solvers::internal::ParseLinearCost(dynamics_linear(j));
+        Eigen::MatrixXd Q1, Q2;
+        std::tie(Q1, Q2) = solvers::DecomposeNonConvexQuadraticForm(
+            quadratic_expr.constraint()->Q());
+        NonConvexQuadraticConstraint non_convex_quadratic_constraint;
+        non_convex_quadratic_constraint.lb = -linear_expr.constraint()->b();
+        non_convex_quadratic_constraint.ub = -linear_expr.constraint()->b();
+        non_convex_quadratic_constraint.p = linear_expr.constraint()->a();
+        non_convex_quadratic_constraint.y = linear_expr.variables();
+        non_convex_quadratic_constraint.Q1 = Q1;
+        non_convex_quadratic_constraint.Q2 = Q2;
+        non_convex_quadratic_constraint.x = quadratic_expr.variables();
+        non_convex_quadratic_constraints_.push_back(
+            non_convex_quadratic_constraint);
+      } else {
+        AddLinearConstraint(dynamics_linear(j) == 0);
+      }
+    }
   }
 }
 }  // namespace box_rotation

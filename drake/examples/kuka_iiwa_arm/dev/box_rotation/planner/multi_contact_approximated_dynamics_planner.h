@@ -35,6 +35,10 @@ class ContactFacet {
   Eigen::Matrix3Xd friction_cone_edges_;
 };
 
+namespace {
+class MultiContactApproximatedDynamicsPlannerTest; // Forward declaration
+}
+
 class MultiContactApproximatedDynamicsPlanner
     : public solvers::MathematicalProgram {
  public:
@@ -45,24 +49,32 @@ class MultiContactApproximatedDynamicsPlanner
       const std::vector<ContactFacet>& contact_facets, int nT,
       int num_arm_patches);
 
+  const std::vector<ContactFacet>& contact_facets() const {return contact_facets_;}
+
+  int nT() const {return nT_;}
+
  private:
+  friend MultiContactApproximatedDynamicsPlannerTest;
   /**
-   * Add the constraint on the linear dynamics
-   * m * com_accel = R_WB * force + m * gravity;
-   * Notice that there is the bilinear product between R_WB and the contact
-   * force. We will need to relax this bilinear product to convex constraints.
+   * Add the constraint on the box dynamics
+   * m * com_accel = R_WB * force + m * gravity
+   * I * omega_dot + omega.cross(I * omega) = torque
+   * Notice that there are the bilinear products between R_WB and the contact
+   * force, also the product between omega and itself. We will need to relax
+   * this bilinear product to convex constraints.
    */
-  void AddLinearDynamicConstraint();
+  void AddDynamicConstraint();
 
   /**
    * Stores the non-convex quadratic constraint
-   * lb <= x'Q1x - x'Q2x + p'x <= ub
+   * lb <= x'Q1x - x'Q2x + p'y <= ub
    */
   struct NonConvexQuadraticConstraint {
     Eigen::MatrixXd Q1;
     Eigen::MatrixXd Q2;
     solvers::VectorXDecisionVariable x;
     Eigen::VectorXd p;
+    solvers::VectorXDecisionVariable y;
     double lb;
     double ub;
   };

@@ -11,6 +11,7 @@ drake_cc_library(
     hdrs = ["multi_contact_approximated_dynamics_planner.h"],
     deps = [
         "//drake/solvers:mathematical_program",
+        "//drake/solvers:non_convex_optimization_util",
     ],
 )
 

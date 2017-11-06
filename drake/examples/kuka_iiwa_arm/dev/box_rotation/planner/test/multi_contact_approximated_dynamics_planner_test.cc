@@ -13,8 +13,16 @@ std::vector<ContactFacet> ConstructContactFacets(double box_size, double mu) {
   std::vector<ContactFacet> contact_facets;
   contact_facets.reserve(6);
 
-  Eigen::Matrix<double, 3, 4> friction_cone_edges;
-  friction_cone_edges << 1, 0, -1, 0, 0, 1, 0, -1, 1, 1, 1, 1;
+  constexpr int num_edges_per_cone = 5;
+  Eigen::Matrix<double, 3, num_edges_per_cone> friction_cone_edges;
+  Eigen::Matrix<double, 1, num_edges_per_cone> cone_theta =
+      Eigen::Matrix<double, 1, num_edges_per_cone + 1>::LinSpaced(
+          num_edges_per_cone + 1, 0, 2 * M_PI)
+          .leftCols<num_edges_per_cone>();
+  friction_cone_edges.row(0) = cone_theta.array().cos().matrix();
+  friction_cone_edges.row(1) = cone_theta.array().sin().matrix();
+  friction_cone_edges.row(2) =
+      Eigen::Matrix<double, 1, num_edges_per_cone>::Ones();
   friction_cone_edges.topRows<2>() * mu;
 
   Eigen::Matrix<double, 3, 8> box_vertices;
@@ -113,14 +121,90 @@ Eigen::Matrix3d ConstructInertiaMatrix(double mass, double box_size) {
 class MultiContactApproximatedDynamicsPlannerTest : public ::testing::Test {
  public:
   MultiContactApproximatedDynamicsPlannerTest()
-      : planner_(2, ConstructInertiaMatrix(2, 0.5), ConstructContactFacets(0.5, 0.4), 10, 3) {}
+      : planner_(2, ConstructInertiaMatrix(2, 0.5),
+                 ConstructContactFacets(0.5, 0.4), 10, 3) {}
+
+  void GenerateBoxTrajectory(
+      const std::vector<Eigen::MatrixXd>& contact_wrench_weight,
+      const Eigen::Isometry3d& box_pose0,
+      const Eigen::Ref<const Eigen::Vector3d>& com_vel0,
+      const Eigen::Ref<const Eigen::Vector3d>& omega_BpB0,
+      const Eigen::Ref<const Eigen::Vector3d>& omega_dot_BpB0) {
+    DRAKE_ASSERT(contact_wrench_weight.size() ==
+                 planner_.contact_facets().size());
+    for (int i = 0; i < static_cast<int>(planner_.contact_facets().size());
+         ++i) {
+      planner_.AddBoundingBoxConstraint(contact_wrench_weight[i],
+                                        contact_wrench_weight[i],
+                                        planner_.contact_wrench_weight_[i]);
+    }
+    const auto& contact_facets = planner_.contact_facets();
+    for (int i = 0; i < planner_.nT(); ++i) {
+      Vector6<double> contact_wrench = Vector6<double>::Zero();
+      for (int j = 0; j < static_cast<int>(contact_facets.size()); ++j) {
+        for (int k = 0; k < contact_facets[j].NumVertices(); ++k) {
+          contact_wrench += contact_facets[j].CalcWrenchConeEdges()[k] *
+                            contact_wrench_weight[j].block(
+                                k * contact_facets[j].NumFrictionConeEdges(), i,
+                                contact_facets[j].NumFrictionConeEdges(), 1);
+        }
+      }
+      planner_.AddBoundingBoxConstraint(contact_wrench, contact_wrench,
+                                        planner_.total_contact_wrench_.col(i));
+    }
+  }
+
+  void CheckConstructor(
+      const std::vector<Eigen::MatrixXd>& contact_wrench_weight,
+      const Eigen::Isometry3d& box_pose0,
+      const Eigen::Ref<const Eigen::Vector3d>& com_vel0,
+      const Eigen::Ref<const Eigen::Vector3d>& omega_BpB0,
+      const Eigen::Ref<const Eigen::Vector3d>& omega_dot_BpB0) {
+    // For each time sample, there are 3 non-convex quadratic constraint on the
+    // dynamics, coming from R_WB * total_contact_force
+    const int num_non_convex_quadratic_constraints = 3 * planner_.nT();
+    EXPECT_EQ(planner_.non_convex_quadratic_constraints_.size(),
+              num_non_convex_quadratic_constraints);
+    GenerateBoxTrajectory(contact_wrench_weight, box_pose0, com_vel0,
+                          omega_BpB0, omega_dot_BpB0);
+  }
 
  protected:
   MultiContactApproximatedDynamicsPlanner planner_;
 };
 
-TEST_F(MultiContactApproximatedDynamicsPlannerTest, TestConstruction) {
+void SetActiveContactWrenchWeight(
+    std::vector<Eigen::MatrixXd>* contact_wrench_weight, int time_index,
+    const std::vector<int>& active_facets) {
+  for (int facet_idx : active_facets) {
+    contact_wrench_weight->at(facet_idx).col(time_index) =
+        Eigen::VectorXd::Random(contact_wrench_weight->at(facet_idx).rows())
+            .array()
+            .abs()
+            .matrix();
+  }
+}
 
+TEST_F(MultiContactApproximatedDynamicsPlannerTest, TestConstruction) {
+  // Test if the total contact wrench at each time sample is computed correctly,
+  // from the weights of each friction cone edges.
+  std::vector<Eigen::MatrixXd> contact_wrench_weight(
+      planner_.contact_facets().size());
+
+  for (int i = 0; i < static_cast<int>(planner_.contact_facets().size()); ++i) {
+    contact_wrench_weight[i].resize(
+        planner_.contact_facets()[i].NumFrictionConeEdges() *
+            planner_.contact_facets()[i].NumVertices(),
+        planner_.nT());
+    contact_wrench_weight[i].setZero();
+  }
+  SetActiveContactWrenchWeight(&contact_wrench_weight, 0, {0, 1, 3});
+  const Eigen::Isometry3d box_pose0 = Eigen::Isometry3d::Identity();
+  const Eigen::Vector3d com_vel0(0.1, 0.2, 0.3);
+  const Eigen::Vector3d omega_BpB0(0.3, 0.2, 1);
+  const Eigen::Vector3d omega_dot_BpB0(0.1, -0.2, 2);
+  CheckConstructor(contact_wrench_weight, box_pose0, com_vel0, omega_BpB0,
+                   omega_dot_BpB0);
 }
 }  // namespace
 }  // namespace box_rotation
