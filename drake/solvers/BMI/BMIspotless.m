@@ -160,7 +160,7 @@ classdef BMIspotless < spotsosprog
     function w_direction = descentDirection(obj,sol_w,sol_W)
       covW = sol_W-(sol_w*sol_w').*obj.blk1s;
       min_eig_covW = min(eig(covW));
-      w_direction = mvnrnd(sol_w,obj.alpha_covW*(covW+max(abs(1.1*min_eig_covW),1e-4)*eye(size(covW))),1)';
+      w_direction = sol_w; %mvnrnd(sol_w,obj.alpha_covW*(covW+max(abs(1.1*min_eig_covW),1e-4)*eye(size(covW))),1)';
     end
     
     function plotSolution(obj,sol,sol_bilinear)
