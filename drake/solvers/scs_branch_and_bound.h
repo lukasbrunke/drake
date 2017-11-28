@@ -212,5 +212,66 @@ class ScsNode {
   // TODO(hongkai.dai) Add a function to set the integer tolerance.
   double integer_tol_ = 1E-2;
 };
+
+/**
+ * Given a mixed-integer convex optimization program in SCS format
+ * <pre>
+ * min cᵀx
+ * s.t Ax + s = b
+ *     s in K
+ *     y are binary variables.
+ * <pre>
+ * where y is a subset of the variables x, and the indices of binary variable y
+ * in x that should only take binary value {0, 1}, solve this mixed-integer
+ * optimization problem through branch-and-bound.
+ */
+class ScsBranchAndBound {
+ public:
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(ScsBranchAndBound)
+
+  /**
+   * Construct the root of the tree for the branch and bound. The mixed-integer
+   * optimization problem is
+   * <pre>
+   * min cᵀx
+   * s.t Ax + s = b
+   *     s in K
+   *     y are binary variables.
+   * </pre>
+   * @param scs_data scs_data contains the A, b, c matrices of the problem,
+   * together with the settings of the problem. Notice that the data A, b, c do
+   * NOT include the integral constraints on y, nor the relaxation 0 ≤ y ≤ 1.
+   * @param binary_var_indices The indices of the binary variables y in x.
+   */
+  ScsBranchAndBound(const SCS_PROBLEM_DATA& scs_data, const std::list<int>& binary_var_indices);
+
+
+ private:
+  // scs_data_ includes the data on c, A, b, and the cone K. It also contains
+  // the settings of the problem, such as iteration limit, accuracy, etc.
+  std::unique_ptr<SCS_PROBLEM_DATA, void(*)(SCS_PROBLEM_DATA*)> scs_data_;
+  // binary_var_indices_ records the indices of all binary variables in x.
+  std::list<int> binary_var_indices_;
+
+  // The root of the tree
+  std::unique_ptr<ScsNode> root_;
+
+  // The best upper bound of the mixed-integer optimization optimal cost. An
+  // upper bound is obtained by evaluating the cost at a solution satisfying
+  // all the constraints in the mixed-integer problem.
+  double best_upper_bound_;
+
+  // The best lower bound of the mixed-integer optimization optimal cost. This
+  // best lower bound is obtained by taking the minimal of the optimal cost in
+  // each leaf node.
+  double best_lower_bound_;
+
+  // We will stop the branch and bound, and regard the best upper bound is
+  // sufficiently close to the best lower bound, if
+  // (best_upper_bound_ - best_lower_bound_) / abs(best_lower_bound) < relative_gap_tol_
+  double relative_gap_tol_;
+
+  std::list<ScsNode*> active_leaves_;
+};
 }  // namespace solvers
 }  // namespace drake
