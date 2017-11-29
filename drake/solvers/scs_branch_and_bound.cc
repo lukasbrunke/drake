@@ -11,6 +11,30 @@ namespace solvers {
 namespace {
 void free_scs_pointer(void* scs_pointer) { scs_free(scs_pointer); }
 
+// Find the node with the smallest optimal cost in the range [first, first +
+// length).
+// The complexity of this function is O(log₂N), where N is the length of the
+// list.
+ScsNode* FindNodeWithSmallestCost(std::list<ScsNode*>::const_iterator first,
+                                  int length) {
+  // TODO(hongkai.dai): test other implementations to see if it is faster
+  // 1. Use bubble sort on the list.
+  // 2. Instead of using the list, do a binary search on the tree directly.
+  if (length <= 0) {
+    throw std::runtime_error("The length must be positive.");
+  } else if (length == 1) {
+    return *first;
+  } else {
+    const int half_length = length / 2;
+    ScsNode* l_min_node = FindNodeWithSmallestCost(first, half_length);
+    auto it = first;
+    for (int i = 0; i < half_length; ++i) {
+      ++it;
+    }
+    ScsNode* r_min_node = FindNodeWithSmallestCost(it, length - half_length);
+    return l_min_node->cost() < r_min_node->cost() ? l_min_node : r_min_node;
+  }
+}
 }  // namespace
 
 ScsNode::ScsNode(int num_A_rows, int num_A_cols)
@@ -400,6 +424,33 @@ scs_int ScsNode::Solve(const SCS_SETTINGS& scs_settings) {
   scs_finish(scs_work);
   scs_free(scs_problem_data);
   return scs_status;
+}
+
+ScsBranchAndBound::ScsBranchAndBound(const SCS_PROBLEM_DATA& scs_data,
+                                     const SCS_CONE& cone, double cost_constant,
+                                     const std::list<int>& binary_var_indices)
+    : scs_data_{scs_data},
+      binary_var_indices_{binary_var_indices},
+      root_{ScsNode::ConstructRootNode(*(scs_data.A), scs_data.b, scs_data.c,
+                                       cone, binary_var_indices,
+                                       cost_constant)},
+      best_upper_bound_{std::numeric_limits<double>::infinity()},
+      best_lower_bound_{-std::numeric_limits<double>::infinity()},
+      relative_gap_tol_{1E-2},
+      active_leaves_{root_.get()} {}
+
+ScsNode* ScsBranchAndBound::PickBranchingNode() const {
+  return FindNodeWithSmallestCost(active_leaves_.cbegin(),
+                                  active_leaves_.size());
+}
+
+int ScsBranchAndBound::PickBranchingVariable(ScsNode* node) { return 0; }
+
+void ScsBranchAndBound::PickBranchingVariableAndSolve(ScsNode* node) {
+  int binary_var_index = PickBranchingVariable(node);
+  node->Branch(binary_var_index);
+  node->left_child()->Solve(*(scs_data_.stgs));
+  node->right_child()->Solve(*(scs_data_.stgs));
 }
 }  // namespace solvers
 }  // namespace drake

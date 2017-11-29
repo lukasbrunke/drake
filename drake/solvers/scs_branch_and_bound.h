@@ -216,7 +216,7 @@ class ScsNode {
 /**
  * Given a mixed-integer convex optimization program in SCS format
  * <pre>
- * min cᵀx
+ * min cᵀx + d
  * s.t Ax + s = b
  *     s in K
  *     y are binary variables.
@@ -224,16 +224,32 @@ class ScsNode {
  * where y is a subset of the variables x, and the indices of binary variable y
  * in x that should only take binary value {0, 1}, solve this mixed-integer
  * optimization problem through branch-and-bound.
+ *
+ * The performance of the branch-and-bound highly depends on some choices,
+ * including
+ * 1. Which leaf node to branch.
+ * 2. Which binary variable to branch.
+ * 3. How to find a feasible solution to the mixed-integer problem, from the
+ *    solution to the problem in a node. This feasible solution will generate
+ *    an upper bound of the mixed-integer problem.
+ * In this class we provide default choices, and also virtual functions as
+ * interfaces to implement the user's own choices. The user could inherit this
+ * class, and implement their choices in the sub-class.
  */
 class ScsBranchAndBound {
  public:
+  enum class PickVariable {
+    LeastAmbivalent,  // pick the variable that is closest to either 0 or 1
+    MostAmbivalent    // pick the variable that is closest to 0.5
+  };
+
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(ScsBranchAndBound)
 
   /**
    * Construct the root of the tree for the branch and bound. The mixed-integer
    * optimization problem is
    * <pre>
-   * min cᵀx
+   * min cᵀx + d
    * s.t Ax + s = b
    *     s in K
    *     y are binary variables.
@@ -241,15 +257,46 @@ class ScsBranchAndBound {
    * @param scs_data scs_data contains the A, b, c matrices of the problem,
    * together with the settings of the problem. Notice that the data A, b, c do
    * NOT include the integral constraints on y, nor the relaxation 0 ≤ y ≤ 1.
+   * scs_data should outlive the ScsBranchAndBound object constructed in this
+   * function.
+   * @param cone The cone `K` in the documentation above. This cone should
+   * outlive the ScsBranchAndBound object constructed in this function.
+   * @param cost_constant The constant term in the cost, `d` in the
+   * documentation above.
    * @param binary_var_indices The indices of the binary variables y in x.
    */
-  ScsBranchAndBound(const SCS_PROBLEM_DATA& scs_data, const std::list<int>& binary_var_indices);
+  ScsBranchAndBound(const SCS_PROBLEM_DATA& scs_data, const SCS_CONE& cone,
+                    double cost_constant,
+                    const std::list<int>& binary_var_indices);
 
+  virtual ~ScsBranchAndBound() {}
+
+ protected:
+  /**
+   * Given a node, pick a binary variable in the node to branch.
+   * The two child nodes are created in this function. The optimization problems
+   * in the two child nodes are solved.
+   * @param node
+   */
+  void PickBranchingVariableAndSolve(ScsNode* node);
 
  private:
+  friend class ScsBranchAndBoundTest;  // Forward declaration
+
+  /**
+   * Pick one node to branch. The default is to pick the node with the smallest
+   * optimal cost.
+   */
+  virtual ScsNode* PickBranchingNode() const;
+
+  /**
+   * Pick one variable to branch, returns the index of the branching variable.
+   */
+  virtual int PickBranchingVariable(ScsNode* node);
+
   // scs_data_ includes the data on c, A, b, and the cone K. It also contains
   // the settings of the problem, such as iteration limit, accuracy, etc.
-  std::unique_ptr<SCS_PROBLEM_DATA, void(*)(SCS_PROBLEM_DATA*)> scs_data_;
+  SCS_PROBLEM_DATA scs_data_;
   // binary_var_indices_ records the indices of all binary variables in x.
   std::list<int> binary_var_indices_;
 
@@ -268,10 +315,18 @@ class ScsBranchAndBound {
 
   // We will stop the branch and bound, and regard the best upper bound is
   // sufficiently close to the best lower bound, if
-  // (best_upper_bound_ - best_lower_bound_) / abs(best_lower_bound) < relative_gap_tol_
+  // (best_upper_bound_ - best_lower_bound_) / abs(best_lower_bound) <
+  // relative_gap_tol_
   double relative_gap_tol_;
 
+  // The list of active leaves, i.e., the leaf nodes that have not been
+  // fathomed. A leaf node is fathomed if
+  // 1. The optimization problem in the node is infeasible.
+  // 2. The optimal cost of the node is larger than the best upper bound.
   std::list<ScsNode*> active_leaves_;
+
+  // Default way to pick a branching variable is "most ambivalent".
+  constexpr PickVariable pick_variable = PickVariable::MostAmbivalent;
 };
 }  // namespace solvers
 }  // namespace drake

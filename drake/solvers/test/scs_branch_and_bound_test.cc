@@ -5,6 +5,26 @@
 
 namespace drake {
 namespace solvers {
+class ScsBranchAndBoundTest {
+ public:
+  ScsBranchAndBoundTest(const SCS_PROBLEM_DATA& scs_data, const SCS_CONE& cone,
+                        double cost_constant,
+                        const std::list<int>& binary_var_indices)
+      : bnb_tree_{scs_data, cone, cost_constant, binary_var_indices} {}
+
+  void TestConstructor() {
+    EXPECT_EQ(bnb_tree_.best_upper_bound_,
+              std::numeric_limits<double>::infinity());
+    EXPECT_EQ(bnb_tree_.best_lower_bound_,
+              -std::numeric_limits<double>::infinity());
+    EXPECT_EQ(bnb_tree_.active_leaves_.size(), 1);
+    EXPECT_EQ(*(bnb_tree_.active_leaves_.begin()), bnb_tree_.root_.get());
+  }
+
+ private:
+  ScsBranchAndBound bnb_tree_;
+};
+
 namespace {
 std::unique_ptr<AMatrix, void (*)(AMatrix*)> ConstructScsAmatrix(
     const Eigen::SparseMatrix<double>& A) {
@@ -742,6 +762,97 @@ GTEST_TEST(TestScsNode, TestSolveChildNode5) {
   const scs_float x_expected_r[4] = {0.2, 2.0 / 3.0, 1, 1.4};
   TestNodeSolve(root->right_child(), SCS_SOLVED, -47.0 / 30, x_expected_r,
                 false, 2E-2);
+}
+
+void free_scs_pointer(void* scs_pointer) { scs_free(scs_pointer); }
+
+// Store the data for a mixed-inteter optimization problem
+// min cᵀx + d
+// s.t Ax + s = b
+//     s in cone
+//     x(binary_var_indices_) are binary variables
+struct MIPdata {
+  MIPdata(const Eigen::SparseMatrix<double>& A, const scs_float* const b,
+          const scs_float* const c, double d, const SCS_CONE& cone,
+          const std::list<int>& binary_var_indices)
+      : A_{ConstructScsAmatrix(A)},
+        b_{static_cast<scs_float*>(scs_calloc(A_->m, sizeof(scs_float))),
+           &free_scs_pointer},
+        c_{static_cast<scs_float*>(scs_calloc(A_->n, sizeof(scs_float))),
+           &free_scs_pointer},
+        d_{d},
+        cone_{DeepCopyScsCone(&cone)},
+        binary_var_indices_{binary_var_indices} {
+    for (int i = 0; i < A_->m; ++i) {
+      b_.get()[i] = b[i];
+    }
+    for (int i = 0; i < A_->n; ++i) {
+      c_.get()[i] = c[i];
+    }
+  }
+  std::unique_ptr<AMatrix, void (*)(AMatrix*)> A_;
+  std::unique_ptr<scs_float, void (*)(void*)> b_;
+  std::unique_ptr<scs_float, void (*)(void*)> c_;
+  double d_;
+  std::unique_ptr<SCS_CONE, void (*)(SCS_CONE*)> cone_;
+  std::list<int> binary_var_indices_;
+};
+
+// Construct the problem data for the mixed-integer linear program
+// min x₀ + 2x₁ - 3x₂ - 4x₃ + 4.5x₄ + 1
+// s.t 2x₀ + x₂ + 1.5x₃ + x₄ = 4.5
+//     1 ≤ 2x₀ + 4x₃ + x₄ ≤ 7
+//     -2 ≤ 3x₁ + 2x₂ - 5x₃ + x₄ ≤ 7
+//     -5 ≤ x₁ + x₂ + 2x₃ ≤ 10
+//     -10 ≤ x₁ ≤ 10
+//     x₀, x₂, x₄ are binary variables.
+MIPdata ConstructMILPExample() {
+  Eigen::Matrix<double, 9, 5> A;
+  // clang-format off
+  A << 2, 0, 1, 1.5, 1,
+       2, 0, 0, 4, 1,
+       -2, 0, 0, -4, -1,
+       0, 3, 2, -5, 1,
+       0, -3, -2, 5, -1,
+       0, 1, 1, 2, 0,
+       0, -1, -1, -2, 0,
+       0, 1, 0, 0, 0,
+       0, -1, 0, 0, 0;
+  // clang-format on
+  scs_float b[9] = {4.5, 7, -1, 7, 2, 10, 5, 10, 10};
+  scs_float c[5] = {1, 2, -3, -4, 4.5};
+  SCS_CONE cone;
+  cone.f = 1;
+  cone.l = 8;
+  cone.q = nullptr;
+  cone.qsize = 0;
+  cone.s = nullptr;
+  cone.ssize = 0;
+  cone.ed = 0;
+  cone.ep = 0;
+  cone.p = nullptr;
+  cone.psize = 0;
+  return MIPdata(A.sparseView(), b, c, 1, cone, {0, 2, 4});
+};
+
+GTEST_TEST(TestScsBranchAndBound, TestConstructor) {
+  const MIPdata data = ConstructMILPExample();
+  SCS_PROBLEM_DATA scs_data;
+  scs_data.A = data.A_.get();
+  scs_data.b = data.b_.get();
+  scs_data.c = data.c_.get();
+  scs_data.m = data.A_->m;
+  scs_data.n = data.A_->n;
+  std::unique_ptr<SCS_SETTINGS, void (*)(void*)> settings{
+      static_cast<SCS_SETTINGS*>(scs_malloc(sizeof(SCS_SETTINGS))),
+      &free_scs_pointer};
+  SetScsSettingToDefault(settings.get());
+  scs_data.stgs = settings.get();
+
+  ScsBranchAndBoundTest dut(scs_data, *(data.cone_), data.d_,
+                            data.binary_var_indices_);
+
+  dut.TestConstructor();
 }
 }  // namespace
 }  // namespace solvers
