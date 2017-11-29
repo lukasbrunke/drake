@@ -835,7 +835,7 @@ MIPdata ConstructMILPExample() {
   return MIPdata(A.sparseView(), b, c, 1, cone, {0, 2, 4});
 };
 
-GTEST_TEST(TestScsBranchAndBound, TestConstructor) {
+ScsBranchAndBoundTest ConstructScsBranchAndBoundMILPTest() {
   const MIPdata data = ConstructMILPExample();
   SCS_PROBLEM_DATA scs_data;
   scs_data.A = data.A_.get();
@@ -849,9 +849,11 @@ GTEST_TEST(TestScsBranchAndBound, TestConstructor) {
   SetScsSettingToDefault(settings.get());
   scs_data.stgs = settings.get();
 
-  ScsBranchAndBoundTest dut(scs_data, *(data.cone_), data.d_,
-                            data.binary_var_indices_);
+  return ScsBranchAndBoundTest(scs_data, *(data.cone_), data.d_, data.binary_var_indices_);
+}
 
+GTEST_TEST(TestScsBranchAndBound, TestConstructor) {
+  auto dut = ConstructScsBranchAndBoundMILPTest();
   dut.TestConstructor();
 }
 }  // namespace

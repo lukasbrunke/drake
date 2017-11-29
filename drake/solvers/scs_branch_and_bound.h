@@ -271,6 +271,14 @@ class ScsBranchAndBound {
 
   virtual ~ScsBranchAndBound() {}
 
+  /**
+   * Solve the mixed-integer optimization problem by running branch-and-bound
+   * algorithm.
+   */
+  void Solve();
+
+  void SetVerbose(bool verbose) { verbose_ = verbose; }
+
  protected:
   /**
    * Given a node, pick a binary variable in the node to branch.
@@ -327,6 +335,9 @@ class ScsBranchAndBound {
 
   // Default way to pick a branching variable is "most ambivalent".
   constexpr PickVariable pick_variable = PickVariable::MostAmbivalent;
+
+  // Print out message on the branch and bound.
+  bool verbose_ = false;
 };
 }  // namespace solvers
 }  // namespace drake

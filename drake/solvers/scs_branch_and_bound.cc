@@ -444,13 +444,50 @@ ScsNode* ScsBranchAndBound::PickBranchingNode() const {
                                   active_leaves_.size());
 }
 
-int ScsBranchAndBound::PickBranchingVariable(ScsNode* node) { return 0; }
+int ScsBranchAndBound::PickBranchingVariable(ScsNode* node) {
+  if (node->binary_var_indices().empty()) {
+    throw std::runtime_error("All binary variables are fixed to either 0 or 1, cannot branch anymore.");
+  }
+  switch (pick_variable) {
+    case PickVariable::MostAmbivalent : {
+      // Choose the binary variable whose value is closest to 0.5.
+      double min_val = 1;
+      int branch_var_index = -1;
+      for (int binary_var_index : node->binary_var_indices()) {
+        if (std::abs(node->scs_sol()->x[binary_var_index] - 0.5) < min_val) {
+          branch_var_index = binary_var_index;
+        }
+      }
+      return branch_var_index;
+    }
+    case PickVariable::LeastAmbivalent : {
+      // Choose the binary variable whose value is closest to 0 or 1.
+      double min_val = 2;
+      int branch_var_index = -1;
+      for (int binary_var_index : node->binary_var_indices()) {
+        const double binary_var_val{node->scs_sol()->x[binary_var_index]};
+        if (std::min(std::abs(binary_var_val), std::abs(binary_var_val - 1)) < min_val) {
+          branch_var_index = binary_var_index;
+        }
+      }
+      return branch_var_index;
+    }
+  }
+}
 
 void ScsBranchAndBound::PickBranchingVariableAndSolve(ScsNode* node) {
   int binary_var_index = PickBranchingVariable(node);
   node->Branch(binary_var_index);
   node->left_child()->Solve(*(scs_data_.stgs));
   node->right_child()->Solve(*(scs_data_.stgs));
+}
+
+void ScsBranchAndBound::Solve() {
+  // First solve the root node
+  if (verbose_) {
+    std::cout << "Presolve. Solve relaxed problem on the root node.\n";
+  }
+  root_->Solve(*(scs_data_.stgs));
 }
 }  // namespace solvers
 }  // namespace drake
