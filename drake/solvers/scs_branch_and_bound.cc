@@ -444,39 +444,65 @@ ScsNode* ScsBranchAndBound::PickBranchingNode() const {
                                   active_leaves_.size());
 }
 
-int ScsBranchAndBound::PickBranchingVariable(ScsNode* node) {
-  if (node->binary_var_indices().empty()) {
-    throw std::runtime_error("All binary variables are fixed to either 0 or 1, cannot branch anymore.");
+void CheckPickVariablePreCondition(const ScsNode& node) {
+  if (node.binary_var_indices().empty()) {
+    throw std::runtime_error(
+        "All binary variables are fixed to either 0 or 1, cannot branch "
+            "anymore.");
   }
-  switch (pick_variable) {
-    case PickVariable::MostAmbivalent : {
-      // Choose the binary variable whose value is closest to 0.5.
-      double min_val = 1;
-      int branch_var_index = -1;
-      for (int binary_var_index : node->binary_var_indices()) {
-        if (std::abs(node->scs_sol()->x[binary_var_index] - 0.5) < min_val) {
-          branch_var_index = binary_var_index;
-        }
-      }
-      return branch_var_index;
+}
+int ScsBranchAndBound::PickMostAmbivalentAsBranchingVariable(
+    const ScsNode& node) const {
+  CheckPickVariablePreCondition(node);
+  // Choose the binary variable whose value is closest to 0 or 1.
+  // The loop below has linear complexity, since binary_var_indices() is a list,
+  // that doesn't allow random access.
+  double min_val = 1;
+  int branch_var_index = -1;
+  for (int binary_var_index : node.binary_var_indices()) {
+    const double val = std::abs(node.scs_sol()->x[binary_var_index] - 0.5);
+    if (val < min_val) {
+      branch_var_index = binary_var_index;
+      min_val = val;
     }
-    case PickVariable::LeastAmbivalent : {
-      // Choose the binary variable whose value is closest to 0 or 1.
-      double min_val = 2;
-      int branch_var_index = -1;
-      for (int binary_var_index : node->binary_var_indices()) {
-        const double binary_var_val{node->scs_sol()->x[binary_var_index]};
-        if (std::min(std::abs(binary_var_val), std::abs(binary_var_val - 1)) < min_val) {
-          branch_var_index = binary_var_index;
-        }
-      }
-      return branch_var_index;
+  }
+  return branch_var_index;
+}
+
+int ScsBranchAndBound::PickLeastAmbivalentAsBranchingVariable(
+    const ScsNode& node) const {
+  CheckPickVariablePreCondition(node);
+  // Choose the binary variable whose value is closest to 0 or 1.
+  // The loop below has linear complexity, since binary_var_indices() is a list,
+  // that doesn't allow random access.
+  double min_val = 2;
+  int branch_var_index = -1;
+  for (int binary_var_index : node.binary_var_indices()) {
+    const double binary_var_val{node.scs_sol()->x[binary_var_index]};
+    const double val =
+        std::min(std::abs(binary_var_val), std::abs(binary_var_val - 1));
+    if (val < min_val) {
+      branch_var_index = binary_var_index;
+      min_val = val;
+    }
+  }
+  return branch_var_index;
+}
+
+int ScsBranchAndBound::PickBranchingVariable(const ScsNode& node) const {
+  CheckPickVariablePreCondition(node);
+  switch (pick_variable) {
+    case PickVariable::MostAmbivalent: {
+      return PickMostAmbivalentAsBranchingVariable(node);
+    }
+    case PickVariable::LeastAmbivalent: {
+      return PickLeastAmbivalentAsBranchingVariable(node);
     }
   }
 }
 
 void ScsBranchAndBound::PickBranchingVariableAndSolve(ScsNode* node) {
-  int binary_var_index = PickBranchingVariable(node);
+  int binary_var_index = PickBranchingVariable(*node);
   node->Branch(binary_var_index);
   node->left_child()->Solve(*(scs_data_.stgs));
   node->right_child()->Solve(*(scs_data_.stgs));

@@ -5,20 +5,37 @@
 
 namespace drake {
 namespace solvers {
+/**
+ * This class exposes all the protected and private members of
+ * ScsBranchAndBound, so that we can test its internal implementation.
+ */
 class ScsBranchAndBoundTest {
  public:
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(ScsBranchAndBoundTest)
+
   ScsBranchAndBoundTest(const SCS_PROBLEM_DATA& scs_data, const SCS_CONE& cone,
                         double cost_constant,
                         const std::list<int>& binary_var_indices)
       : bnb_tree_{scs_data, cone, cost_constant, binary_var_indices} {}
 
-  void TestConstructor() {
-    EXPECT_EQ(bnb_tree_.best_upper_bound_,
-              std::numeric_limits<double>::infinity());
-    EXPECT_EQ(bnb_tree_.best_lower_bound_,
-              -std::numeric_limits<double>::infinity());
-    EXPECT_EQ(bnb_tree_.active_leaves_.size(), 1);
-    EXPECT_EQ(*(bnb_tree_.active_leaves_.begin()), bnb_tree_.root_.get());
+  double best_upper_bound() const { return bnb_tree_.best_upper_bound_; }
+
+  double best_lower_bound() const { return bnb_tree_.best_lower_bound_; }
+
+  const std::list<ScsNode*>& active_leaves() const {
+    return bnb_tree_.active_leaves_;
+  }
+
+  SCS_SETTINGS* scs_settings() const { return bnb_tree_.scs_data_.stgs; }
+
+  ScsNode* root() const { return bnb_tree_.root_.get(); }
+
+  int PickMostAmbivalentAsBranchingVariable(const ScsNode& node) const {
+    return bnb_tree_.PickMostAmbivalentAsBranchingVariable(node);
+  }
+
+  int PickLeastAmbivalentAsBranchingVariable(const ScsNode& node) const {
+    return bnb_tree_.PickLeastAmbivalentAsBranchingVariable(node);
   }
 
  private:
@@ -835,7 +852,7 @@ MIPdata ConstructMILPExample() {
   return MIPdata(A.sparseView(), b, c, 1, cone, {0, 2, 4});
 };
 
-ScsBranchAndBoundTest ConstructScsBranchAndBoundMILPTest() {
+std::unique_ptr<ScsBranchAndBoundTest> ConstructScsBranchAndBoundMILPTest() {
   const MIPdata data = ConstructMILPExample();
   SCS_PROBLEM_DATA scs_data;
   scs_data.A = data.A_.get();
@@ -849,12 +866,43 @@ ScsBranchAndBoundTest ConstructScsBranchAndBoundMILPTest() {
   SetScsSettingToDefault(settings.get());
   scs_data.stgs = settings.get();
 
-  return ScsBranchAndBoundTest(scs_data, *(data.cone_), data.d_, data.binary_var_indices_);
+  return std::make_unique<ScsBranchAndBoundTest>(
+      scs_data, *(data.cone_), data.d_, data.binary_var_indices_);
 }
 
 GTEST_TEST(TestScsBranchAndBound, TestConstructor) {
   auto dut = ConstructScsBranchAndBoundMILPTest();
-  dut.TestConstructor();
+  EXPECT_EQ(dut->best_upper_bound(), std::numeric_limits<double>::infinity());
+  EXPECT_EQ(dut->best_lower_bound(), -std::numeric_limits<double>::infinity());
+  EXPECT_EQ(dut->active_leaves().size(), 1);
+  EXPECT_EQ(*(dut->active_leaves().begin()), dut->root());
+}
+
+GTEST_TEST(TestScsBranchAndBound, TestSolveRootNode) {
+  auto dut = ConstructScsBranchAndBoundMILPTest();
+  dut->root()->Solve(*(dut->scs_settings()));
+  // The optimal cost to the root is -4.9, with the optimal solution as
+  // (0.7, 1, 1, 1.4, 0)
+  const scs_float x_expected[5] = {0.7, 1, 1, 1.4, 0};
+  EXPECT_EQ(dut->root()->scs_info().statusVal, SCS_SOLVED);
+  EXPECT_NEAR(dut->root()->cost(), -4.9, 2E-2);
+  for (int i = 0; i < 5; ++i) {
+    EXPECT_NEAR(dut->root()->scs_sol()->x[i], x_expected[i], 2E-2);
+  }
+  EXPECT_FALSE(dut->root()->found_integral_sol());
+}
+
+GTEST_TEST(TestScsBranchAndBound, TestPickBranchingVariable) {
+  auto dut = ConstructScsBranchAndBoundMILPTest();
+  dut->root()->Solve(*(dut->scs_settings()));
+  // The optimal solution to the root is (0.7, 1, 1, 1.4, 0)
+  // If we pick the most ambivalent branching variable, then we should return x0
+  // If we pick the least ambivalent branching variable, then we should return
+  // either x2 or x4.
+  EXPECT_EQ(dut->PickMostAmbivalentAsBranchingVariable(*(dut->root())), 0);
+  EXPECT_TRUE(dut->PickLeastAmbivalentAsBranchingVariable(*(dut->root())) ==
+                  2 ||
+              dut->PickLeastAmbivalentAsBranchingVariable(*(dut->root())) == 4);
 }
 }  // namespace
 }  // namespace solvers

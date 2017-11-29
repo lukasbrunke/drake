@@ -300,7 +300,19 @@ class ScsBranchAndBound {
   /**
    * Pick one variable to branch, returns the index of the branching variable.
    */
-  virtual int PickBranchingVariable(ScsNode* node);
+  virtual int PickBranchingVariable(const ScsNode& node) const;
+
+  /**
+   * Pick the most ambivalent one as the branching variable, namely the binary
+   * variable whose value is closest to 0.5.
+   */
+  int PickMostAmbivalentAsBranchingVariable(const ScsNode& node) const;
+
+  /**
+   * Pick the least ambivalent one as the branching variable, namely the binary
+   * variable whose value is closest to 0 or 1.
+   */
+  int PickLeastAmbivalentAsBranchingVariable(const ScsNode& node) const;
 
   // scs_data_ includes the data on c, A, b, and the cone K. It also contains
   // the settings of the problem, such as iteration limit, accuracy, etc.
@@ -334,7 +346,7 @@ class ScsBranchAndBound {
   std::list<ScsNode*> active_leaves_;
 
   // Default way to pick a branching variable is "most ambivalent".
-  constexpr PickVariable pick_variable = PickVariable::MostAmbivalent;
+  PickVariable pick_variable = PickVariable::MostAmbivalent;
 
   // Print out message on the branch and bound.
   bool verbose_ = false;
