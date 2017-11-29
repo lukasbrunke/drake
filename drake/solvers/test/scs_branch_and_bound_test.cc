@@ -16,30 +16,29 @@ class ScsBranchAndBoundTest {
   ScsBranchAndBoundTest(const SCS_PROBLEM_DATA& scs_data, const SCS_CONE& cone,
                         double cost_constant,
                         const std::list<int>& binary_var_indices)
-      : bnb_tree_{scs_data, cone, cost_constant, binary_var_indices} {}
+      : bnb_tree_{std::make_unique<ScsBranchAndBound>(
+            scs_data, cone, cost_constant, binary_var_indices)} {}
 
-  double best_upper_bound() const { return bnb_tree_.best_upper_bound_; }
+  ScsBranchAndBound* bnb_tree() const { return bnb_tree_.get(); }
 
-  double best_lower_bound() const { return bnb_tree_.best_lower_bound_; }
+  double best_upper_bound() const { return bnb_tree_->best_upper_bound_; }
+
+  double best_lower_bound() const { return bnb_tree_->best_lower_bound_; }
 
   const std::list<ScsNode*>& active_leaves() const {
-    return bnb_tree_.active_leaves_;
+    return bnb_tree_->active_leaves_;
   }
 
-  SCS_SETTINGS* scs_settings() const { return bnb_tree_.scs_data_.stgs; }
+  SCS_SETTINGS* scs_settings() const { return bnb_tree_->scs_data_.stgs; }
 
-  ScsNode* root() const { return bnb_tree_.root_.get(); }
+  ScsNode* root() const { return bnb_tree_->root_.get(); }
 
-  int PickMostAmbivalentAsBranchingVariable(const ScsNode& node) const {
-    return bnb_tree_.PickMostAmbivalentAsBranchingVariable(node);
-  }
-
-  int PickLeastAmbivalentAsBranchingVariable(const ScsNode& node) const {
-    return bnb_tree_.PickLeastAmbivalentAsBranchingVariable(node);
+  int PickBranchingVariable(const ScsNode& node) const {
+    return bnb_tree_->PickBranchingVariable(node);
   }
 
  private:
-  ScsBranchAndBound bnb_tree_;
+  std::unique_ptr<ScsBranchAndBound> bnb_tree_;
 };
 
 namespace {
@@ -899,10 +898,29 @@ GTEST_TEST(TestScsBranchAndBound, TestPickBranchingVariable) {
   // If we pick the most ambivalent branching variable, then we should return x0
   // If we pick the least ambivalent branching variable, then we should return
   // either x2 or x4.
-  EXPECT_EQ(dut->PickMostAmbivalentAsBranchingVariable(*(dut->root())), 0);
-  EXPECT_TRUE(dut->PickLeastAmbivalentAsBranchingVariable(*(dut->root())) ==
-                  2 ||
-              dut->PickLeastAmbivalentAsBranchingVariable(*(dut->root())) == 4);
+  dut->bnb_tree()->SetPickBranchingVariable(
+      ScsBranchAndBound::PickVariable::MostAmbivalent);
+  EXPECT_EQ(dut->PickBranchingVariable(*(dut->root())), 0);
+  dut->bnb_tree()->SetPickBranchingVariable(
+      ScsBranchAndBound::PickVariable::LeastAmbivalent);
+  EXPECT_TRUE(dut->PickBranchingVariable(*(dut->root())) == 2 ||
+              dut->PickBranchingVariable(*(dut->root())) == 4);
+  EXPECT_THROW(dut->bnb_tree()->SetPickBranchingVariable(
+                   ScsBranchAndBound::PickVariable::UserDefined),
+               std::runtime_error);
+
+  // Test user-defined method to pick the branching variable.
+  dut->bnb_tree()->SetUserDefinedBranchingVariableMethod(
+      [](const ScsNode& node) -> int {
+        return *(node.binary_var_indices().begin());
+      });
+  EXPECT_EQ(dut->PickBranchingVariable(*(dut->root())), 0);
+
+  dut->bnb_tree()->SetUserDefinedBranchingVariableMethod(
+      [](const ScsNode& node) -> int {
+        return *(++node.binary_var_indices().begin());
+      });
+  EXPECT_EQ(dut->PickBranchingVariable(*(dut->root())), 2);
 }
 }  // namespace
 }  // namespace solvers

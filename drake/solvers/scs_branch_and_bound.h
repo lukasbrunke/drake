@@ -220,7 +220,7 @@ class ScsNode {
  * s.t Ax + s = b
  *     s in K
  *     y are binary variables.
- * <pre>
+ * </pre>
  * where y is a subset of the variables x, and the indices of binary variable y
  * in x that should only take binary value {0, 1}, solve this mixed-integer
  * optimization problem through branch-and-bound.
@@ -240,7 +240,8 @@ class ScsBranchAndBound {
  public:
   enum class PickVariable {
     LeastAmbivalent,  // pick the variable that is closest to either 0 or 1
-    MostAmbivalent    // pick the variable that is closest to 0.5
+    MostAmbivalent,   // pick the variable that is closest to 0.5
+    UserDefined
   };
 
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(ScsBranchAndBound)
@@ -279,6 +280,20 @@ class ScsBranchAndBound {
 
   void SetVerbose(bool verbose) { verbose_ = verbose; }
 
+  /**
+   * The user can choose the method to pick a variable. We provide options such
+   * as "mose ambivalent" or "least ambivalent". If the user wants to set his
+   * own method to pick branching variable, then call ScsBranchAndBound::SetUserDefinedBranchingVariableMethod().
+   * @param pick_variable Any value except PickVariable::UserDefined.
+   */
+  void SetPickBranchingVariable(PickVariable pick_variable);
+
+  /**
+   * Set the user-defined method to pick a branching variable.
+   * @param fun the user-defined method to pick a branching variable.
+   */
+  void SetUserDefinedBranchingVariableMethod(int(*fun)(const ScsNode&));
+
  protected:
   /**
    * Given a node, pick a binary variable in the node to branch.
@@ -300,7 +315,7 @@ class ScsBranchAndBound {
   /**
    * Pick one variable to branch, returns the index of the branching variable.
    */
-  virtual int PickBranchingVariable(const ScsNode& node) const;
+  int PickBranchingVariable(const ScsNode& node) const;
 
   /**
    * Pick the most ambivalent one as the branching variable, namely the binary
@@ -346,10 +361,13 @@ class ScsBranchAndBound {
   std::list<ScsNode*> active_leaves_;
 
   // Default way to pick a branching variable is "most ambivalent".
-  PickVariable pick_variable = PickVariable::MostAmbivalent;
+  PickVariable pick_variable_ = PickVariable::MostAmbivalent;
 
   // Print out message on the branch and bound.
   bool verbose_ = false;
+
+  // This is the user defined function to pick a branching variable.
+  int(*pick_branching_variable_userfun_)(const ScsNode&) = nullptr;
 };
 }  // namespace solvers
 }  // namespace drake

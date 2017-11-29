@@ -453,7 +453,6 @@ void CheckPickVariablePreCondition(const ScsNode& node) {
 }
 int ScsBranchAndBound::PickMostAmbivalentAsBranchingVariable(
     const ScsNode& node) const {
-  CheckPickVariablePreCondition(node);
   // Choose the binary variable whose value is closest to 0 or 1.
   // The loop below has linear complexity, since binary_var_indices() is a list,
   // that doesn't allow random access.
@@ -471,7 +470,6 @@ int ScsBranchAndBound::PickMostAmbivalentAsBranchingVariable(
 
 int ScsBranchAndBound::PickLeastAmbivalentAsBranchingVariable(
     const ScsNode& node) const {
-  CheckPickVariablePreCondition(node);
   // Choose the binary variable whose value is closest to 0 or 1.
   // The loop below has linear complexity, since binary_var_indices() is a list,
   // that doesn't allow random access.
@@ -491,12 +489,15 @@ int ScsBranchAndBound::PickLeastAmbivalentAsBranchingVariable(
 
 int ScsBranchAndBound::PickBranchingVariable(const ScsNode& node) const {
   CheckPickVariablePreCondition(node);
-  switch (pick_variable) {
+  switch (pick_variable_) {
     case PickVariable::MostAmbivalent: {
       return PickMostAmbivalentAsBranchingVariable(node);
     }
     case PickVariable::LeastAmbivalent: {
       return PickLeastAmbivalentAsBranchingVariable(node);
+    }
+    case PickVariable::UserDefined: {
+      return pick_branching_variable_userfun_(node);
     }
   }
 }
@@ -506,6 +507,18 @@ void ScsBranchAndBound::PickBranchingVariableAndSolve(ScsNode* node) {
   node->Branch(binary_var_index);
   node->left_child()->Solve(*(scs_data_.stgs));
   node->right_child()->Solve(*(scs_data_.stgs));
+}
+
+void ScsBranchAndBound::SetPickBranchingVariable(PickVariable pick_variable) {
+  if (pick_variable == PickVariable::UserDefined) {
+    throw std::runtime_error("Please call SetUserDefinedBranchingVariableMethod to set the user-defined method.");
+  }
+  pick_variable_ = pick_variable;
+}
+
+void ScsBranchAndBound::SetUserDefinedBranchingVariableMethod(int (*fun)(const ScsNode &)) {
+  pick_branching_variable_userfun_ = fun;
+  pick_variable_ = PickVariable::UserDefined;
 }
 
 void ScsBranchAndBound::Solve() {
