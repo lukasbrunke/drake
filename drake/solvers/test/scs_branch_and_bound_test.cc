@@ -37,6 +37,14 @@ class ScsBranchAndBoundTest {
     return bnb_tree_->PickBranchingVariable(node);
   }
 
+  ScsNode* PickBranchingNode() const {
+    return bnb_tree_->PickBranchingNode();
+  }
+
+  void SolveNode(ScsNode* node) { return bnb_tree_->SolveNode(node); }
+
+  bool IsNodeFathomed(const ScsNode& node) { return bnb_tree_->IsNodeFathomed(node); }
+
  private:
   std::unique_ptr<ScsBranchAndBound> bnb_tree_;
 };
@@ -87,8 +95,9 @@ void IsAmatrixEqual(const AMatrix& A1, const AMatrix& A2, double tol) {
   }
 }
 
-void IsBinaryVarIndicesEqual(const std::list<int>& indices1,
-                             const std::list<int>& indices2) {
+template<typename T>
+void DoListsContainSameElements(const std::list<T> &indices1,
+                                const std::list<T> &indices2) {
   EXPECT_EQ(indices1.size(), indices2.size());
   auto it2 = indices2.begin();
   for (auto it1 = indices1.begin(); it1 != indices1.end(); ++it1) {
@@ -873,8 +882,7 @@ GTEST_TEST(TestScsBranchAndBound, TestConstructor) {
   auto dut = ConstructScsBranchAndBoundMILPTest();
   EXPECT_EQ(dut->best_upper_bound(), std::numeric_limits<double>::infinity());
   EXPECT_EQ(dut->best_lower_bound(), -std::numeric_limits<double>::infinity());
-  EXPECT_EQ(dut->active_leaves().size(), 1);
-  EXPECT_EQ(*(dut->active_leaves().begin()), dut->root());
+  EXPECT_TRUE(dut->active_leaves().empty());
 }
 
 GTEST_TEST(TestScsBranchAndBound, TestSolveRootNode) {
@@ -898,15 +906,15 @@ GTEST_TEST(TestScsBranchAndBound, TestPickBranchingVariable) {
   // If we pick the most ambivalent branching variable, then we should return x0
   // If we pick the least ambivalent branching variable, then we should return
   // either x2 or x4.
-  dut->bnb_tree()->SetPickBranchingVariable(
+  dut->bnb_tree()->ChoosePickBranchingVariableMethod(
       ScsBranchAndBound::PickVariable::MostAmbivalent);
   EXPECT_EQ(dut->PickBranchingVariable(*(dut->root())), 0);
-  dut->bnb_tree()->SetPickBranchingVariable(
+  dut->bnb_tree()->ChoosePickBranchingVariableMethod(
       ScsBranchAndBound::PickVariable::LeastAmbivalent);
   EXPECT_TRUE(dut->PickBranchingVariable(*(dut->root())) == 2 ||
               dut->PickBranchingVariable(*(dut->root())) == 4);
-  EXPECT_THROW(dut->bnb_tree()->SetPickBranchingVariable(
-                   ScsBranchAndBound::PickVariable::UserDefined),
+  EXPECT_THROW(dut->bnb_tree()->ChoosePickBranchingVariableMethod(
+      ScsBranchAndBound::PickVariable::UserDefined),
                std::runtime_error);
 
   // Test user-defined method to pick the branching variable.
@@ -921,6 +929,16 @@ GTEST_TEST(TestScsBranchAndBound, TestPickBranchingVariable) {
         return *(++node.binary_var_indices().begin());
       });
   EXPECT_EQ(dut->PickBranchingVariable(*(dut->root())), 2);
+}
+
+GTEST_TEST(TestScsBranchAndBound, TestSolveNode1) {
+  auto dut = ConstructScsBranchAndBoundMILPTest();
+  dut->SolveNode(dut->root());
+  // The best lower bound should be the cost on the root node.
+  EXPECT_NEAR(dut->best_lower_bound(), dut->root()->cost(), 1E-10);
+  // The root node is not fathomed.
+  EXPECT_FALSE(dut->IsNodeFathomed(*(dut->root())));
+  DoListsContainSameElements(dut->active_leaves(), {dut->root()});
 }
 }  // namespace
 }  // namespace solvers

@@ -10,31 +10,6 @@ namespace drake {
 namespace solvers {
 namespace {
 void free_scs_pointer(void* scs_pointer) { scs_free(scs_pointer); }
-
-// Find the node with the smallest optimal cost in the range [first, first +
-// length).
-// The complexity of this function is O(log₂N), where N is the length of the
-// list.
-ScsNode* FindNodeWithSmallestCost(std::list<ScsNode*>::const_iterator first,
-                                  int length) {
-  // TODO(hongkai.dai): test other implementations to see if it is faster
-  // 1. Use bubble sort on the list.
-  // 2. Instead of using the list, do a binary search on the tree directly.
-  if (length <= 0) {
-    throw std::runtime_error("The length must be positive.");
-  } else if (length == 1) {
-    return *first;
-  } else {
-    const int half_length = length / 2;
-    ScsNode* l_min_node = FindNodeWithSmallestCost(first, half_length);
-    auto it = first;
-    for (int i = 0; i < half_length; ++i) {
-      ++it;
-    }
-    ScsNode* r_min_node = FindNodeWithSmallestCost(it, length - half_length);
-    return l_min_node->cost() < r_min_node->cost() ? l_min_node : r_min_node;
-  }
-}
 }  // namespace
 
 ScsNode::ScsNode(int num_A_rows, int num_A_cols)
@@ -437,11 +412,51 @@ ScsBranchAndBound::ScsBranchAndBound(const SCS_PROBLEM_DATA& scs_data,
       best_upper_bound_{std::numeric_limits<double>::infinity()},
       best_lower_bound_{-std::numeric_limits<double>::infinity()},
       relative_gap_tol_{1E-2},
-      active_leaves_{root_.get()} {}
+      absolute_gap_tol_{0.1},
+      active_leaves_{} {}
 
 ScsNode* ScsBranchAndBound::PickBranchingNode() const {
-  return FindNodeWithSmallestCost(active_leaves_.cbegin(),
-                                  active_leaves_.size());
+  if (active_leaves_.empty()) {
+    throw std::runtime_error("No active leaves.");
+  }
+  switch (pick_node_) {
+    case PickNode::MinLowerBound : {
+      return PickMinLowerBoundNode();
+    }
+    case PickNode::DepthFirst : {
+      return PickDepthFirstNode();
+    }
+    case PickNode::UserDefined : {
+      return pick_branching_node_userfun_(*root_);
+    }
+  }
+}
+
+ScsNode* ScsBranchAndBound::PickMinLowerBoundNode() const {
+  // TODO(hongkai.dai): test other implementations to see if it is faster
+  // for example,  nnstead of using the list, do a binary search on the tree
+  // directly.
+  double min_val = std::numeric_limits<double>::infinity();
+  ScsNode* node = nullptr;
+  for (const auto& active_leaf : active_leaves_) {
+    if (active_leaf->cost() < min_val) {
+      min_val = active_leaf->cost();
+      node = active_leaf;
+    }
+  }
+  return node;
+}
+
+ScsNode* ScsBranchAndBound::PickDepthFirstNode() const {
+  int max_num_fixed_vars = 0;
+  ScsNode* node = nullptr;
+  for (const auto& active_leaf : active_leaves_) {
+    if (active_leaf->binary_var_indices().size() > max_num_fixed_vars) {
+      max_num_fixed_vars = active_leaf->binary_var_indices().size();
+      node = active_leaf;
+    }
+  }
+  return node;
 }
 
 void CheckPickVariablePreCondition(const ScsNode& node) {
@@ -503,13 +518,21 @@ int ScsBranchAndBound::PickBranchingVariable(const ScsNode& node) const {
 }
 
 void ScsBranchAndBound::PickBranchingVariableAndSolve(ScsNode* node) {
+  if (IsNodeFathomed(*node)) {
+    throw std::runtime_error("Should not branch on a fathomed node.");
+  }
+  // Pick the variable to branch
   int binary_var_index = PickBranchingVariable(*node);
   node->Branch(binary_var_index);
-  node->left_child()->Solve(*(scs_data_.stgs));
-  node->right_child()->Solve(*(scs_data_.stgs));
+  // Remove node from active leaves. It is not a leaf node anymore.
+  active_leaves_.remove(node);
+
+  // Solve the child nodes.
+  SolveNode(node->left_child());
+  SolveNode(node->right_child());
 }
 
-void ScsBranchAndBound::SetPickBranchingVariable(PickVariable pick_variable) {
+void ScsBranchAndBound::ChoosePickBranchingVariableMethod(PickVariable pick_variable) {
   if (pick_variable == PickVariable::UserDefined) {
     throw std::runtime_error("Please call SetUserDefinedBranchingVariableMethod to set the user-defined method.");
   }
@@ -519,6 +542,50 @@ void ScsBranchAndBound::SetPickBranchingVariable(PickVariable pick_variable) {
 void ScsBranchAndBound::SetUserDefinedBranchingVariableMethod(int (*fun)(const ScsNode &)) {
   pick_branching_variable_userfun_ = fun;
   pick_variable_ = PickVariable::UserDefined;
+}
+
+void ScsBranchAndBound::ChoosePickBranchingNodeMethod(PickNode pick_node) {
+  if (pick_node == PickNode::UserDefined) {
+    throw std::runtime_error("Please call SetUserDefinedBranchingNodeMethod to set the user-defined method.");
+  }
+  pick_node_ = pick_node;
+}
+
+void ScsBranchAndBound::SetUserDefinedBranchingNodeMethod(ScsNode* (*fun)(const ScsNode &)) {
+  pick_branching_node_userfun_ = fun;
+  pick_node_ = PickNode::UserDefined;
+}
+
+void ScsBranchAndBound::SolveNode(ScsNode* node) {
+  node->Solve(*(scs_data_.stgs));
+  if (node->found_integral_sol()) {
+    best_upper_bound_ = std::min(best_upper_bound_, node->cost());
+  }
+  // TODO(hongkai.dai) round off the binary variables in the solution, to get a
+  // potentially different (might be tighter) best upper bound.
+
+  // If the node is not fathomed, then add this node to the active_leaves_.
+  if (!IsNodeFathomed(*node)) {
+    active_leaves_.insert(active_leaves_.end(), node);
+  }
+  if (node->scs_info().statusVal == SCS_SOLVED || node->scs_info().statusVal == SCS_SOLVED_INACCURATE) {
+    best_lower_bound_ = (*std::min_element(active_leaves_.begin(), active_leaves_.end(), [](ScsNode* n1, ScsNode* n2) { return n1->cost() < n2->cost();}))->cost();
+  }
+}
+
+bool ScsBranchAndBound::IsNodeFathomed(const ScsNode& node) const {
+  if (!node.IsLeaf()) {
+    throw std::runtime_error("Not a leaf node.");
+  }
+  if (node.scs_info().statusVal == SCS_INFEASIBLE || node.scs_info().statusVal == SCS_INFEASIBLE_INACCURATE) {
+    return true;
+  }
+  if (node.scs_info().statusVal == SCS_SOLVED || node.scs_info().statusVal == SCS_SOLVED_INACCURATE) {
+    if (node.cost() > best_upper_bound_) {
+      return true;
+    }
+  }
+  return false;
 }
 
 void ScsBranchAndBound::Solve() {

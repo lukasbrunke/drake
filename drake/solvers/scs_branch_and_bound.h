@@ -116,7 +116,12 @@ class ScsNode {
    */
   scs_int Solve(const SCS_SETTINGS& scs_settings);
 
-  /// Getter for A matrix.
+  /**
+   * A node is a leaf if it doesn't have children.
+   */
+  bool IsLeaf() const { return left_child_ == nullptr && right_child_ == nullptr;}
+
+  // Getter for A matrix.
   const AMatrix* A() const { return A_.get(); }
 
   /// Getter for b vector.
@@ -238,10 +243,22 @@ class ScsNode {
  */
 class ScsBranchAndBound {
  public:
+  /**
+   * Different method to pick a branching variable.
+   */
   enum class PickVariable {
+    UserDefined,
     LeastAmbivalent,  // pick the variable that is closest to either 0 or 1
-    MostAmbivalent,   // pick the variable that is closest to 0.5
-    UserDefined
+    MostAmbivalent    // pick the variable that is closest to 0.5
+  };
+
+  /**
+   * Different method to pick a branching node.
+   */
+  enum class PickNode {
+    UserDefined,
+    DepthFirst,     // Pick the node with the most binary variables fixed.
+    MinLowerBound   // Pick the node with the smallest optimal cost.
   };
 
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(ScsBranchAndBound)
@@ -270,7 +287,7 @@ class ScsBranchAndBound {
                     double cost_constant,
                     const std::list<int>& binary_var_indices);
 
-  virtual ~ScsBranchAndBound() {}
+  ~ScsBranchAndBound() {}
 
   /**
    * Solve the mixed-integer optimization problem by running branch-and-bound
@@ -286,31 +303,47 @@ class ScsBranchAndBound {
    * own method to pick branching variable, then call ScsBranchAndBound::SetUserDefinedBranchingVariableMethod().
    * @param pick_variable Any value except PickVariable::UserDefined.
    */
-  void SetPickBranchingVariable(PickVariable pick_variable);
+  void ChoosePickBranchingVariableMethod(PickVariable pick_variable);
 
   /**
-   * Set the user-defined method to pick a branching variable.
+   * Set the user-defined method to pick a branching variable at a node.
    * @param fun the user-defined method to pick a branching variable.
    */
   void SetUserDefinedBranchingVariableMethod(int(*fun)(const ScsNode&));
 
- protected:
   /**
-   * Given a node, pick a binary variable in the node to branch.
-   * The two child nodes are created in this function. The optimization problems
-   * in the two child nodes are solved.
-   * @param node
+   * The user can choose the method to pick a node for branching. We provide
+   * options such as "depth first" or "min lower bound". If the user wants to
+   * set his own method to pick the branching variable, then call
+   * ScsBranchAndBound::SetUserDefinedBranchingNodeMethod
+   * @param pick_node Any value except PickNode::UserDefined.
    */
-  void PickBranchingVariableAndSolve(ScsNode* node);
+  void ChoosePickBranchingNodeMethod(PickNode pick_node);
+
+  /**
+   * Set the user-defined method to pick the branching node.
+   * @param fun the user-defined method to pick a branching node. The input
+   * argument to fun is the root of the tree.
+   */
+  void SetUserDefinedBranchingNodeMethod(ScsNode*(*fun)(const ScsNode&));
 
  private:
   friend class ScsBranchAndBoundTest;  // Forward declaration
 
   /**
-   * Pick one node to branch. The default is to pick the node with the smallest
-   * optimal cost.
+   * Pick one node to branch.
    */
-  virtual ScsNode* PickBranchingNode() const;
+  ScsNode* PickBranchingNode() const;
+
+  /**
+   *  Pick the node with the smallest lower bound.
+   */
+  ScsNode* PickMinLowerBoundNode() const;
+
+  /**
+   * Pick the node with the most binary variables fixed.
+   */
+  ScsNode* PickDepthFirstNode() const;
 
   /**
    * Pick one variable to branch, returns the index of the branching variable.
@@ -329,9 +362,31 @@ class ScsBranchAndBound {
    */
   int PickLeastAmbivalentAsBranchingVariable(const ScsNode& node) const;
 
+  /**
+   * Solve a node, determine if the node is fathomed, and update the bounds.
+   * @param node The node to be solved.
+   */
+  void SolveNode(ScsNode* node);
+
+  /**
+   * Given a node, pick a binary variable in the node to branch.
+   * The two child nodes are created in this function. The optimization problems
+   * in the two child nodes are solved.
+   * @param node
+   */
+  void PickBranchingVariableAndSolve(ScsNode* node);
+
+  /**
+   * A leaf node is fathomed if
+   * 1. The optimization problem in the node is infeasible.
+   * 2. The optimal cost of the node is larger than the best upper bound.
+   */
+  bool IsNodeFathomed(const ScsNode& node) const;
+
   // scs_data_ includes the data on c, A, b, and the cone K. It also contains
   // the settings of the problem, such as iteration limit, accuracy, etc.
   SCS_PROBLEM_DATA scs_data_;
+
   // binary_var_indices_ records the indices of all binary variables in x.
   std::list<int> binary_var_indices_;
 
@@ -349,25 +404,33 @@ class ScsBranchAndBound {
   double best_lower_bound_;
 
   // We will stop the branch and bound, and regard the best upper bound is
-  // sufficiently close to the best lower bound, if
+  // sufficiently close to the best lower bound, if either
   // (best_upper_bound_ - best_lower_bound_) / abs(best_lower_bound) <
   // relative_gap_tol_
+  // or
+  // best_upper_bound - best_lower_bound < absolute_gap_tol_
   double relative_gap_tol_;
+  double absolute_gap_tol_;
 
-  // The list of active leaves, i.e., the leaf nodes that have not been
-  // fathomed. A leaf node is fathomed if
+  // The list of active leaves, i.e., the leaf nodes whose optimization problem
+  // has been solved, and the nodes have not been fathomed.
+  // A leaf node is fathomed if
   // 1. The optimization problem in the node is infeasible.
   // 2. The optimal cost of the node is larger than the best upper bound.
   std::list<ScsNode*> active_leaves_;
 
-  // Default way to pick a branching variable is "most ambivalent".
   PickVariable pick_variable_ = PickVariable::MostAmbivalent;
+
+  PickNode pick_node_ = PickNode::MinLowerBound;
 
   // Print out message on the branch and bound.
   bool verbose_ = false;
 
   // This is the user defined function to pick a branching variable.
   int(*pick_branching_variable_userfun_)(const ScsNode&) = nullptr;
+
+  // This is the user defined function to pick a branching node.
+  ScsNode*(*pick_branching_node_userfun_)(const ScsNode&) = nullptr;
 };
 }  // namespace solvers
 }  // namespace drake
