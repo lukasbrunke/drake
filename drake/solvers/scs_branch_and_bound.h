@@ -360,10 +360,9 @@ class ScsBranchAndBound {
   int PickLeastAmbivalentAsBranchingVariable(const ScsNode& node) const;
 
   /**
-   * Solve a node, determine if the node is fathomed, and update the bounds.
-   * @param node The node to be solved.
+   * Solve the root node.
    */
-  void SolveNode(ScsNode* node);
+  void SolveRootNode();
 
   /**
    * Given a node, and the binary variable in the node to branch, branch this
@@ -380,6 +379,13 @@ class ScsBranchAndBound {
    * 2. The optimal cost of the node is larger than the best upper bound.
    */
   bool IsNodeFathomed(const ScsNode& node) const;
+
+  /**
+   * A problem converges if it finds a mixed-integer solution, such that the
+   * cost of this solution is close to the lower bound.
+   * @return
+   */
+  bool IsConverged() const;
 
   // The root of the tree
   std::unique_ptr<ScsNode> root_;

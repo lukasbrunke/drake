@@ -258,8 +258,7 @@ void ScsNode::Branch(int binary_var_index) {
     const int column_nnz{A_->p[A_col + 1] - A_->p[A_col]};
     left_child_->A_->p[col + 1] = left_child_->A_->p[col] + column_nnz;
     for (int i = 0; i < column_nnz; ++i) {
-      left_child_->A_->x[left_child_->A_->p[col] + i] =
-          A_->x[A_->p[A_col] + i];
+      left_child_->A_->x[left_child_->A_->p[col] + i] = A_->x[A_->p[A_col] + i];
       // The indices of the rows above the row representing z ≥ 0 is unchanged.
       // The indices of the rows below the row representing z ≤ 1 is decremented
       // by 2, since we are going to remove the two rows representing 0 ≤ z ≤ 1.
@@ -416,7 +415,7 @@ void freeCone(SCS_CONE* cone) {
     scs_free(cone);
   }
 }
-template<typename T>
+template <typename T>
 void ConstructAndCopyArray(T* src, T* dest, int size) {
   if (size > 0) {
     dest = static_cast<T*>(scs_calloc(size, sizeof(T)));
@@ -460,13 +459,13 @@ ScsNode* ScsBranchAndBound::PickBranchingNode() const {
     throw std::runtime_error("No active leaves.");
   }
   switch (pick_node_) {
-    case PickNode::MinLowerBound : {
+    case PickNode::MinLowerBound: {
       return PickMinLowerBoundNode();
     }
-    case PickNode::DepthFirst : {
+    case PickNode::DepthFirst: {
       return PickDepthFirstNode();
     }
-    case PickNode::UserDefined : {
+    case PickNode::UserDefined: {
       return pick_branching_node_userfun_(*root_);
     }
   }
@@ -504,7 +503,7 @@ void CheckPickVariablePreCondition(const ScsNode& node) {
   if (node.binary_var_indices().empty()) {
     throw std::runtime_error(
         "All binary variables are fixed to either 0 or 1, cannot branch "
-            "anymore.");
+        "anymore.");
   }
 }
 
@@ -559,48 +558,93 @@ void ScsBranchAndBound::BranchAndSolve(ScsNode* node, int branch_var_index) {
   active_leaves_.remove(node);
 
   // Solve the child nodes.
-  SolveNode(node->left_child());
-  SolveNode(node->right_child());
+  node->left_child()->Solve(settings_);
+  node->right_child()->Solve(settings_);
+  const scs_float left_cost = node->left_child()->cost();
+  const scs_float right_cost = node->right_child()->cost();
+
+  // Update upper bound.
+  if (node->left_child()->found_integral_sol()) {
+    best_upper_bound_ = std::min(best_upper_bound_, left_cost);
+  }
+  if (node->right_child()->found_integral_sol()) {
+    best_upper_bound_ = std::min(best_upper_bound_, right_cost);
+  }
+
+  // Update lower bound.
+  // remaining_lower_bound is the lower bound in the rest of the tree, excluding
+  // the two new child nodes.
+  const double remaining_lower_bound =
+      active_leaves_.empty()
+          ? std::numeric_limits<double>::infinity()
+          : std::min(
+                node->cost(),
+                (*std::min_element(active_leaves_.begin(), active_leaves_.end(),
+                                   [](ScsNode* n1, ScsNode* n2) {
+                                     return n1->cost() < n2->cost();
+                                   }))
+                    ->cost());
+  best_lower_bound_ = std::min({left_cost, right_cost, remaining_lower_bound});
+
+  // Update active_leaves_
+  if (!IsConverged()) {
+    if (!IsNodeFathomed(*(node->left_child()))) {
+      active_leaves_.push_back(node->left_child());
+    }
+    if (!IsNodeFathomed(*(node->right_child()))) {
+      active_leaves_.push_back(node->right_child());
+    }
+  }
 }
 
-void ScsBranchAndBound::ChoosePickBranchingVariableMethod(PickVariable pick_variable) {
+void ScsBranchAndBound::ChoosePickBranchingVariableMethod(
+    PickVariable pick_variable) {
   if (pick_variable == PickVariable::UserDefined) {
-    throw std::runtime_error("Please call SetUserDefinedBranchingVariableMethod to set the user-defined method.");
+    throw std::runtime_error(
+        "Please call SetUserDefinedBranchingVariableMethod to set the "
+        "user-defined method.");
   }
   pick_variable_ = pick_variable;
 }
 
-void ScsBranchAndBound::SetUserDefinedBranchingVariableMethod(int (*fun)(const ScsNode &)) {
+void ScsBranchAndBound::SetUserDefinedBranchingVariableMethod(
+    int (*fun)(const ScsNode&)) {
   pick_branching_variable_userfun_ = fun;
   pick_variable_ = PickVariable::UserDefined;
 }
 
 void ScsBranchAndBound::ChoosePickBranchingNodeMethod(PickNode pick_node) {
   if (pick_node == PickNode::UserDefined) {
-    throw std::runtime_error("Please call SetUserDefinedBranchingNodeMethod to set the user-defined method.");
+    throw std::runtime_error(
+        "Please call SetUserDefinedBranchingNodeMethod to set the user-defined "
+        "method.");
   }
   pick_node_ = pick_node;
 }
 
-void ScsBranchAndBound::SetUserDefinedBranchingNodeMethod(ScsNode* (*fun)(const ScsNode &)) {
+void ScsBranchAndBound::SetUserDefinedBranchingNodeMethod(
+    ScsNode* (*fun)(const ScsNode&)) {
   pick_branching_node_userfun_ = fun;
   pick_node_ = PickNode::UserDefined;
 }
 
-void ScsBranchAndBound::SolveNode(ScsNode* node) {
-  node->Solve(settings_);
-  if (node->found_integral_sol()) {
-    best_upper_bound_ = std::min(best_upper_bound_, node->cost());
+void ScsBranchAndBound::SolveRootNode() {
+  root_->Solve(settings_);
+  if (root_->found_integral_sol()) {
+    best_upper_bound_ = root_->cost();
+    best_lower_bound_ = root_->cost();
+    return;
   }
   // TODO(hongkai.dai) round off the binary variables in the solution, to get a
   // potentially different (might be tighter) best upper bound.
 
-  // If the node is not fathomed, then add this node to the active_leaves_.
-  if (!IsNodeFathomed(*node)) {
-    active_leaves_.insert(active_leaves_.end(), node);
-  }
-  if (node->scs_info().statusVal == SCS_SOLVED || node->scs_info().statusVal == SCS_SOLVED_INACCURATE) {
-    best_lower_bound_ = (*std::min_element(active_leaves_.begin(), active_leaves_.end(), [](ScsNode* n1, ScsNode* n2) { return n1->cost() < n2->cost();}))->cost();
+  // Update the best lower bound.
+  best_lower_bound_ = root_->cost();
+
+  // If the node is not fathomed, and the node does not find the solution to the
+  // mixed-integer optimization, then add this node to the active_leaves_.
+  if (!IsNodeFathomed(*root_) && !IsConverged()) {
+    active_leaves_.push_back(root_.get());
   }
 }
 
@@ -608,15 +652,29 @@ bool ScsBranchAndBound::IsNodeFathomed(const ScsNode& node) const {
   if (!node.IsLeaf()) {
     throw std::runtime_error("Not a leaf node.");
   }
-  if (node.scs_info().statusVal == SCS_INFEASIBLE || node.scs_info().statusVal == SCS_INFEASIBLE_INACCURATE) {
+  if (node.scs_info().statusVal == SCS_INFEASIBLE ||
+      node.scs_info().statusVal == SCS_INFEASIBLE_INACCURATE) {
     return true;
   }
-  if (node.scs_info().statusVal == SCS_SOLVED || node.scs_info().statusVal == SCS_SOLVED_INACCURATE) {
+  if (node.scs_info().statusVal == SCS_SOLVED ||
+      node.scs_info().statusVal == SCS_SOLVED_INACCURATE) {
     if (node.cost() > best_upper_bound_) {
       return true;
     }
   }
   return false;
+}
+
+bool ScsBranchAndBound::IsConverged() const {
+  if (std::isinf(best_upper_bound_) && best_upper_bound_ > 0) {
+    // If the best upper bound is +∞, the problem is infeasible.
+    // If the best upper bound is -∞, then the mixed-integer problem is feasible
+    // and unbounded.
+    return false;
+  }
+  const double gap = best_upper_bound_ - best_lower_bound_;
+  return gap < absolute_gap_tol_ ||
+         gap / (std::abs(best_lower_bound_)) < relative_gap_tol_;
 }
 
 void ScsBranchAndBound::Solve() {
