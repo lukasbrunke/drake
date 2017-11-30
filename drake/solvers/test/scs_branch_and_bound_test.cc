@@ -29,7 +29,9 @@ class ScsBranchAndBoundTest {
     return bnb_tree_->active_leaves_;
   }
 
-  SCS_SETTINGS* scs_settings() const { return bnb_tree_->scs_data_.stgs; }
+  SCS_CONE* cone() const {return bnb_tree_->cone_.get();}
+
+  SCS_SETTINGS scs_settings() const { return bnb_tree_->settings_; }
 
   ScsNode* root() const { return bnb_tree_->root_.get(); }
 
@@ -490,7 +492,9 @@ void TestConstructScsRootNode(const AMatrix& A, const scs_float* const b,
   IsConeEqual(*(root->cone()), *root_cone_expected);
 
   EXPECT_FALSE(root->found_integral_sol());
-  IsBinaryVarIndicesEqual(root->binary_var_indices(), binary_var_indices);
+  IsListEqual(root->binary_var_indices(), binary_var_indices);
+
+  EXPECT_TRUE(root->IsLeaf());
 }
 
 GTEST_TEST(TestScsNode, TestConstructRoot1) {
@@ -535,9 +539,13 @@ void TestBranching(ScsNode* root, int branch_var_index,
   EXPECT_EQ(root->left_child()->parent(), root);
   EXPECT_EQ(root->right_child()->parent(), root);
 
-  IsBinaryVarIndicesEqual(root->left_child()->binary_var_indices(),
+  EXPECT_FALSE(root->IsLeaf());
+  EXPECT_TRUE(root->left_child()->IsLeaf());
+  EXPECT_TRUE(root->right_child()->IsLeaf());
+
+  IsListEqual(root->left_child()->binary_var_indices(),
                           binary_var_indices_child);
-  IsBinaryVarIndicesEqual(root->right_child()->binary_var_indices(),
+  IsListEqual(root->right_child()->binary_var_indices(),
                           binary_var_indices_child);
 
   EXPECT_EQ(root->left_child()->A()->m, root->A()->m - 2);
@@ -837,93 +845,21 @@ GTEST_TEST(TestScsNode, TestSolveChildNode5) {
                 false, 2E-2);
 }
 
-void free_scs_pointer(void* scs_pointer) { scs_free(scs_pointer); }
-
-// Store the data for a mixed-inteter optimization problem
-// min cᵀx + d
-// s.t Ax + s = b
-//     s in cone
-//     x(binary_var_indices_) are binary variables
-struct MIPdata {
-  MIPdata(const Eigen::SparseMatrix<double>& A, const scs_float* const b,
-          const scs_float* const c, double d, const SCS_CONE& cone,
-          const std::list<int>& binary_var_indices)
-      : A_{ConstructScsAmatrix(A)},
-        b_{static_cast<scs_float*>(scs_calloc(A_->m, sizeof(scs_float))),
-           &free_scs_pointer},
-        c_{static_cast<scs_float*>(scs_calloc(A_->n, sizeof(scs_float))),
-           &free_scs_pointer},
-        d_{d},
-        cone_{DeepCopyScsCone(&cone)},
-        binary_var_indices_{binary_var_indices} {
-    for (int i = 0; i < A_->m; ++i) {
-      b_.get()[i] = b[i];
-    }
-    for (int i = 0; i < A_->n; ++i) {
-      c_.get()[i] = c[i];
-    }
-  }
-  std::unique_ptr<AMatrix, void (*)(AMatrix*)> A_;
-  std::unique_ptr<scs_float, void (*)(void*)> b_;
-  std::unique_ptr<scs_float, void (*)(void*)> c_;
-  double d_;
-  std::unique_ptr<SCS_CONE, void (*)(SCS_CONE*)> cone_;
-  std::list<int> binary_var_indices_;
-};
-
-// Construct the problem data for the mixed-integer linear program
-// min x₀ + 2x₁ - 3x₂ - 4x₃ + 4.5x₄ + 1
-// s.t 2x₀ + x₂ + 1.5x₃ + x₄ = 4.5
-//     1 ≤ 2x₀ + 4x₃ + x₄ ≤ 7
-//     -2 ≤ 3x₁ + 2x₂ - 5x₃ + x₄ ≤ 7
-//     -5 ≤ x₁ + x₂ + 2x₃ ≤ 10
-//     -10 ≤ x₁ ≤ 10
-//     x₀, x₂, x₄ are binary variables.
-MIPdata ConstructMILPExample() {
-  Eigen::Matrix<double, 9, 5> A;
-  // clang-format off
-  A << 2, 0, 1, 1.5, 1,
-       2, 0, 0, 4, 1,
-       -2, 0, 0, -4, -1,
-       0, 3, 2, -5, 1,
-       0, -3, -2, 5, -1,
-       0, 1, 1, 2, 0,
-       0, -1, -1, -2, 0,
-       0, 1, 0, 0, 0,
-       0, -1, 0, 0, 0;
-  // clang-format on
-  scs_float b[9] = {4.5, 7, -1, 7, 2, 10, 5, 10, 10};
-  scs_float c[5] = {1, 2, -3, -4, 4.5};
-  SCS_CONE cone;
-  cone.f = 1;
-  cone.l = 8;
-  cone.q = nullptr;
-  cone.qsize = 0;
-  cone.s = nullptr;
-  cone.ssize = 0;
-  cone.ed = 0;
-  cone.ep = 0;
-  cone.p = nullptr;
-  cone.psize = 0;
-  return MIPdata(A.sparseView(), b, c, 1, cone, {0, 2, 4});
-};
-
 std::unique_ptr<ScsBranchAndBoundTest> ConstructScsBranchAndBoundMILPTest() {
-  const MIPdata data = ConstructMILPExample();
+  const MIPdata data = ConstructMILPExample2();
   SCS_PROBLEM_DATA scs_data;
   scs_data.A = data.A_.get();
   scs_data.b = data.b_.get();
   scs_data.c = data.c_.get();
   scs_data.m = data.A_->m;
   scs_data.n = data.A_->n;
-  std::unique_ptr<SCS_SETTINGS, void (*)(void*)> settings{
-      static_cast<SCS_SETTINGS*>(scs_malloc(sizeof(SCS_SETTINGS))),
-      &free_scs_pointer};
-  SetScsSettingToDefault(settings.get());
-  scs_data.stgs = settings.get();
+  scs_data.stgs = static_cast<SCS_SETTINGS*>(scs_malloc(sizeof(SCS_SETTINGS)));
+  SetScsSettingToDefault(scs_data.stgs);
 
   return std::make_unique<ScsBranchAndBoundTest>(
       scs_data, *(data.cone_), data.d_, data.binary_var_indices_);
+
+  scs_free(scs_data.stgs);
 }
 
 GTEST_TEST(TestScsBranchAndBound, TestConstructor) {
@@ -931,11 +867,13 @@ GTEST_TEST(TestScsBranchAndBound, TestConstructor) {
   EXPECT_EQ(dut->best_upper_bound(), std::numeric_limits<double>::infinity());
   EXPECT_EQ(dut->best_lower_bound(), -std::numeric_limits<double>::infinity());
   EXPECT_TRUE(dut->active_leaves().empty());
+  const MIPdata data = ConstructMILPExample2();
+  IsConeEqual(*(dut->cone()), *(data.cone_));
 }
 
 GTEST_TEST(TestScsBranchAndBound, TestSolveRootNode) {
   auto dut = ConstructScsBranchAndBoundMILPTest();
-  dut->root()->Solve(*(dut->scs_settings()));
+  dut->root()->Solve(dut->scs_settings());
   // The optimal cost to the root is -4.9, with the optimal solution as
   // (0.7, 1, 1, 1.4, 0)
   const scs_float x_expected[5] = {0.7, 1, 1, 1.4, 0};
@@ -949,7 +887,7 @@ GTEST_TEST(TestScsBranchAndBound, TestSolveRootNode) {
 
 GTEST_TEST(TestScsBranchAndBound, TestPickBranchingVariable) {
   auto dut = ConstructScsBranchAndBoundMILPTest();
-  dut->root()->Solve(*(dut->scs_settings()));
+  dut->root()->Solve(dut->scs_settings());
   // The optimal solution to the root is (0.7, 1, 1, 1.4, 0)
   // If we pick the most ambivalent branching variable, then we should return x0
   // If we pick the least ambivalent branching variable, then we should return
@@ -991,6 +929,7 @@ GTEST_TEST(TestScsBranchAndBound, TestSolveNode1) {
 
 GTEST_TEST(TestScsBranchAndBound, TestBranchAndSolve1) {
   auto dut = ConstructScsBranchAndBoundMILPTest();
+  dut->SolveNode(dut->root());
   dut->BranchAndSolve(dut->root(), 0);
 }
 }  // namespace

@@ -275,10 +275,7 @@ class ScsBranchAndBound {
    * @param scs_data scs_data contains the A, b, c matrices of the problem,
    * together with the settings of the problem. Notice that the data A, b, c do
    * NOT include the integral constraints on y, nor the relaxation 0 ≤ y ≤ 1.
-   * scs_data should outlive the ScsBranchAndBound object constructed in this
-   * function.
-   * @param cone The cone `K` in the documentation above. This cone should
-   * outlive the ScsBranchAndBound object constructed in this function.
+   * @param cone The cone `K` in the documentation above.
    * @param cost_constant The constant term in the cost, `d` in the
    * documentation above.
    * @param binary_var_indices The indices of the binary variables y in x.
@@ -287,7 +284,7 @@ class ScsBranchAndBound {
                     double cost_constant,
                     const std::list<int>& binary_var_indices);
 
-  ~ScsBranchAndBound() {}
+  ~ScsBranchAndBound();
 
   /**
    * Solve the mixed-integer optimization problem by running branch-and-bound
@@ -384,15 +381,23 @@ class ScsBranchAndBound {
    */
   bool IsNodeFathomed(const ScsNode& node) const;
 
-  // scs_data_ includes the data on c, A, b, and the cone K. It also contains
-  // the settings of the problem, such as iteration limit, accuracy, etc.
-  SCS_PROBLEM_DATA scs_data_;
-
-  // binary_var_indices_ records the indices of all binary variables in x.
-  std::list<int> binary_var_indices_;
-
   // The root of the tree
   std::unique_ptr<ScsNode> root_;
+
+  // The setting for solving SCS problem
+  SCS_SETTINGS settings_;
+
+  // The cone in the original mixed-integer optimization
+  // <pre>
+  // min cᵀx + d
+  //     s.t Ax + s = b
+  //        s in K
+  //     y are binary variables.
+  // </pre>
+  // ScsBranchAndBound owns this cone, none-of the node owns the cone (A cone
+  // has arrays on second order cone size, semi-definite cone size, etc).
+  // This cone is copied from the construction.
+  std::unique_ptr<SCS_CONE, void(*)(SCS_CONE*)> cone_;
 
   // The best upper bound of the mixed-integer optimization optimal cost. An
   // upper bound is obtained by evaluating the cost at a solution satisfying

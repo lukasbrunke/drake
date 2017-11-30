@@ -401,20 +401,60 @@ scs_int ScsNode::Solve(const SCS_SETTINGS& scs_settings) {
   return scs_status;
 }
 
+namespace {
+void freeCone(SCS_CONE* cone) {
+  if (cone) {
+    if (cone->q) {
+      scs_free(cone->q);
+    }
+    if (cone->s) {
+      scs_free(cone->s);
+    }
+    if (cone->p) {
+      scs_free(cone->p);
+    }
+    scs_free(cone);
+  }
+}
+template<typename T>
+void ConstructAndCopyArray(T* src, T* dest, int size) {
+  if (size > 0) {
+    dest = static_cast<T*>(scs_calloc(size, sizeof(T)));
+    for (int i = 0; i < size; ++i) {
+      dest[i] = src[i];
+    }
+  } else {
+    dest = nullptr;
+  }
+}
+}  // namespace
+
 ScsBranchAndBound::ScsBranchAndBound(const SCS_PROBLEM_DATA& scs_data,
                                      const SCS_CONE& cone, double cost_constant,
                                      const std::list<int>& binary_var_indices)
-    : scs_data_{scs_data},
-      binary_var_indices_{binary_var_indices},
-      root_{ScsNode::ConstructRootNode(*(scs_data.A), scs_data.b, scs_data.c,
+    : root_{ScsNode::ConstructRootNode(*(scs_data.A), scs_data.b, scs_data.c,
                                        cone, binary_var_indices,
                                        cost_constant)},
+      settings_{*(scs_data.stgs)},
+      cone_{static_cast<SCS_CONE*>(scs_calloc(1, sizeof(SCS_CONE))), &freeCone},
       best_upper_bound_{std::numeric_limits<double>::infinity()},
       best_lower_bound_{-std::numeric_limits<double>::infinity()},
       relative_gap_tol_{1E-2},
       absolute_gap_tol_{0.1},
-      active_leaves_{} {}
+      active_leaves_{} {
+  cone_->f = cone.f;
+  cone_->l = cone.l;
+  cone_->qsize = cone.qsize;
+  ConstructAndCopyArray(cone.q, cone_->q, cone_->qsize);
+  cone_->psize = cone.psize;
+  ConstructAndCopyArray(cone.p, cone_->p, cone_->psize);
+  cone_->ed = cone.ed;
+  cone_->ep = cone.ep;
+  cone_->ssize = cone.ssize;
+  ConstructAndCopyArray(cone.s, cone_->s, cone_->ssize);
+}
 
+ScsBranchAndBound::~ScsBranchAndBound() {}
 ScsNode* ScsBranchAndBound::PickBranchingNode() const {
   if (active_leaves_.empty()) {
     throw std::runtime_error("No active leaves.");
@@ -548,7 +588,7 @@ void ScsBranchAndBound::SetUserDefinedBranchingNodeMethod(ScsNode* (*fun)(const 
 }
 
 void ScsBranchAndBound::SolveNode(ScsNode* node) {
-  node->Solve(*(scs_data_.stgs));
+  node->Solve(settings_);
   if (node->found_integral_sol()) {
     best_upper_bound_ = std::min(best_upper_bound_, node->cost());
   }
@@ -584,7 +624,7 @@ void ScsBranchAndBound::Solve() {
   if (verbose_) {
     std::cout << "Presolve. Solve relaxed problem on the root node.\n";
   }
-  root_->Solve(*(scs_data_.stgs));
+  root_->Solve(settings_);
 }
 }  // namespace solvers
 }  // namespace drake
