@@ -369,12 +369,13 @@ class ScsBranchAndBound {
   void SolveNode(ScsNode* node);
 
   /**
-   * Given a node, pick a binary variable in the node to branch.
-   * The two child nodes are created in this function. The optimization problems
-   * in the two child nodes are solved.
-   * @param node
+   * Given a node, and the binary variable in the node to branch, branch this
+   * node by creating two child nodes, and solve the optimization problems in
+   * the child nodes.
+   * @param node The node to branch. Should be a leaf node that is not fathomed.
+   * @param branch_var_index The binary variable to branch.
    */
-  void PickBranchingVariableAndSolve(ScsNode* node);
+  void BranchAndSolve(ScsNode* node, int branch_var_index);
 
   /**
    * A leaf node is fathomed if

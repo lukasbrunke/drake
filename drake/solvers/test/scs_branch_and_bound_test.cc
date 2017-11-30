@@ -45,6 +45,8 @@ class ScsBranchAndBoundTest {
 
   bool IsNodeFathomed(const ScsNode& node) { return bnb_tree_->IsNodeFathomed(node); }
 
+  void BranchAndSolve(ScsNode* node, int branch_var_index) { return bnb_tree_->BranchAndSolve(node, branch_var_index); }
+
  private:
   std::unique_ptr<ScsBranchAndBound> bnb_tree_;
 };
@@ -95,15 +97,61 @@ void IsAmatrixEqual(const AMatrix& A1, const AMatrix& A2, double tol) {
   }
 }
 
+/**
+ * Test if two lists are equal, namely list1[i] = list2[i]
+ */
 template<typename T>
-void DoListsContainSameElements(const std::list<T> &indices1,
-                                const std::list<T> &indices2) {
-  EXPECT_EQ(indices1.size(), indices2.size());
-  auto it2 = indices2.begin();
-  for (auto it1 = indices1.begin(); it1 != indices1.end(); ++it1) {
-    EXPECT_EQ(*it1, *it2);
+bool IsListEqual(const std::list<T>& list1,
+                 const std::list<T>& list2) {
+  if (list1.size() != list2.size()) {
+    return false;
+  }
+  auto it2 = list2.begin();
+  for (auto it1 = list1.begin(); it1 != list1.end(); ++it1) {
+    if (*it1 != *it2) {
+      return false;
+    }
     ++it2;
   }
+  return true;
+}
+
+template<typename T>
+bool IsListEqualAfterReshuffle(const std::list<T>& list1, const std::list<T>& list2) {
+  if (list1.size() != list2.size()) {
+    return false;
+  }
+  std::list<T> list1_remaining = list1;
+  std::list<T> list2_remaining = list2;
+  auto it1 = list1_remaining.begin();
+  while (!list1_remaining.empty()) {
+    bool found_match = false;
+    for (auto it2 = list2_remaining.begin(); it2 != list2_remaining.end(); ++it2) {
+      if (*it1 == *it2) {
+        list1_remaining.erase(it1);
+        list2_remaining.erase(it2);
+        it1 = list1_remaining.begin();
+        found_match = true;
+        break;
+      }
+    }
+    if (!found_match) {
+      return false;
+    }
+  }
+  return true;
+}
+
+GTEST_TEST(TestIsListEqualAfterReshuffle, test) {
+  EXPECT_TRUE(IsListEqualAfterReshuffle<int>({}, {}));
+  EXPECT_TRUE(IsListEqualAfterReshuffle<int>({1}, {1}));
+  EXPECT_TRUE(IsListEqualAfterReshuffle<int>({1, 2}, {2, 1}));
+  EXPECT_TRUE(IsListEqualAfterReshuffle<int>({1, 2, 1}, {1, 2, 1}));
+  EXPECT_TRUE(IsListEqualAfterReshuffle<int>({1, 1, 2}, {1, 2, 1}));
+
+  EXPECT_FALSE(IsListEqualAfterReshuffle<int>({}, {1}));
+  EXPECT_FALSE(IsListEqualAfterReshuffle<int>({1, 2}, {1}));
+  EXPECT_FALSE(IsListEqualAfterReshuffle<int>({1, 1}, {1, 2}));
 }
 
 // Determine if the two constraints
@@ -938,7 +986,12 @@ GTEST_TEST(TestScsBranchAndBound, TestSolveNode1) {
   EXPECT_NEAR(dut->best_lower_bound(), dut->root()->cost(), 1E-10);
   // The root node is not fathomed.
   EXPECT_FALSE(dut->IsNodeFathomed(*(dut->root())));
-  DoListsContainSameElements(dut->active_leaves(), {dut->root()});
+  EXPECT_TRUE(IsListEqualAfterReshuffle(dut->active_leaves(), {dut->root()}));
+}
+
+GTEST_TEST(TestScsBranchAndBound, TestBranchAndSolve1) {
+  auto dut = ConstructScsBranchAndBoundMILPTest();
+  dut->BranchAndSolve(dut->root(), 0);
 }
 }  // namespace
 }  // namespace solvers

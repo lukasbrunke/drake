@@ -459,6 +459,7 @@ ScsNode* ScsBranchAndBound::PickDepthFirstNode() const {
   return node;
 }
 
+namespace {
 void CheckPickVariablePreCondition(const ScsNode& node) {
   if (node.binary_var_indices().empty()) {
     throw std::runtime_error(
@@ -466,40 +467,32 @@ void CheckPickVariablePreCondition(const ScsNode& node) {
             "anymore.");
   }
 }
+
+double AmbivalentValueFun(const ScsNode& node, int binary_var_index) {
+  return std::abs(node.scs_sol()->x[binary_var_index] - 0.5);
+}
+}  // namespace
+
 int ScsBranchAndBound::PickMostAmbivalentAsBranchingVariable(
     const ScsNode& node) const {
-  // Choose the binary variable whose value is closest to 0 or 1.
-  // The loop below has linear complexity, since binary_var_indices() is a list,
-  // that doesn't allow random access.
-  double min_val = 1;
-  int branch_var_index = -1;
-  for (int binary_var_index : node.binary_var_indices()) {
-    const double val = std::abs(node.scs_sol()->x[binary_var_index] - 0.5);
-    if (val < min_val) {
-      branch_var_index = binary_var_index;
-      min_val = val;
-    }
-  }
-  return branch_var_index;
+  // Choose the binary variable whose value is closest to 0.5.
+  return *(std::min_element(node.binary_var_indices().begin(),
+                            node.binary_var_indices().end(),
+                            [&node](int index1, int index2) {
+                              return AmbivalentValueFun(node, index1) <
+                                     AmbivalentValueFun(node, index2);
+                            }));
 }
 
 int ScsBranchAndBound::PickLeastAmbivalentAsBranchingVariable(
     const ScsNode& node) const {
   // Choose the binary variable whose value is closest to 0 or 1.
-  // The loop below has linear complexity, since binary_var_indices() is a list,
-  // that doesn't allow random access.
-  double min_val = 2;
-  int branch_var_index = -1;
-  for (int binary_var_index : node.binary_var_indices()) {
-    const double binary_var_val{node.scs_sol()->x[binary_var_index]};
-    const double val =
-        std::min(std::abs(binary_var_val), std::abs(binary_var_val - 1));
-    if (val < min_val) {
-      branch_var_index = binary_var_index;
-      min_val = val;
-    }
-  }
-  return branch_var_index;
+  return *(std::max_element(node.binary_var_indices().begin(),
+                            node.binary_var_indices().end(),
+                            [&node](int index1, int index2) {
+                              return AmbivalentValueFun(node, index1) <
+                                     AmbivalentValueFun(node, index2);
+                            }));
 }
 
 int ScsBranchAndBound::PickBranchingVariable(const ScsNode& node) const {
@@ -517,13 +510,11 @@ int ScsBranchAndBound::PickBranchingVariable(const ScsNode& node) const {
   }
 }
 
-void ScsBranchAndBound::PickBranchingVariableAndSolve(ScsNode* node) {
+void ScsBranchAndBound::BranchAndSolve(ScsNode* node, int branch_var_index) {
   if (IsNodeFathomed(*node)) {
     throw std::runtime_error("Should not branch on a fathomed node.");
   }
-  // Pick the variable to branch
-  int binary_var_index = PickBranchingVariable(*node);
-  node->Branch(binary_var_index);
+  node->Branch(branch_var_index);
   // Remove node from active leaves. It is not a leaf node anymore.
   active_leaves_.remove(node);
 
