@@ -343,8 +343,8 @@ MIPdata ConstructMILPExample1() {
        0, -1, 3.1, 0,
        -1, 0, 1, 1.2;
   // clang-format on
-  scs_float b[3] = {2, -1, 5};
-  scs_float c[4] = {1, 2, 0, -3};
+  const scs_float b[3] = {2, -1, 5};
+  const scs_float c[4] = {1, 2, 0, -3};
   SCS_CONE cone;
   cone.f = 1;
   cone.l = 2;
@@ -380,8 +380,8 @@ MIPdata ConstructMILPExample2() {
       0, 1, 0, 0, 0,
       0, -1, 0, 0, 0;
   // clang-format on
-  scs_float b[9] = {4.5, 7, -1, 7, 2, 10, 5, 10, 10};
-  scs_float c[5] = {1, 2, -3, -4, 4.5};
+  const scs_float b[9] = {4.5, 7, -1, 7, 2, 10, 5, 10, 10};
+  const scs_float c[5] = {1, 2, -3, -4, 4.5};
   SCS_CONE cone;
   cone.f = 1;
   cone.l = 8;
@@ -396,6 +396,34 @@ MIPdata ConstructMILPExample2() {
   return MIPdata(A.sparseView(), b, c, 1, cone, {0, 2, 4});
 }
 
+// A mixed-integer optimization problem that is un-bounded.
+// min x0 + 2*x1 + 3*x2 + 2.5*x3 + 2
+// s.t     x0 + x1 - x2 + x3 <= 3
+//     1<= x0 + 2*x1 -2*x2 + 4*x3 <= 3
+//     x0, x2 are binary
+MIPdata ConstructMILPExample3() {
+  Eigen::Matrix<double, 3, 4> A;
+  // clang-format off
+  A << 1, 1, -1, 1,
+       1, 2, -2, 4,
+       -1, -2, 2, -4;
+  // clang-format on
+  const scs_float b[3] = {3, 3, -1};
+  const scs_float c[4] = {1, 2, 3, 2.5};
+  SCS_CONE cone;
+  cone.f = 0;
+  cone.l = 3;
+  cone.q = nullptr;
+  cone.qsize = 0;
+  cone.s = nullptr;
+  cone.ssize = 0;
+  cone.ed = 0;
+  cone.ep = 0;
+  cone.p = nullptr;
+  cone.psize = 0;
+  return MIPdata(A.sparseView(), b, c, 2, cone, {0, 2});
+}
+
 std::unique_ptr<ScsNode> ConstructMILPExample1RootNode() {
   MIPdata mip_data = ConstructMILPExample1();
   return ScsNode::ConstructRootNode(*(mip_data.A_), mip_data.b_.get(),
@@ -405,6 +433,13 @@ std::unique_ptr<ScsNode> ConstructMILPExample1RootNode() {
 
 std::unique_ptr<ScsNode> ConstructMILPExample2RootNode() {
   MIPdata mip_data = ConstructMILPExample2();
+  return ScsNode::ConstructRootNode(*(mip_data.A_), mip_data.b_.get(),
+                                    mip_data.c_.get(), *(mip_data.cone_),
+                                    mip_data.binary_var_indices_, mip_data.d_);
+}
+
+std::unique_ptr<ScsNode> ConstructMILPExample3RootNode() {
+  MIPdata mip_data = ConstructMILPExample3();
   return ScsNode::ConstructRootNode(*(mip_data.A_), mip_data.b_.get(),
                                     mip_data.c_.get(), *(mip_data.cone_),
                                     mip_data.binary_var_indices_, mip_data.d_);
@@ -510,6 +545,13 @@ GTEST_TEST(TestScsNode, TestConstructRoot1) {
 
 GTEST_TEST(TestScsNode, TestConstructRoot2) {
   MIPdata mip_data = ConstructMILPExample2();
+  TestConstructScsRootNode(*(mip_data.A_), mip_data.b_.get(), mip_data.c_.get(),
+                           *(mip_data.cone_), mip_data.binary_var_indices_,
+                           mip_data.d_);
+}
+
+GTEST_TEST(TestScsNode, TestConstructRoot3) {
+  MIPdata mip_data = ConstructMILPExample3();
   TestConstructScsRootNode(*(mip_data.A_), mip_data.b_.get(), mip_data.c_.get(),
                            *(mip_data.cone_), mip_data.binary_var_indices_,
                            mip_data.d_);
@@ -788,6 +830,14 @@ GTEST_TEST(TestScsNode, TestSolve2) {
   TestNodeSolve(*root, SCS_SOLVED, -4.9, x_expected, false, 2E-2);
 }
 
+GTEST_TEST(TestScsNode, TestSolve3) {
+  // Solve the root node
+  const auto root = ConstructMILPExample3RootNode();
+
+  SolveNodeWithDefaultSettings(root.get());
+  TestNodeSolve(*root, SCS_UNBOUNDED, -std::numeric_limits<double>::infinity(), nullptr, false, 1E-3);
+}
+
 GTEST_TEST(TestScsNode, TestSolveChildNodes1) {
   // Solve the left and right child nodes of the root, by branching on x0.
   const auto root = ConstructMILPExample1RootNode();
@@ -893,6 +943,11 @@ std::unique_ptr<ScsBranchAndBoundTest> ConstructScsBranchAndBoundMILP2Test() {
   return ConstructScsBranchAndBoundTest(data);
 }
 
+std::unique_ptr<ScsBranchAndBoundTest> ConstructScsBranchAndBoundMILP3Test() {
+  const MIPdata data = ConstructMILPExample3();
+  return ConstructScsBranchAndBoundTest(data);
+}
+
 GTEST_TEST(TestScsBranchAndBound, TestConstructor) {
   auto dut = ConstructScsBranchAndBoundMILP2Test();
   EXPECT_EQ(dut->best_upper_bound(), std::numeric_limits<double>::infinity());
@@ -962,6 +1017,16 @@ GTEST_TEST(TestScsBranchAndBound, TestSolveNode2) {
   // The best lower bound should be the cost on the root node.
   EXPECT_NEAR(dut->best_lower_bound(), dut->root()->cost(), 1E-10);
   // The root node is not fathomed.
+  EXPECT_FALSE(dut->IsNodeFathomed(*(dut->root())));
+  EXPECT_TRUE(IsListEqualAfterReshuffle(dut->active_leaves(), {dut->root()}));
+}
+
+GTEST_TEST(TestScsBranchAndBound, TestSolveNode3) {
+  auto dut = ConstructScsBranchAndBoundMILP3Test();
+  dut->SolveRootNode();
+  TestNodeSolve(*(dut->root()), SCS_UNBOUNDED, -std::numeric_limits<double>::infinity(), nullptr, false, 1E-10);
+
+  EXPECT_EQ(dut->best_lower_bound(), -std::numeric_limits<double>::infinity());
   EXPECT_FALSE(dut->IsNodeFathomed(*(dut->root())));
   EXPECT_TRUE(IsListEqualAfterReshuffle(dut->active_leaves(), {dut->root()}));
 }
