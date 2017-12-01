@@ -628,12 +628,12 @@ void ScsBranchAndBound::SetUserDefinedBranchingNodeMethod(
   pick_node_ = PickNode::UserDefined;
 }
 
-void ScsBranchAndBound::SolveRootNode() {
+scs_int ScsBranchAndBound::SolveRootNode() {
   root_->Solve(settings_);
   if (root_->found_integral_sol()) {
     best_upper_bound_ = root_->cost();
     best_lower_bound_ = root_->cost();
-    return;
+    return root_->scs_info().statusVal;
   }
   // TODO(hongkai.dai) round off the binary variables in the solution, to get a
   // potentially different (might be tighter) best upper bound.
@@ -646,6 +646,7 @@ void ScsBranchAndBound::SolveRootNode() {
   if (!IsNodeFathomed(*root_) && !IsConverged()) {
     active_leaves_.push_back(root_.get());
   }
+  return root_->scs_info().statusVal;
 }
 
 bool ScsBranchAndBound::IsNodeFathomed(const ScsNode& node) const {
@@ -677,12 +678,31 @@ bool ScsBranchAndBound::IsConverged() const {
          gap / (std::abs(best_lower_bound_)) < relative_gap_tol_;
 }
 
-void ScsBranchAndBound::Solve() {
+scs_int ScsBranchAndBound::Solve() {
   // First solve the root node
   if (verbose_) {
     std::cout << "Presolve. Solve relaxed problem on the root node.\n";
   }
-  root_->Solve(settings_);
+  const root_status = SolveRootNode();
+  // If root node is infeasible, then the mixed-integer problem is infeasible.
+  if (root_status == SCS_INFEASIBLE || root_status == SCS_INFEASIBLE_INACCURATE) {
+    return root_status;
+  } else if (root_status == SCS_SOLVED || root_status == SCS_SOLVED_INACCURATE || root_status == SCS_UNBOUNDED || root_status == SCS_UNBOUNDED_INACCURATE) {
+    if (best_upper_bound_ == -std::numeric_limits<double>::infinity()) {
+      return SCS_UNBOUNDED;
+    }
+    while (!IsConverged()) {
+      auto node = PickBranchingNode();
+      int branch_var_index = PickBranchingVariable(*node);
+      BranchAndSolve(node, branch_var_index);
+      if (active_leaves_.empty() && best_upper_bound_ == std::numeric_limits<double>::infinity()) {
+        return SCS_INFEASIBLE;
+      }
+    }
+    return SCS_SOLVED;
+  } else {
+    return root_status;
+  }
 }
 }  // namespace solvers
 }  // namespace drake

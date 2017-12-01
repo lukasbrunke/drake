@@ -289,8 +289,9 @@ class ScsBranchAndBound {
   /**
    * Solve the mixed-integer optimization problem by running branch-and-bound
    * algorithm.
+   * @return status The status of the SCS when it terminates.
    */
-  void Solve();
+  scs_int Solve();
 
   void SetVerbose(bool verbose) { verbose_ = verbose; }
 
@@ -361,8 +362,10 @@ class ScsBranchAndBound {
 
   /**
    * Solve the root node.
+   * @return status The status of the SCS by solving the optimization problem
+   * in the root node.
    */
-  void SolveRootNode();
+  scs_int SolveRootNode();
 
   /**
    * Given a node, and the binary variable in the node to branch, branch this
