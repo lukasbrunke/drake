@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <list>
 #include <memory>
 
@@ -119,7 +120,9 @@ class ScsNode {
   /**
    * A node is a leaf if it doesn't have children.
    */
-  bool IsLeaf() const { return left_child_ == nullptr && right_child_ == nullptr;}
+  bool IsLeaf() const {
+    return left_child_ == nullptr && right_child_ == nullptr;
+  }
 
   // Getter for A matrix.
   const AMatrix* A() const { return A_.get(); }
@@ -257,9 +260,14 @@ class ScsBranchAndBound {
    */
   enum class PickNode {
     UserDefined,
-    DepthFirst,     // Pick the node with the most binary variables fixed.
-    MinLowerBound   // Pick the node with the smallest optimal cost.
+    DepthFirst,    // Pick the node with the most binary variables fixed.
+    MinLowerBound  // Pick the node with the smallest optimal cost.
   };
+
+  // The function signature for the user defined method to pick a branching node
+  // or a branching variable.
+  using PickNodeFun = std::function<ScsNode*(const ScsNode&)>;
+  using PickVariableFun = std::function<int(const ScsNode&)>;
 
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(ScsBranchAndBound)
 
@@ -298,7 +306,8 @@ class ScsBranchAndBound {
   /**
    * The user can choose the method to pick a variable. We provide options such
    * as "mose ambivalent" or "least ambivalent". If the user wants to set his
-   * own method to pick branching variable, then call ScsBranchAndBound::SetUserDefinedBranchingVariableMethod().
+   * own method to pick branching variable, then call
+   * ScsBranchAndBound::SetUserDefinedBranchingVariableMethod().
    * @param pick_variable Any value except PickVariable::UserDefined.
    */
   void ChoosePickBranchingVariableMethod(PickVariable pick_variable);
@@ -307,7 +316,7 @@ class ScsBranchAndBound {
    * Set the user-defined method to pick a branching variable at a node.
    * @param fun the user-defined method to pick a branching variable.
    */
-  void SetUserDefinedBranchingVariableMethod(int(*fun)(const ScsNode&));
+  void SetUserDefinedBranchingVariableMethod(PickVariableFun fun);
 
   /**
    * The user can choose the method to pick a node for branching. We provide
@@ -323,7 +332,15 @@ class ScsBranchAndBound {
    * @param fun the user-defined method to pick a branching node. The input
    * argument to fun is the root of the tree.
    */
-  void SetUserDefinedBranchingNodeMethod(ScsNode*(*fun)(const ScsNode&));
+  void SetUserDefinedBranchingNodeMethod(PickNodeFun fun);
+
+  /**
+   * A leaf node is fathomed if any of the following conditions are satisfied
+   * 1. The optimization problem in the node is infeasible.
+   * 2. The optimal cost of the node is larger than the best upper bound.
+   * 3. The optimal solution to the node satisfies all the integral constraints.
+   */
+  bool IsNodeFathomed(const ScsNode& node) const;
 
  private:
   friend class ScsBranchAndBoundTest;  // Forward declaration
@@ -377,13 +394,6 @@ class ScsBranchAndBound {
   void BranchAndSolve(ScsNode* node, int branch_var_index);
 
   /**
-   * A leaf node is fathomed if
-   * 1. The optimization problem in the node is infeasible.
-   * 2. The optimal cost of the node is larger than the best upper bound.
-   */
-  bool IsNodeFathomed(const ScsNode& node) const;
-
-  /**
    * A problem converges if it finds a mixed-integer solution, such that the
    * cost of this solution is close to the lower bound.
    * @return
@@ -406,7 +416,7 @@ class ScsBranchAndBound {
   // ScsBranchAndBound owns this cone, none-of the node owns the cone (A cone
   // has arrays on second order cone size, semi-definite cone size, etc).
   // This cone is copied from the construction.
-  std::unique_ptr<SCS_CONE, void(*)(SCS_CONE*)> cone_;
+  std::unique_ptr<SCS_CONE, void (*)(SCS_CONE*)> cone_;
 
   // The best upper bound of the mixed-integer optimization optimal cost. An
   // upper bound is obtained by evaluating the cost at a solution satisfying
@@ -429,9 +439,10 @@ class ScsBranchAndBound {
 
   // The list of active leaves, i.e., the leaf nodes whose optimization problem
   // has been solved, and the nodes have not been fathomed.
-  // A leaf node is fathomed if
+  // A leaf node is fathomed if any of the following conditions are met
   // 1. The optimization problem in the node is infeasible.
   // 2. The optimal cost of the node is larger than the best upper bound.
+  // 3. The optimal solution to the node satisfies all the integral constraints.
   std::list<ScsNode*> active_leaves_;
 
   PickVariable pick_variable_ = PickVariable::MostAmbivalent;
@@ -442,10 +453,10 @@ class ScsBranchAndBound {
   bool verbose_ = false;
 
   // This is the user defined function to pick a branching variable.
-  int(*pick_branching_variable_userfun_)(const ScsNode&) = nullptr;
+  PickVariableFun pick_branching_variable_userfun_ = nullptr;
 
   // This is the user defined function to pick a branching node.
-  ScsNode*(*pick_branching_node_userfun_)(const ScsNode&) = nullptr;
+  PickNodeFun pick_branching_node_userfun_ = nullptr;
 };
 }  // namespace solvers
 }  // namespace drake

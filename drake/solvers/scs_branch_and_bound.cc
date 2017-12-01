@@ -475,27 +475,18 @@ ScsNode* ScsBranchAndBound::PickMinLowerBoundNode() const {
   // TODO(hongkai.dai): test other implementations to see if it is faster
   // for example,  nnstead of using the list, do a binary search on the tree
   // directly.
-  double min_val = std::numeric_limits<double>::infinity();
-  ScsNode* node = nullptr;
-  for (const auto& active_leaf : active_leaves_) {
-    if (active_leaf->cost() < min_val) {
-      min_val = active_leaf->cost();
-      node = active_leaf;
-    }
-  }
-  return node;
+  return *(std::min_element(active_leaves_.begin(), active_leaves_.end(),
+                            [](ScsNode* node1, ScsNode* node2) {
+                              return node1->cost() < node2->cost();
+                            }));
 }
 
 ScsNode* ScsBranchAndBound::PickDepthFirstNode() const {
-  int max_num_fixed_vars = 0;
-  ScsNode* node = nullptr;
-  for (const auto& active_leaf : active_leaves_) {
-    if (active_leaf->binary_var_indices().size() > max_num_fixed_vars) {
-      max_num_fixed_vars = active_leaf->binary_var_indices().size();
-      node = active_leaf;
-    }
-  }
-  return node;
+  return *(std::max_element(active_leaves_.begin(), active_leaves_.end(),
+                            [](ScsNode* node1, ScsNode* node2) {
+                              return node1->binary_var_indices().size() >
+                                     node2->binary_var_indices().size();
+                            }));
 }
 
 namespace {
@@ -570,6 +561,9 @@ void ScsBranchAndBound::BranchAndSolve(ScsNode* node, int branch_var_index) {
   if (node->right_child()->found_integral_sol()) {
     best_upper_bound_ = std::min(best_upper_bound_, right_cost);
   }
+  // Remove any node in active_leaves_, whose cost is larger than the updated
+  // best upper bound.
+  active_leaves_.remove_if([this](ScsNode* leaf) { return leaf->cost() > this->best_upper_bound_;});
 
   // Update lower bound.
   // remaining_lower_bound is the lower bound in the rest of the tree, excluding
@@ -577,13 +571,11 @@ void ScsBranchAndBound::BranchAndSolve(ScsNode* node, int branch_var_index) {
   const double remaining_lower_bound =
       active_leaves_.empty()
           ? std::numeric_limits<double>::infinity()
-          : std::min(
-                node->cost(),
-                (*std::min_element(active_leaves_.begin(), active_leaves_.end(),
-                                   [](ScsNode* n1, ScsNode* n2) {
-                                     return n1->cost() < n2->cost();
-                                   }))
-                    ->cost());
+          : (*std::min_element(active_leaves_.begin(), active_leaves_.end(),
+                               [](ScsNode* n1, ScsNode* n2) {
+                                 return n1->cost() < n2->cost();
+                               }))
+                ->cost();
   best_lower_bound_ = std::min({left_cost, right_cost, remaining_lower_bound});
 
   // Update active_leaves_
@@ -608,7 +600,7 @@ void ScsBranchAndBound::ChoosePickBranchingVariableMethod(
 }
 
 void ScsBranchAndBound::SetUserDefinedBranchingVariableMethod(
-    int (*fun)(const ScsNode&)) {
+    PickVariableFun fun) {
   pick_branching_variable_userfun_ = fun;
   pick_variable_ = PickVariable::UserDefined;
 }
@@ -622,8 +614,7 @@ void ScsBranchAndBound::ChoosePickBranchingNodeMethod(PickNode pick_node) {
   pick_node_ = pick_node;
 }
 
-void ScsBranchAndBound::SetUserDefinedBranchingNodeMethod(
-    ScsNode* (*fun)(const ScsNode&)) {
+void ScsBranchAndBound::SetUserDefinedBranchingNodeMethod(PickNodeFun fun) {
   pick_branching_node_userfun_ = fun;
   pick_node_ = PickNode::UserDefined;
 }
@@ -659,7 +650,7 @@ bool ScsBranchAndBound::IsNodeFathomed(const ScsNode& node) const {
   }
   if (node.scs_info().statusVal == SCS_SOLVED ||
       node.scs_info().statusVal == SCS_SOLVED_INACCURATE) {
-    if (node.cost() > best_upper_bound_) {
+    if (node.cost() > best_upper_bound_ || node.found_integral_sol()) {
       return true;
     }
   }
@@ -683,11 +674,15 @@ scs_int ScsBranchAndBound::Solve() {
   if (verbose_) {
     std::cout << "Presolve. Solve relaxed problem on the root node.\n";
   }
-  const root_status = SolveRootNode();
+  const scs_int root_status = SolveRootNode();
   // If root node is infeasible, then the mixed-integer problem is infeasible.
-  if (root_status == SCS_INFEASIBLE || root_status == SCS_INFEASIBLE_INACCURATE) {
+  if (root_status == SCS_INFEASIBLE ||
+      root_status == SCS_INFEASIBLE_INACCURATE) {
     return root_status;
-  } else if (root_status == SCS_SOLVED || root_status == SCS_SOLVED_INACCURATE || root_status == SCS_UNBOUNDED || root_status == SCS_UNBOUNDED_INACCURATE) {
+  } else if (root_status == SCS_SOLVED ||
+             root_status == SCS_SOLVED_INACCURATE ||
+             root_status == SCS_UNBOUNDED ||
+             root_status == SCS_UNBOUNDED_INACCURATE) {
     if (best_upper_bound_ == -std::numeric_limits<double>::infinity()) {
       return SCS_UNBOUNDED;
     }
@@ -695,7 +690,8 @@ scs_int ScsBranchAndBound::Solve() {
       auto node = PickBranchingNode();
       int branch_var_index = PickBranchingVariable(*node);
       BranchAndSolve(node, branch_var_index);
-      if (active_leaves_.empty() && best_upper_bound_ == std::numeric_limits<double>::infinity()) {
+      if (active_leaves_.empty() &&
+          best_upper_bound_ == std::numeric_limits<double>::infinity()) {
         return SCS_INFEASIBLE;
       }
     }
