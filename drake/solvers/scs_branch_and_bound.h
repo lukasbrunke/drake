@@ -240,9 +240,9 @@ class ScsNode {
  * 3. How to find a feasible solution to the mixed-integer problem, from the
  *    solution to the problem in a node. This feasible solution will generate
  *    an upper bound of the mixed-integer problem.
- * In this class we provide default choices, and also virtual functions as
- * interfaces to implement the user's own choices. The user could inherit this
- * class, and implement their choices in the sub-class.
+ *
+ * In this class we provide default choices. The user could also provide their
+ * own functions to make the choice.
  */
 class ScsBranchAndBound {
  public:
@@ -250,18 +250,18 @@ class ScsBranchAndBound {
    * Different method to pick a branching variable.
    */
   enum class PickVariable {
-    UserDefined,
-    LeastAmbivalent,  // pick the variable that is closest to either 0 or 1
-    MostAmbivalent    // pick the variable that is closest to 0.5
+    UserDefined,      ///< User defined.
+    LeastAmbivalent,  ///< Pick the variable that is closest to either 0 or 1
+    MostAmbivalent    ///< Pick the variable that is closest to 0.5
   };
 
   /**
    * Different method to pick a branching node.
    */
   enum class PickNode {
-    UserDefined,
-    DepthFirst,    // Pick the node with the most binary variables fixed.
-    MinLowerBound  // Pick the node with the smallest optimal cost.
+    UserDefined,   ///< User defined.
+    DepthFirst,    ///< Pick the node with the most binary variables fixed.
+    MinLowerBound  ///< Pick the node with the smallest optimal cost.
   };
 
   // The function signature for the user defined method to pick a branching node
@@ -297,7 +297,7 @@ class ScsBranchAndBound {
   /**
    * Solve the mixed-integer optimization problem by running branch-and-bound
    * algorithm.
-   * @return status The status of the SCS when it terminates.
+   * @retval status The status of the SCS when it terminates.
    */
   scs_int Solve();
 
@@ -396,7 +396,6 @@ class ScsBranchAndBound {
   /**
    * A problem converges if it finds a mixed-integer solution, such that the
    * cost of this solution is close to the lower bound.
-   * @return
    */
   bool IsConverged() const;
 
