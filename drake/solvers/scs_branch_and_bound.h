@@ -399,6 +399,18 @@ class ScsBranchAndBound {
    */
   bool IsConverged() const;
 
+  /**
+   * Assuming we are given a node in the tree, and the solution to this node as
+   * node_sol_x, which only contains the solution to the variables in this node,
+   * but not the value of the binary variables that has been fixed in this node.
+   * We will recover the solution to the original mixed-integer problem from
+   * this node's solution.
+   * @param node[in] A node in the tree.
+   * @param node_sol_x[in] The solution to the optimization problem in this node.
+   * @param mip_sol_x[out] mip_sol The solution to the original mixed-integer optimization problem.
+   */
+  void RecoverSolutionFromNode(const ScsNode& node, const scs_float* const node_sol_x, std::vector<scs_float>* mip_sol_x) const;
+
   // The root of the tree
   std::unique_ptr<ScsNode> root_;
 

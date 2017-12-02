@@ -53,6 +53,12 @@ class ScsBranchAndBoundTest {
     return bnb_tree_->BranchAndSolve(node, branch_var_index);
   }
 
+  std::vector<scs_float> RecoverSolutionFromNode(const ScsNode& node, const scs_float* const sol_x) const {
+    std::vector<scs_float> mip_sol_x;
+    bnb_tree_->RecoverSolutionFromNode(node, sol_x, &mip_sol_x);
+    return mip_sol_x;
+  }
+
  private:
   std::unique_ptr<ScsBranchAndBound> bnb_tree_;
 };
@@ -998,12 +1004,21 @@ GTEST_TEST(TestScsBranchAndBound, TestPickBranchingVariable) {
   EXPECT_EQ(dut->PickBranchingVariable(*(dut->root())), 2);
 }
 
+template<typename T>
+bool IsVectorEqual(const std::vector<T>& vec1, const std::vector<T>& vec2) {
+  if (vec1.size() != vec2.size()) {
+    return false;
+  }
+  return std::equal(vec1.begin(), vec1.end(), vec2.begin());
+}
+
 GTEST_TEST(TestScsBranchAndBound, TestSolveNode1) {
   auto dut = ConstructScsBranchAndBoundMILP1Test();
   EXPECT_EQ(dut->best_upper_bound(), std::numeric_limits<double>::infinity());
   dut->SolveRootNode();
   const scs_float x_expected[4] = {0, 1, 0, 0.5};
   TestNodeSolve(*(dut->root()), SCS_SOLVED, 1.5, x_expected, true, 1E-3);
+  IsVectorEqual(dut->RecoverSolutionFromNode(*(dut->root()), x_expected), {0, 1, 0, 0.5});
 
   // The best lower bound should be the cost on the root node.
   EXPECT_NEAR(dut->best_lower_bound(), dut->root()->cost(), 1E-10);
@@ -1022,7 +1037,7 @@ GTEST_TEST(TestScsBranchAndBound, TestSolveNode2) {
   dut->SolveRootNode();
   const scs_float x_expected[5] = {0.7, 1, 1, 1.4, 0};
   TestNodeSolve(*(dut->root()), SCS_SOLVED, -4.9, x_expected, false, 2E-2);
-
+  IsVectorEqual(dut->RecoverSolutionFromNode(*(dut->root()), x_expected), {0.7, 1, 1, 1.4, 0});
   // The best lower bound should be the cost on the root node.
   EXPECT_NEAR(dut->best_lower_bound(), dut->root()->cost(), 1E-10);
   // The root node is not fathomed.
@@ -1059,6 +1074,7 @@ GTEST_TEST(TestScsBranchAndBound, TestBranchAndSolve1) {
   const scs_float x_expected_r[4] = {1.0 / 3.0, 1, 1, 0};
   TestNodeSolve(*(dut->root()->right_child()), SCS_SOLVED, -13.0 / 3.0,
                 x_expected_r, true, 2E-2);
+  IsVectorEqual(dut->RecoverSolutionFromNode(*(dut->root()->right_child()), x_expected_r), {1, 1.0 / 3.0, 1, 1, 0});
 
   EXPECT_NEAR(dut->best_lower_bound(), dut->root()->right_child()->cost(),
               1E-10);
@@ -1077,10 +1093,13 @@ GTEST_TEST(TestScsBranchAndBound, TestBranchAndSolve2) {
   const scs_float x_expected_l[4] = {1, 2.0 / 3.0, 1, 1};
   TestNodeSolve(*(dut->root()->left_child()), SCS_SOLVED, 23.0 / 6.0,
                 x_expected_l, true, 1E-2);
+  IsVectorEqual(dut->RecoverSolutionFromNode(*(dut->root()->left_child()), x_expected_l), {1, 2.0 / 3.0, 0, 1, 1});
 
   const scs_float x_expected_r[4] = {0.7, 1, 1.4, 0};
   TestNodeSolve(*(dut->root()->right_child()), SCS_SOLVED, -4.9, x_expected_r,
                 false, 2E-2);
+  IsVectorEqual(dut->RecoverSolutionFromNode(*(dut->root()->right_child()), x_expected_r), {0.7, 1, 1, 1.4, 0});
+
 
   EXPECT_TRUE(dut->IsNodeFathomed(*(dut->root()->left_child())));
   EXPECT_FALSE(dut->IsNodeFathomed(*(dut->root()->right_child())));
@@ -1103,10 +1122,14 @@ GTEST_TEST(TestScsBranchAndBound, TestBranchAndSolve3) {
   const scs_float x_expected_l[4] = {0.7, 1, 1, 1.4};
   TestNodeSolve(*(dut->root()->left_child()), SCS_SOLVED, -4.9, x_expected_l,
                 false, 2E-2);
+  IsVectorEqual(dut->RecoverSolutionFromNode(*(dut->root()->left_child()), x_expected_l), {0.7, 1, 1, 1.4, 0});
+
 
   const scs_float x_expected_r[4] = {0.2, 2.0 / 3.0, 1, 1.4};
   TestNodeSolve(*(dut->root()->right_child()), SCS_SOLVED, -47.0 / 30,
                 x_expected_r, false, 2E-2);
+  IsVectorEqual(dut->RecoverSolutionFromNode(*(dut->root()->right_child()), x_expected_r), {0.2, 2.0 / 3.0, 1, 1.4, 1});
+
 
   EXPECT_FALSE(dut->IsNodeFathomed(*(dut->root()->left_child())));
   EXPECT_FALSE(dut->IsNodeFathomed(*(dut->root()->right_child())));
@@ -1128,6 +1151,7 @@ GTEST_TEST(TestScsBranchAndBound, TestBranchAndSolve3) {
   // root->right should become fathomed (it has cost -47/30).
   const scs_float x_expected_l_r[3] = {1.0 / 3.0, 1, 1};
   TestNodeSolve(*(dut->root()->left_child()->right_child()), SCS_SOLVED, -13.0 / 3.0, x_expected_l_r, true, 1E-2);
+  IsVectorEqual(dut->RecoverSolutionFromNode(*(dut->root()->left_child()->right_child()), x_expected_l_r), {1, 1.0 / 3.0, 1, 1, 0});
   EXPECT_TRUE(dut->IsNodeFathomed(*(dut->root()->left_child()->left_child())));
   EXPECT_TRUE(dut->IsNodeFathomed(*(dut->root()->left_child()->right_child())));
   EXPECT_TRUE(dut->IsNodeFathomed(*(dut->root()->right_child())));
@@ -1152,6 +1176,7 @@ GTEST_TEST(TestScsBranchAndBound, TestBranch4) {
   // root->r->r has integral solution (1, -10/9, 1, 1/3, 1), with optimal cost -1/18
   const scs_float x_expected_r_r[3] = {-10.0 / 9.0, 1, 1.0 / 3.0};
   TestNodeSolve(*(dut->root()->right_child()->right_child()), SCS_SOLVED, -1.0 / 18.0, x_expected_r_r, true, 2E-2);
+  IsVectorEqual(dut->RecoverSolutionFromNode(*(dut->root()->right_child()->right_child()), x_expected_r_r), {1, -10.0/9, 1, 1.0/3, 1});
   // There is only one active leaves, root->l with cost -4.9.
   EXPECT_TRUE(dut->IsNodeFathomed(*(dut->root()->right_child()->right_child())));
   EXPECT_TRUE(dut->IsNodeFathomed(*(dut->root()->right_child()->left_child())));

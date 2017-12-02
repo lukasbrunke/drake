@@ -669,6 +669,32 @@ bool ScsBranchAndBound::IsConverged() const {
          gap / (std::abs(best_lower_bound_)) < relative_gap_tol_;
 }
 
+void ScsBranchAndBound::RecoverSolutionFromNode(const ScsNode& node, const scs_float* const node_sol_x, std::vector<scs_float>* mip_sol_x) const {
+  std::list<scs_float> mip_sol_list;
+  for (int i = 0; i < node.A()->n; ++i) {
+    mip_sol_list.push_back(node_sol_x[i]);
+  }
+  ScsNode* node_ptr = const_cast<ScsNode*>(&node); // node_ptr will move up all the way to the root.
+  while(node_ptr->parent() != nullptr) {
+    // insert node_ptr->y_val() to mip_sol_list at position node_ptr.y_index().
+    auto it = mip_sol_list.begin();
+    for (int pos = 0; pos < node_ptr->y_index(); ++pos) {
+      ++it;
+    }
+    mip_sol_list.insert(it, node_ptr->y_val());
+    node_ptr = node_ptr->parent();
+  }
+  if (node_ptr != root_.get()) {
+    throw std::runtime_error("The node does not belong to this tree.");
+  }
+  mip_sol_x->resize(node_ptr->A()->n);
+  auto it = mip_sol_list.begin();
+  for (int i = 0; i < node_ptr->A()->n; ++i) {
+    (*mip_sol_x)[i] = *it;
+    ++it;
+  }
+}
+
 scs_int ScsBranchAndBound::Solve() {
   // First solve the root node
   if (verbose_) {
