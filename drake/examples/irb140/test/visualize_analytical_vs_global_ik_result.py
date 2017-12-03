@@ -5,7 +5,7 @@ import bot_core as lcmbotcore
 
 # receive lcm message and draw data
 def receiveMessage(msg):
-    drake_path = '/home/hongkai/drake-distro-bk'
+    drake_path = '/home/hongkai/drake-distro'
     case = 0
 
     robotModel, jointController = roboturdf.loadRobotModel(urdfFile=drake_path+'/drake/examples/IRB140/urdf/irb_140_shift.urdf', view=view, useConfigFile=False)
