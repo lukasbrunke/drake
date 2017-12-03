@@ -8,7 +8,7 @@
 
 #include "drake/examples/irb140/IRB140_analytical_kinematics.h"
 #include "drake/examples/irb140/test/irb140_common.h"
-#include "drake/multibody/constraint/rigid_body_constraint.h"
+#include "drake/multibody/rigid_body_constraint.h"
 #include "drake/multibody/global_inverse_kinematics.h"
 #include "drake/multibody/rigid_body_ik.h"
 #include "drake/solvers/gurobi_solver.h"
