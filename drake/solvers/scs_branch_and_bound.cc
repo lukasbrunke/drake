@@ -400,6 +400,48 @@ scs_int ScsNode::Solve(const SCS_SETTINGS& scs_settings) {
   return scs_status;
 }
 
+std::pair<scs_int, std::unique_ptr<SCS_SOL_VARS, void(*)(SCS_SOL_VARS*)>> ScsNode::SolveWithFixedBinaryVariables(
+    const std::vector<int>& binary_var_vals,
+    const SCS_SETTINGS& settings) const {
+  if (binary_var_vals.size() != binary_var_indices_.size() || std::any_of(binary_var_vals.begin(), binary_var_vals.end(), [](int v) {return v != 0 && v!= 1;})) {
+    throw std::runtime_error("binary_var_vals is not an acceptable input.");
+  }
+  // First we need to obtain the optimization problem in the SCS form, after
+  // all the binary variables are fixed.
+  // Before fixing the binary variables, the SCS problem in this node is
+  // min cᵀx+d
+  // s.t Ax + s = b
+  //     s in K
+  // If we denote all the binary variables as y, after fixing y to their values,
+  // we will remove the first 2*y.size() rows in the linear inequality
+  // constraints of A, since these rows represent the relaxation 0 ≤ y ≤ 1.
+  // We then need to remove the columns in A corresponding to y, and subtract
+  // these columns form the right-hand side vector b.
+  AMatrix* A_new = static_cast<AMatrix*>(scs_calloc(1, sizeof(AMatrix)));
+  const int num_A_new_cols = A_->n - binary_var_vals.size();
+  A_new->p = static_cast<scs_int*>(scs_calloc(num_A_new_cols, sizeof(scs_int)));
+  // Since we will remove the columns in A corresponding to the binary variable
+  // y, we use A_new_col_to_A_col[i] to store the column in A that corresponds
+  // to the i'th column in A_new;
+  std::vector<int> A_new_col_to_A_col(num_A_new_cols);
+  std::vector<bool> is_A_col_removed(A_->n, false);
+  for (const auto y_index : binary_var_indices_) {
+    is_A_col_removed[y_index] = true;
+  }
+  int A_new_col_index = 0;
+  for (int i = 0; i < A_->n; ++i) {
+    if (!is_A_col_removed[i]) {
+      A_new_col_to_A_col[A_new_col_index] = i;
+      ++A_new_col_index;
+    }
+  }
+  A_new->p[0] = 0;
+  for (int i  = 1; i < num_A_new_cols + 1; ++i) {
+    const int A_col_index{A_new_col_to_A_col[i]};
+    A_new->p[i] = A_new->p[i-1] + A_->p[A_col_index] - A_->p[A_col_index - 1];
+  }
+}
+
 namespace {
 void freeCone(SCS_CONE* cone) {
   if (cone) {

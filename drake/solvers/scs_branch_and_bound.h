@@ -118,6 +118,20 @@ class ScsNode {
   scs_int Solve(const SCS_SETTINGS& scs_settings);
 
   /**
+   * Fix the binary variables in this node to some given value, and solve the
+   * resulting optimization problem.
+   * @param binary_var_vals The values of the binary variables in this node.
+   * @retval (status, sol) The status of the SCS solver, together with the
+   * solution.
+   * @pre 1. The length of binary_var_vals is the same as binary_var_indices().
+   * @pre 2. binary_var_vals[i] can only be either 0 or 1.
+   * @throw std::runtime_error if the pre-condition is not satisfied.
+   */
+  std::pair<scs_int, std::unique_ptr<SCS_SOL_VARS, void (*)(SCS_SOL_VARS*)>>
+  SolveWithFixedBinaryVariables(const std::vector<int>& binary_var_vals,
+                                const SCS_SETTINGS& settings) const;
+
+  /**
    * A node is a leaf if it doesn't have children.
    */
   bool IsLeaf() const {
@@ -343,7 +357,7 @@ class ScsBranchAndBound {
   bool IsNodeFathomed(const ScsNode& node) const;
 
   /// Getter for the best solution to the mixed-integer problem.
-  const std::vector<scs_float>& best_solution() const { return best_solution_;}
+  const std::vector<scs_float>& best_solution() const { return best_solution_; }
 
  private:
   friend class ScsBranchAndBoundTest;  // Forward declaration
@@ -409,10 +423,14 @@ class ScsBranchAndBound {
    * We will recover the solution to the original mixed-integer problem from
    * this node's solution.
    * @param node[in] A node in the tree.
-   * @param node_sol_x[in] The solution to the optimization problem in this node.
-   * @param mip_sol_x[out] mip_sol The solution to the original mixed-integer optimization problem.
+   * @param node_sol_x[in] The solution to the optimization problem in this
+   * node.
+   * @param mip_sol_x[out] mip_sol The solution to the original mixed-integer
+   * optimization problem.
    */
-  void RecoverSolutionFromNode(const ScsNode& node, const scs_float* const node_sol_x, std::vector<scs_float>* mip_sol_x) const;
+  void RecoverSolutionFromNode(const ScsNode& node,
+                               const scs_float* const node_sol_x,
+                               std::vector<scs_float>* mip_sol_x) const;
 
   // The root of the tree
   std::unique_ptr<ScsNode> root_;
