@@ -31,7 +31,12 @@ drake_cc_library(
     srcs = ["test/irb140_common.cc"],
     hdrs = ["test/irb140_common.h"],
     deps = [
+        "//drake/common",
         "//drake/common/test_utilities:eigen_matrix_compare",
+        "//drake/lcm",
+        "//drake/manipulation/util:simple_tree_visualizer",
+        "//drake/multibody:rigid_body_tree",
+        "//drake/multibody/parsers",
         "@gtest//:without_main",
     ],
 )
