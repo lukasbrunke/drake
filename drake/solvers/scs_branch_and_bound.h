@@ -342,6 +342,9 @@ class ScsBranchAndBound {
    */
   bool IsNodeFathomed(const ScsNode& node) const;
 
+  /// Getter for the best solution to the mixed-integer problem.
+  const std::vector<scs_float>& best_solution() const { return best_solution_;}
+
  private:
   friend class ScsBranchAndBoundTest;  // Forward declaration
 
@@ -456,12 +459,16 @@ class ScsBranchAndBound {
   // 3. The optimal solution to the node satisfies all the integral constraints.
   std::list<ScsNode*> active_leaves_;
 
-  PickVariable pick_variable_ = PickVariable::MostAmbivalent;
-
-  PickNode pick_node_ = PickNode::MinLowerBound;
+  // Best mixed-integer problem solution found so far. If no solution found yet,
+  // then best_solution_ is empty.
+  std::vector<scs_float> best_solution_;
 
   // Print out message on the branch and bound.
   bool verbose_ = false;
+
+  PickVariable pick_variable_ = PickVariable::MostAmbivalent;
+
+  PickNode pick_node_ = PickNode::MinLowerBound;
 
   // This is the user defined function to pick a branching variable.
   PickVariableFun pick_branching_variable_userfun_ = nullptr;

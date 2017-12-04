@@ -440,7 +440,8 @@ ScsBranchAndBound::ScsBranchAndBound(const SCS_PROBLEM_DATA& scs_data,
       best_lower_bound_{-std::numeric_limits<double>::infinity()},
       relative_gap_tol_{1E-2},
       absolute_gap_tol_{0.1},
-      active_leaves_{} {
+      active_leaves_{},
+      best_solution_{} {
   cone_->f = cone.f;
   cone_->l = cone.l;
   cone_->qsize = cone.qsize;
@@ -555,15 +556,34 @@ void ScsBranchAndBound::BranchAndSolve(ScsNode* node, int branch_var_index) {
   const scs_float right_cost = node->right_child()->cost();
 
   // Update upper bound.
-  if (node->left_child()->found_integral_sol()) {
-    best_upper_bound_ = std::min(best_upper_bound_, left_cost);
+  if (node->left_child()->found_integral_sol() ||
+      node->right_child()->found_integral_sol()) {
+    const double left_child_integral_cost =
+        node->left_child()->found_integral_sol()
+            ? left_cost
+            : std::numeric_limits<double>::infinity();
+    const double right_child_integral_cost =
+        node->right_child()->found_integral_sol()
+            ? right_cost
+            : std::numeric_limits<double>::infinity();
+    if (left_child_integral_cost < right_child_integral_cost) {
+      best_upper_bound_ = std::min(best_upper_bound_, left_child_integral_cost);
+      RecoverSolutionFromNode(*(node->left_child()),
+                              node->left_child()->scs_sol()->x,
+                              &best_solution_);
+    } else {
+      best_upper_bound_ =
+          std::min(best_upper_bound_, right_child_integral_cost);
+      RecoverSolutionFromNode(*(node->right_child()),
+                              node->right_child()->scs_sol()->x,
+                              &best_solution_);
+    }
   }
-  if (node->right_child()->found_integral_sol()) {
-    best_upper_bound_ = std::min(best_upper_bound_, right_cost);
-  }
+
   // Remove any node in active_leaves_, whose cost is larger than the updated
   // best upper bound.
-  active_leaves_.remove_if([this](ScsNode* leaf) { return leaf->cost() > this->best_upper_bound_;});
+  active_leaves_.remove_if(
+      [this](ScsNode* leaf) { return leaf->cost() > this->best_upper_bound_; });
 
   // Update lower bound.
   // remaining_lower_bound is the lower bound in the rest of the tree, excluding
@@ -624,6 +644,10 @@ scs_int ScsBranchAndBound::SolveRootNode() {
   if (root_->found_integral_sol()) {
     best_upper_bound_ = root_->cost();
     best_lower_bound_ = root_->cost();
+    best_solution_.resize(root_->A()->n);
+    for (int i = 0; i < root_->A()->n; ++i) {
+      best_solution_[i] = root_->scs_sol()->x[i];
+    }
     return root_->scs_info().statusVal;
   }
   // TODO(hongkai.dai) round off the binary variables in the solution, to get a
@@ -669,13 +693,16 @@ bool ScsBranchAndBound::IsConverged() const {
          gap / (std::abs(best_lower_bound_)) < relative_gap_tol_;
 }
 
-void ScsBranchAndBound::RecoverSolutionFromNode(const ScsNode& node, const scs_float* const node_sol_x, std::vector<scs_float>* mip_sol_x) const {
+void ScsBranchAndBound::RecoverSolutionFromNode(
+    const ScsNode& node, const scs_float* const node_sol_x,
+    std::vector<scs_float>* mip_sol_x) const {
   std::list<scs_float> mip_sol_list;
   for (int i = 0; i < node.A()->n; ++i) {
     mip_sol_list.push_back(node_sol_x[i]);
   }
-  ScsNode* node_ptr = const_cast<ScsNode*>(&node); // node_ptr will move up all the way to the root.
-  while(node_ptr->parent() != nullptr) {
+  ScsNode* node_ptr = const_cast<ScsNode*>(
+      &node);  // node_ptr will move up all the way to the root.
+  while (node_ptr->parent() != nullptr) {
     // insert node_ptr->y_val() to mip_sol_list at position node_ptr.y_index().
     auto it = mip_sol_list.begin();
     for (int pos = 0; pos < node_ptr->y_index(); ++pos) {
