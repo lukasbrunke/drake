@@ -400,10 +400,15 @@ scs_int ScsNode::Solve(const SCS_SETTINGS& scs_settings) {
   return scs_status;
 }
 
-std::pair<scs_int, std::unique_ptr<SCS_SOL_VARS, void(*)(SCS_SOL_VARS*)>> ScsNode::SolveWithFixedBinaryVariables(
-    const std::vector<int>& binary_var_vals,
-    const SCS_SETTINGS& settings) const {
-  if (binary_var_vals.size() != binary_var_indices_.size() || std::any_of(binary_var_vals.begin(), binary_var_vals.end(), [](int v) {return v != 0 && v!= 1;})) {
+std::tuple<std::unique_ptr<AMatrix, void (*)(AMatrix*)>,
+           std::unique_ptr<scs_float, void (*)(void*)>,
+           std::unique_ptr<scs_float, void (*)(void*)>, double,
+           std::unique_ptr<SCS_CONE, void (*)(void*)>>
+ScsNode::ConstructScsProblemWithFixedBinaryVariables(
+    const std::vector<int>& binary_var_vals) const {
+  if (binary_var_vals.size() != binary_var_indices_.size() ||
+      std::any_of(binary_var_vals.begin(), binary_var_vals.end(),
+                  [](int v) { return v != 0 && v != 1; })) {
     throw std::runtime_error("binary_var_vals is not an acceptable input.");
   }
   // First we need to obtain the optimization problem in the SCS form, after
@@ -417,8 +422,11 @@ std::pair<scs_int, std::unique_ptr<SCS_SOL_VARS, void(*)(SCS_SOL_VARS*)>> ScsNod
   // constraints of A, since these rows represent the relaxation 0 ≤ y ≤ 1.
   // We then need to remove the columns in A corresponding to y, and subtract
   // these columns form the right-hand side vector b.
-  AMatrix* A_new = static_cast<AMatrix*>(scs_calloc(1, sizeof(AMatrix)));
+  auto A_new = std::unique_ptr<AMatrix, void (*)(AMatrix*)>(
+      static_cast<AMatrix*>(scs_calloc(1, sizeof(AMatrix))), &freeAMatrix);
   const int num_A_new_cols = A_->n - binary_var_vals.size();
+  A_new->m = A_->m - 2 * binary_var_vals.size();
+  A_new->n = num_A_new_cols;
   A_new->p = static_cast<scs_int*>(scs_calloc(num_A_new_cols, sizeof(scs_int)));
   // Since we will remove the columns in A corresponding to the binary variable
   // y, we use A_new_col_to_A_col[i] to store the column in A that corresponds
@@ -436,11 +444,90 @@ std::pair<scs_int, std::unique_ptr<SCS_SOL_VARS, void(*)(SCS_SOL_VARS*)>> ScsNod
     }
   }
   A_new->p[0] = 0;
-  for (int i  = 1; i < num_A_new_cols + 1; ++i) {
+  for (int i = 1; i < num_A_new_cols + 1; ++i) {
     const int A_col_index{A_new_col_to_A_col[i]};
-    A_new->p[i] = A_new->p[i-1] + A_->p[A_col_index] - A_->p[A_col_index - 1];
+    A_new->p[i] = A_new->p[i - 1] + A_->p[A_col_index] - A_->p[A_col_index - 1];
   }
+  const int num_A_new_nnz{A_new->p[num_A_new_cols]};
+
+  A_new->i = static_cast<scs_int*>(scs_calloc(num_A_new_nnz, sizeof(scs_int)));
+  A_new->x =
+      static_cast<scs_float*>(scs_calloc(num_A_new_nnz, sizeof(scs_float)));
+  // We need to remove the rows in A_ that correspond to the relaxation of the
+  // binary variables 0 ≤ y ≤ 1. These rows are the first 2*y.size() rows in the
+  // linear inequality constraint part.
+  for (int col = 0; col < num_A_new_cols; ++col) {
+    for (int i = 0; i < A_new->p[col + 1] - A_new->p[col]; ++i) {
+      // The number of linear equality constraints is unchanged, so the row
+      // index smaller than cone_->f is unchanged. The number of linear
+      // inequality constraints is decreased by 2*y.size(), so the row index
+      // after cone_->f + 2*y.size() is decreased by 2*y.size().
+      const int A_col_index = A_new_col_to_A_col[col];
+      const int row_shift = A_->i[A_->p[A_col_index] + i] < cone_->f
+                                ? 0
+                                : 2 * binary_var_vals.size();
+      A_new->i[A_new->p[col] + i] = A_->i[A_->p[A_col_index] + i] - row_shift;
+      A_new->x[A_new->p[col] + i] = A_->x[A_->p[A_col_index] + i];
+    }
+  }
+
+  // First we remove the rows in b that correspond to the relaxation 0 ≤ y ≤ 1,
+  // then we subtract the columns in A corresponding to y from b.
+  auto b_new = std::unique_ptr<scs_float, void (*)(void*)>(
+      static_cast<scs_float*>(scs_calloc(A_new->m, sizeof(scs_float))),
+      &free_scs_pointer);
+  for (int i = 0; i < A_new->m; ++i) {
+    const int row_shift = i < cone_->f ? 0 : 2 * binary_var_vals.size();
+    b_new.get()[i] = b_.get()[i - row_shift];
+  }
+  int binary_var_count = 0;
+  for (auto binary_var_index : binary_var_indices_) {
+    const int binary_var_val{binary_var_vals[binary_var_count]};
+    if (binary_var_val == 1) {
+      for (int i = A_->i[binary_var_index]; i < A_->i[binary_var_index + 1];
+           ++i) {
+        const int A_row_index = A_->i[i];
+        const int A_new_row_index =
+            A_row_index < cone_->f ? A_row_index
+                                   : A_row_index - 2 * binary_var_vals.size();
+        b_new.get()[A_new_row_index] -= A_->x[i];
+      }
+    }
+    binary_var_count++;
+  }
+
+  // Remove the entries in c that corresponds to the binary variables y, and
+  // add the coefficient to the constant term d, if y takes value 1.
+  auto c_new = std::unique_ptr<scs_float, void (*)(void*)>(
+      static_cast<scs_float*>(scs_calloc(A_new->n, sizeof(scs_float))),
+      &free_scs_pointer);
+  for (int i = 0; i < A_new->n; ++i) {
+    c_new.get()[i] = c_.get()[A_new_col_to_A_col[i]];
+  }
+
+  double d_new = cost_constant_;
+  binary_var_count = 0;
+  for (int binary_var_index : binary_var_indices_) {
+    if (binary_var_vals[binary_var_count] == 1) {
+      d_new += c_.get()[binary_var_index];
+    }
+    ++binary_var_count;
+  }
+
+  auto cone_new = std::unique_ptr<SCS_CONE, void (*)(void*)>(
+      static_cast<SCS_CONE*>(scs_calloc(1, sizeof(SCS_CONE))),
+      &free_scs_pointer);
+  // Shallow copy cone_ to cone_new, but decrement the number of linear
+  // inequality constraints by 2*y.size()
+  *cone_new = *cone_;
+  cone_new->l = cone_->l - 2 * binary_var_vals.size();
+
+  return std::make_tuple(A_new, b_new, c_new, d_new, cone_new);
 }
+
+std::pair<scs_int, std::unique_ptr<SCS_SOL_VARS, void (*)(SCS_SOL_VARS*)>>
+ScsNode::SolveWithFixedBinaryVariables(const std::vector<int>& binary_var_vals,
+                                       const SCS_SETTINGS& settings) const {}
 
 namespace {
 void freeCone(SCS_CONE* cone) {

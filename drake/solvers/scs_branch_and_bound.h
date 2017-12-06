@@ -190,6 +190,20 @@ class ScsNode {
   SCS_INFO scs_info() const { return scs_info_; }
 
  private:
+  // Return the optimization problem, after fixing all the binary variables
+  // in this node to some integer values.
+  // @retval (A, b, c, d, cone). The returned optimization problem
+  // min cᵀx + d
+  // s.t Ax + s = b
+  //     s in cone.
+  // where x is obtained from the original decision variables in this node,
+  // after removing the binary variables.
+  std::tuple<std::unique_ptr<AMatrix, void (*)(AMatrix*)>,
+             std::unique_ptr<scs_float, void (*)(void*)>,
+             std::unique_ptr<scs_float, void (*)(void*)>, double,
+             std::unique_ptr<SCS_CONE, void (*)(void*)>>
+  ConstructScsProblemWithFixedBinaryVariables(
+      const std::vector<int>& binary_var_vals) const;
   // We will solve the problem
   // min c_ᵀx
   // s.t A_ * x + s = b_
