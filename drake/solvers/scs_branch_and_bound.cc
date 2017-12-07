@@ -522,7 +522,8 @@ ScsNode::ConstructScsProblemWithFixedBinaryVariables(
   *cone_new = *cone_;
   cone_new->l = cone_->l - 2 * binary_var_vals.size();
 
-  return std::make_tuple(A_new, b_new, c_new, d_new, cone_new);
+  return std::make_tuple(std::move(A_new), std::move(b_new), std::move(c_new),
+                         d_new, std::move(cone_new));
 }
 
 std::pair<scs_int, std::unique_ptr<SCS_SOL_VARS, void (*)(SCS_SOL_VARS*)>>
