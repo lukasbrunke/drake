@@ -1,10 +1,9 @@
 #include <memory>
 
-#include <gflags/gflags.h>
 #include <gtest/gtest.h>
 
 #include "drake/common/drake_path.h"
-#include "drake/examples/kuka_iiwa_arm/dev/tools/simple_tree_visualizer.h"
+#include "drake/manipulation/util/simple_tree_visualizer.h"
 #include "drake/examples/kuka_iiwa_arm/iiwa_common.h"
 #include "drake/examples/kuka_iiwa_arm/iiwa_lcm.h"
 #include "drake/lcm/drake_lcm.h"
@@ -167,7 +166,7 @@ int DoMain() {
   AddFridge(tree.get(), kFridgePos);
   auto free_space_vertices = SetFreeSpace(tree.get());
   auto collision_pts = AddBodyCollisionPoint(tree.get());
-  tools::SimpleTreeVisualizer simple_tree_visualizer(*tree.get(), &lcm);
+  manipulation::SimpleTreeVisualizer simple_tree_visualizer(*tree.get(), &lcm);
   auto q_feasible = SolveGlobalIKreachable(tree.get(), kBottleReachablePos, free_space_vertices, collision_pts, false);
   simple_tree_visualizer.visualize(q_feasible);
   SolveGlobalIKreachable(tree.get(), kBottleReachablePos, free_space_vertices, collision_pts, true);
@@ -179,6 +178,5 @@ int DoMain() {
 }  // namespace drake
 
 int main(int argc, char* argv[]) {
-  gflags::ParseCommandLineFlags(&argc, &argv, true);
   return drake::examples::kuka_iiwa_arm::DoMain();
 }

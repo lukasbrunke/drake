@@ -4,7 +4,7 @@
 #include "drake/multibody/joints/fixed_joint.h"
 #include "drake/multibody/parsers/urdf_parser.h"
 #include "drake/multibody/parsers/sdf_parser.h"
-#include "drake/common/drake_path.h"
+#include "drake/common/find_resource.h"
 
 namespace drake {
 namespace examples {
@@ -65,24 +65,26 @@ std::unique_ptr<RigidBodyTreed> ConstructKuka() {
   std::unique_ptr<RigidBodyTreed>
       rigid_body_tree = std::make_unique<RigidBodyTreed>();
 
-  const std::string model_path = drake::GetDrakePath() +
-      "/manipulation/models/iiwa_description/urdf/"
-          "iiwa14_polytope_collision.urdf";
+  const std::string model_path = FindResourceOrThrow(
+      "drake/manipulation/models/iiwa_description/urdf/"
+          "iiwa14_polytope_collision.urdf");
 
   const std::string table_path =
-      drake::GetDrakePath() + "/examples/kuka_iiwa_arm/models/table/"
-          "extra_heavy_duty_table_surface_only_collision.sdf";
+  FindResourceOrThrow("drake/examples/kuka_iiwa_arm/models/table/"
+          "extra_heavy_duty_table_surface_only_collision.sdf");
 
+  const double kRobotBaseShiftX = -0.243716;
+  const double kRobotBaseShiftY = -0.625087;
   auto table1_frame = std::make_shared<RigidBodyFrame<double>>(
       "iiwa_table",
       rigid_body_tree->get_mutable_body(0),
-      Eigen::Vector3d::Zero(),
+      Eigen::Vector3d(kRobotBaseShiftX, kRobotBaseShiftY, 0),
       Eigen::Vector3d::Zero());
 
   auto table2_frame = std::make_shared<RigidBodyFrame<double>>(
       "object_table",
       rigid_body_tree->get_mutable_body(0),
-      Eigen::Vector3d(0.8, 0, 0),
+      Eigen::Vector3d(0.8 + kRobotBaseShiftX, kRobotBaseShiftY, 0),
       Eigen::Vector3d::Zero());
 
   parsers::sdf::AddModelInstancesFromSdfFile(table_path,
@@ -96,7 +98,7 @@ std::unique_ptr<RigidBodyTreed> ConstructKuka() {
                                              rigid_body_tree.get());
 
   const double kTableTopZInWorld = 0.736 + 0.057 / 2;
-  const Eigen::Vector3d kRobotBase(-0.243716, -0.625087, kTableTopZInWorld);
+  const Eigen::Vector3d kRobotBase(kRobotBaseShiftX, kRobotBaseShiftY, kTableTopZInWorld);
 
   auto robot_base_frame = std::make_shared<RigidBodyFrame<double>>(
       "iiwa_base",
@@ -112,12 +114,11 @@ std::unique_ptr<RigidBodyTreed> ConstructKuka() {
       rigid_body_tree.get());
 
   auto iiwa_frame_ee = rigid_body_tree->findFrame("iiwa_frame_ee");
-  const std::string schunk_path = drake::GetDrakePath()
-      + "/examples/schunk_wsg/models/schunk_wsg_50_fixed_joint.sdf";
-  parsers::sdf::AddModelInstancesFromSdfFile(schunk_path,
-                                             drake::multibody::joints::kFixed,
-                                             iiwa_frame_ee,
-                                             rigid_body_tree.get());
+  const std::string schunk_path = FindResourceOrThrow(
+      "drake/examples/schunk_wsg/models/schunk_wsg_50_fixed_joint.sdf");
+  parsers::sdf::AddModelInstancesFromSdfFile(
+      schunk_path, drake::multibody::joints::kFixed, iiwa_frame_ee,
+      rigid_body_tree.get());
   return rigid_body_tree;
 }
 }  // namespace kuka_iiwa_arm

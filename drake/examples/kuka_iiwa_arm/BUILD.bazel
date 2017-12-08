@@ -87,16 +87,16 @@ drake_cc_binary(
         "//drake/manipulation/models/iiwa_description:models",
     ],
     deps = [
-        "@bot_core_lcmtypes//:lib",
-        "@gflags//:gflags",
-        "@robotlocomotion_lcmtypes//:lib",
         ":iiwa_common",
         ":lcm_plan_interpolator",
         "//drake/common:text_logging_gflags",
         "//drake/lcm",
         "//drake/systems/lcm",
         "//drake/systems/lcm:lcm_driven_loop",
+        "@bot_core_lcmtypes//:lib",
         "@com_github_gflags_gflags//:gflags",
+        "@gflags//:gflags",
+        "@robotlocomotion_lcmtypes//:lib",
     ],
 )
 
@@ -113,7 +113,6 @@ drake_cc_binary(
     # Flaky because LCM self-test can fail (PR #7311)
     test_rule_flaky = 1,
     deps = [
-        "@gflags//:gflags",
         ":iiwa_common",
         ":iiwa_lcm",
         ":oracular_state_estimator",
@@ -132,6 +131,7 @@ drake_cc_binary(
         "//drake/systems/primitives:matrix_gain",
         "//drake/util:lcm_util",
         "@com_github_gflags_gflags//:gflags",
+        "@gflags//:gflags",
     ],
 )
 
@@ -142,8 +142,8 @@ drake_cc_library(
         "test/kuka_global_ik_util.h",
     ],
     data = [
-        "//drake/examples/schunk_wsg:models",
         "//drake/manipulation/models/iiwa_description:models",
+        "//drake/manipulation/models/wsg_50_description:models",
     ],
     deps = [
         ":iiwa_common",
@@ -160,41 +160,40 @@ drake_cc_binary(
         ":models",
     ],
     deps = [
-        "@gflags//:gflags",
         ":iiwa_common",
         ":iiwa_lcm",
         ":kuka_global_ik_util",
-        "//drake/examples/kuka_iiwa_arm/dev/tools:simple_tree_visualizer",
         "//drake/lcm",
+        "//drake/manipulation/util:simple_tree_visualizer",
         "//drake/math:autodiff",
         "//drake/multibody:global_inverse_kinematics",
         "//drake/util:lcm_util",
     ],
 )
 
-drake_cc_binary(
-    name = "kuka_global_ik_infeasible_demo",
-    testonly = 1,
-    srcs = ["test/kuka_global_ik_infeasible_demo.cc"],
-    add_test_rule = 1,
-    data = [
-        ":models",
-        "//drake/examples/schunk_wsg:models",
-        "//drake/manipulation/models/iiwa_description:models",
-    ],
-    deps = [
-        "@gflags//:gflags",
-        "@gtest//:main",
-        ":iiwa_common",
-        ":iiwa_lcm",
-        ":kuka_global_ik_util",
-        "//drake/examples/kuka_iiwa_arm/dev/tools:simple_tree_visualizer",
-        "//drake/lcm",
-        "//drake/math:autodiff",
-        "//drake/multibody:global_inverse_kinematics",
-        "//drake/util:lcm_util",
-    ],
-)
+#drake_cc_binary(
+#    name = "kuka_global_ik_infeasible_demo",
+#    testonly = 1,
+#    srcs = ["test/kuka_global_ik_infeasible_demo.cc"],
+#    add_test_rule = 1,
+#    data = [
+#        ":models",
+#        "//drake/manipulation/models/wsg_50_description:models",
+#        "//drake/manipulation/models/iiwa_description:models",
+#    ],
+#    deps = [
+#        ":iiwa_common",
+#        ":iiwa_lcm",
+#        ":kuka_global_ik_util",
+#        "//drake/examples/kuka_iiwa_arm/dev/tools:simple_tree_visualizer",
+#        "//drake/lcm",
+#        "//drake/math:autodiff",
+#        "//drake/multibody:global_inverse_kinematics",
+#        "//drake/util:lcm_util",
+#        "@gflags//:gflags",
+#        "@gtest//:main",
+#    ],
+#)
 
 drake_cc_binary(
     name = "kuka_simulation",
@@ -208,7 +207,6 @@ drake_cc_binary(
     # Flaky because LCM self-test can fail (PR #7311)
     test_rule_flaky = 1,
     deps = [
-        "@gflags//:gflags",
         ":iiwa_common",
         ":iiwa_lcm",
         "//drake/common:find_resource",
@@ -222,6 +220,7 @@ drake_cc_binary(
         "//drake/systems/controllers:inverse_dynamics_controller",
         "//drake/systems/primitives:constant_vector_source",
         "@com_github_gflags_gflags//:gflags",
+        "@gflags//:gflags",
     ],
 )
 
@@ -233,13 +232,13 @@ drake_cc_binary(
         "//drake/manipulation/models/iiwa_description:models",
     ],
     deps = [
-        "@bot_core_lcmtypes//:lib",
-        "@robotlocomotion_lcmtypes//:lib",
         ":iiwa_common",
         ":iiwa_lcm",
         "//drake/common:find_resource",
+        "@bot_core_lcmtypes//:lib",
         "@lcmtypes_bot2_core",
         "@lcmtypes_robotlocomotion",
+        "@robotlocomotion_lcmtypes//:lib",
     ],
 )
 
@@ -251,14 +250,14 @@ drake_cc_binary(
         "//drake/manipulation/models/iiwa_description:models",
     ],
     deps = [
-        "@lcmtypes_bot2_core",
-        "@lcmtypes_robotlocomotion",
         ":iiwa_common",
         "//drake/lcm",
         "//drake/multibody:inverse_kinematics",
         "//drake/multibody:rigid_body_tree",
         "//drake/multibody/parsers",
         "//drake/solvers:mathematical_program",
+        "@lcmtypes_bot2_core",
+        "@lcmtypes_robotlocomotion",
     ],
 )
 
@@ -325,12 +324,12 @@ sh_test(
 # This examples needs to be install for external projects such as Spartan.
 install(
     name = "install",
+    runtime_dest = "share/drake/examples/kuka_iiwa_arm",
     targets = [
         ":iiwa_wsg_simulation",
         ":kuka_plan_runner",
         ":kuka_simulation",
     ],
-    runtime_dest = "share/drake/examples/kuka_iiwa_arm",
     visibility = ["//visibility:public"],
 )
 

@@ -1,9 +1,7 @@
 #include <memory>
 
-#include <gflags/gflags.h>
-
-#include "drake/common/drake_path.h"
-#include "drake/examples/kuka_iiwa_arm/dev/tools/simple_tree_visualizer.h"
+#include "drake/common/find_resource.h"
+#include "drake/manipulation/util/simple_tree_visualizer.h"
 #include "drake/examples/kuka_iiwa_arm/iiwa_common.h"
 #include "drake/examples/kuka_iiwa_arm/iiwa_lcm.h"
 #include "drake/lcm/drake_lcm.h"
@@ -27,27 +25,27 @@ using systems::DrakeVisualizer;
 
 void AddObjects(RigidBodyTreed* rigid_body_tree) {
   const Eigen::Vector3d kRobotBasePos = rigid_body_tree->findFrame("iiwa_base")->get_transform_to_body().translation();
-  const std::string mug_path = drake::GetDrakePath() + "/manipulation/models/objects/coffee_mug/urdf/coffee_mug.urdf";
+  const std::string mug_path = FindResourceOrThrow("drake/manipulation/models/objects/coffee_mug/urdf/coffee_mug.urdf");
   const Eigen::Vector3d kMugPos(kRobotBasePos(0) + 0.8, kRobotBasePos(1), kRobotBasePos(2));
   auto mug_frame = std::make_shared<RigidBodyFrame<double>>("mug", rigid_body_tree->get_mutable_body(0), kMugPos, Eigen::Vector3d(0, 0, M_PI));
   parsers::urdf::AddModelInstanceFromUrdfFile(mug_path, drake::multibody::joints::kFixed, mug_frame, rigid_body_tree);
   rigid_body_tree->addFrame(mug_frame);
 
-  const std::string beets_path = drake::GetDrakePath() + "/manipulation/models/objects/beets_can/urdf/beets.urdf";
+  const std::string beets_path = FindResourceOrThrow("drake/manipulation/models/objects/beets_can/urdf/beets.urdf");
   const Eigen::Vector3d kBeetsPos(kMugPos(0) - 0.1, kMugPos(1) + 0.15, kMugPos(2) - 0.01);
   auto beets_frame = std::make_shared<RigidBodyFrame<double>>("beets", rigid_body_tree->get_mutable_body(0), kBeetsPos, Eigen::Vector3d::Zero());
   parsers::urdf::AddModelInstanceFromUrdfFile(beets_path, drake::multibody::joints::kFixed, beets_frame, rigid_body_tree);
   multibody::AddFlatTerrainToWorld(rigid_body_tree);
   rigid_body_tree->addFrame(beets_frame);
 
-  const std::string bowl_path = drake::GetDrakePath() + "/manipulation/models/objects/bowl/urdf/bowl.urdf";
+  const std::string bowl_path = FindResourceOrThrow("drake/manipulation/models/objects/bowl/urdf/bowl.urdf");
   const Eigen::Vector3d kBowlPos(kMugPos(0), kMugPos(1) - 0.25, kMugPos(2));
   auto bowl_frame = std::make_shared<RigidBodyFrame<double>>("bowl", rigid_body_tree->get_mutable_body(0), kBowlPos, Eigen::Vector3d::Zero());
   parsers::urdf::AddModelInstanceFromUrdfFile(bowl_path, drake::multibody::joints::kFixed, bowl_frame, rigid_body_tree);
   multibody::AddFlatTerrainToWorld(rigid_body_tree);
   rigid_body_tree->addFrame(bowl_frame);
 
-  const std::string bottle_path = drake::GetDrakePath() + "/manipulation/models/objects/wine_bottle/urdf/bottle.urdf";
+  const std::string bottle_path = FindResourceOrThrow("drake/manipulation/models/objects/wine_bottle/urdf/bottle.urdf");
   const Eigen::Vector3d kBottlePos(kMugPos(0) - 0.25, kMugPos(1) - 0.05, kMugPos(2));
   auto bottle_frame = std::make_shared<RigidBodyFrame<double>>("bottle", rigid_body_tree->get_mutable_body(0), kBottlePos, Eigen::Vector3d::Zero());
   parsers::urdf::AddModelInstanceFromUrdfFile(bottle_path, drake::multibody::joints::kFixed, bottle_frame, rigid_body_tree);
@@ -150,7 +148,7 @@ std::vector<Eigen::Matrix<double, 7, 1>> SolveGlobalIK(RigidBodyTreed* tree, con
                                       free_space_vertices);
   }
   solvers::GurobiSolver gurobi_solver;
-  global_ik.SetSolverOption(solvers::SolverType::kGurobi, "OutputFlag", true);
+  global_ik.SetSolverOption(solvers::GurobiSolver::id(), "OutputFlag", true);
   //int num_solutions = 2;
   //global_ik.SetSolverOption(solvers::SolverType::kGurobi, "PoolSearchMode", 1);
   //global_ik.SetSolverOption(solvers::SolverType::kGurobi, "PoolSolutions", num_solutions);
@@ -160,7 +158,7 @@ std::vector<Eigen::Matrix<double, 7, 1>> SolveGlobalIK(RigidBodyTreed* tree, con
   }
   std::vector<Eigen::Matrix<double, 7, 1>> q;
   for (int i = 0; i < 1; ++i) {
-    q.push_back(global_ik.ReconstructGeneralizedPositionSolution(i));
+    q.push_back(global_ik.ReconstructGeneralizedPositionSolution());
   }
   return q;
 }
@@ -237,7 +235,7 @@ int DoMain() {
   auto tree = ConstructKuka();
   AddObjects(tree.get());
   const std::vector<Eigen::Matrix3Xd> free_space_vertices = SetFreeSpace(tree.get());
-  tools::SimpleTreeVisualizer simple_tree_visualizer(*tree.get(), &lcm);
+  manipulation::SimpleTreeVisualizer simple_tree_visualizer(*tree.get(), &lcm);
   // Palm faces +y axis of ee_frame. The face of the palm is at about (0, 0.1, 0)
   // of the ee_frame.
   // x axis of ee_frame is the longer axis of the palm.
@@ -260,6 +258,7 @@ int DoMain() {
   Eigen::Vector3d mug_pos = mug_frame->get_transform_to_body().translation();
   Eigen::Vector3d mug_center = mug_pos;
   mug_center(2) += 0.05;
+
   auto q_global = SolveGlobalIK(tree.get(), mug_center, free_space_vertices);
   auto cache = tree->CreateKinematicsCache();
   auto link_7 = tree->FindBody("iiwa_link_7");
@@ -281,7 +280,6 @@ int DoMain() {
 }  // namespace examples
 }  // namespace drake
 
-int main(int argc, char* argv[]) {
-  gflags::ParseCommandLineFlags(&argc, &argv, true);
+int main() {
   return drake::examples::kuka_iiwa_arm::DoMain();
 }
