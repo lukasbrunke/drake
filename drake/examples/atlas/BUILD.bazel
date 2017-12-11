@@ -1,6 +1,6 @@
 # -*- python -*-
 
-load("//tools:drake.bzl", "drake_cc_library")
+load("//tools:drake.bzl", "drake_cc_library", "drake_cc_binary")
 load("//tools/install:install_data.bzl", "install_data")
 load("//tools/lint:lint.bzl", "add_lint_tests")
 
@@ -12,6 +12,18 @@ drake_cc_library(
     hdrs = ["atlasUtil.h"],
     deps = [
         "//drake/common:essential",
+    ],
+)
+
+drake_cc_binary(
+    name = "atlas_ik_failure_demo",
+    srcs = ["atlas_ik_failure_demo.cc"],
+    deps = [
+        "//drake/common:find_resource",
+        "//drake/manipulation/util:simple_tree_visualizer",
+        "//drake/multibody:inverse_kinematics",
+        "//drake/multibody:rigid_body_tree",
+        "//drake/multibody/parsers",
     ],
 )
 
