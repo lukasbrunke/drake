@@ -11,25 +11,12 @@ package(
     default_visibility = [":__subpackages__"],
 )
 
-drake_cc_library(
-    name = "contact_implicit_direct_transcription",
-    srcs = ["contact_implicit_direct_transcription.cc"],
-    hdrs = ["contact_implicit_direct_transcription.h"],
-    deps = [
-        "//drake/math:autodiff",
-        "//drake/math:gradient",
-        "//drake/common:essential",
-        "//drake/multibody:rigid_body_tree",
-        "//drake/solvers:constraint",
-        "//drake/systems/trajectory_optimization:multiple_shooting",
-    ],
-)
 
 drake_cc_binary(
     name = "search_cyclic_gait",
     srcs = ["test/search_cyclic_gait.cc"],
     deps = [
-        ":contact_implicit_direct_transcription",
+        "//drake/systems/trajectory_optimization:contact_implicit_direct_transcription",
         "//drake/common:find_resource",
         "//drake/lcm:lcm",
         "//drake/manipulation/util:simple_tree_visualizer",

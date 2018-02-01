@@ -18,6 +18,20 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "contact_implicit_direct_transcription",
+    srcs = ["contact_implicit_direct_transcription.cc"],
+    hdrs = ["contact_implicit_direct_transcription.h"],
+    deps = [
+        ":multiple_shooting",
+        "//drake/math:autodiff",
+        "//drake/math:gradient",
+        "//drake/common:essential",
+        "//drake/multibody:rigid_body_tree",
+        "//drake/solvers:constraint",
+    ],
+)
+
+drake_cc_library(
     name = "direct_collocation",
     srcs = [
         "direct_collocation.cc",
