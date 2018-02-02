@@ -30,7 +30,10 @@ class KinematicsCacheWithVHelper {
  public:
   explicit KinematicsCacheWithVHelper(
       const RigidBodyTree<double>& tree)
-      : tree_{&tree}, kinsol_(tree.CreateKinematicsCacheWithType<Scalar>()) {}
+      : tree_{&tree}, kinsol_(tree.CreateKinematicsCacheWithType<Scalar>()) {
+    last_q_.resize(tree.get_num_positions());
+    last_v_.resize(tree.get_num_velocities());
+  }
 
   KinematicsCache<Scalar>& UpdateKinematics(
       const Eigen::Ref<const VectorX<Scalar>>& q,

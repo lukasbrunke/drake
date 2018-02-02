@@ -14,7 +14,7 @@ GTEST_TEST(GeneralizedConstraintForceEvaluatorTest, TestEval) {
   parsers::urdf::AddModelInstanceFromUrdfFileToWorld(
       FindResourceOrThrow("drake/examples/simple_four_bar/FourBar.urdf"),
       multibody::joints::kFixed, tree.get());
-  const int num_lambda = 1;
+  const int num_lambda = tree->getNumPositionConstraints();
   
   auto cache_helper = std::make_shared<KinematicsCacheWithVHelper<AutoDiffXd>>(*tree);
 
