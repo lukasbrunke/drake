@@ -20,28 +20,46 @@ namespace trajectory_optimization {
  * together with the gradient of the constraint w.r.t qₗ, qᵣ, vₗ, vᵣ, uᵣ, λᵣ
  * For each generalized position and velocity, we will compute the kinematics
  * cache, containing information such as the pose of each link. It is very
- * likely that we will need to re-use these information in different functions. 
+ * likely that we will need to re-use these information in different functions.
  * To avoid redundant computation, we will store these information in this cache
  * helper, and update the cache every time the generalized position or velocites
  * are changed.
  */
-class DirectTranscriptionKinematicsCacheHelper {
+template <typename Scalar>
+class KinematicsCacheWithVHelper {
  public:
-  explicit DirectTranscriptionKinematicsCacheHelper(
-      const RigidBodyTree<double>& tree);
+  explicit KinematicsCacheWithVHelper(
+      const RigidBodyTree<double>& tree)
+      : tree_{&tree}, kinsol_(tree.CreateKinematicsCacheWithType<Scalar>()) {}
 
-  KinematicsCache<AutoDiffXd>& UpdateKinematics(
-      const Eigen::Ref<const AutoDiffVecXd>& q,
-      const Eigen::Ref<const AutoDiffVecXd>& v);
+  KinematicsCache<Scalar>& UpdateKinematics(
+      const Eigen::Ref<const VectorX<Scalar>>& q,
+      const Eigen::Ref<const VectorX<Scalar>>& v) {
+    if (q.size() != last_q_.size() || q != last_q_ ||
+        v.size() != last_v_.size() || v != last_v_) {
+      last_q_ = q;
+      last_v_ = v;
+      kinsol_.initialize(q, v);
+      tree_->doKinematics(kinsol_);
+    }
+    return kinsol_;
+  }
 
-  KinematicsCache<AutoDiffXd>& UpdateKinematics(
-      const Eigen::Ref<const AutoDiffVecXd>& q);
+  KinematicsCache<Scalar>& UpdateKinematics(
+      const Eigen::Ref<const VectorX<Scalar>>& q) {
+    if (q.size() != last_q_.size() || q != last_q_) {
+      last_q_ = q;
+      kinsol_.initialize(q, last_v_);
+      tree_->doKinematics(kinsol_);
+    }
+    return kinsol_;
+  }
 
  private:
   const RigidBodyTree<double>* tree_;
-  AutoDiffVecXd last_q_;
-  AutoDiffVecXd last_v_;
-  KinematicsCache<AutoDiffXd> kinsol_;
+  VectorX<Scalar> last_q_;
+  VectorX<Scalar> last_v_;
+  KinematicsCache<Scalar> kinsol_;
 };
 
 /** This evaluator computes the generalized constraint force Jᵀλ.
@@ -49,15 +67,16 @@ class DirectTranscriptionKinematicsCacheHelper {
  * coming from the positionConstraint(). RigidBodyTree::positionConstraint()
  * contains the constraint φ(q) = 0, that are ALWAYS active, such as the closed
  * loop constraint (e.g., four-bar linkage).
- * In order to add additional generalized constraint force, the user can 
- * derive their evaluator class, and override the DoEval function. 
- * TODO(hongkai.dai): add an example of the derived evaluator class, in the minitaur example.
+ * In order to add additional generalized constraint force, the user can
+ * derive their evaluator class, and override the DoEval function.
+ * TODO(hongkai.dai): add an example of the derived evaluator class, in the
+ * minitaur example.
  */
 class GeneralizedConstraintForceEvaluator : public solvers::EvaluatorBase {
  public:
   GeneralizedConstraintForceEvaluator(
       const RigidBodyTree<double>& tree, int num_lambda,
-      std::shared_ptr<DirectTranscriptionKinematicsCacheHelper>
+      std::shared_ptr<KinematicsCacheWithVHelper<AutoDiffXd>>
           kinematics_helper);
 
   void DoEval(const Eigen::Ref<const Eigen::VectorXd>& x,
@@ -69,7 +88,7 @@ class GeneralizedConstraintForceEvaluator : public solvers::EvaluatorBase {
  private:
   const RigidBodyTree<double>* tree_;
   const int num_lambda_;
-  mutable std::shared_ptr<DirectTranscriptionKinematicsCacheHelper>
+  mutable std::shared_ptr<KinematicsCacheWithVHelper<AutoDiffXd>>
       kinematics_helper_;
 };
 
@@ -95,6 +114,8 @@ class ContactImplicitDirectTranscription : public MultipleShooting {
   // Store system-relevant data for e.g. computing the derivatives during
   // trajectory reconstruction.
   const RigidBodyTree<double>* tree_{nullptr};
+  std::vector<std::shared_ptr<KinematicsCacheWithVHelper<AutoDiffXd>>>
+      direct_transcription_kinematics_helpers_;
 };
 }  // namespace trajectory_optimization
 }  // namespace systems

@@ -99,4 +99,14 @@ drake_cc_googletest(
     ],
 )
 
+drake_cc_googletest(
+    name = "contact_implicit_direct_transcription_test",
+    deps = [
+        ":contact_implicit_direct_transcription",
+        "//drake/common:find_resource",
+        "//drake/multibody/parsers:parsers",
+        "//drake/math:autodiff",
+    ],
+)
+
 add_lint_tests()

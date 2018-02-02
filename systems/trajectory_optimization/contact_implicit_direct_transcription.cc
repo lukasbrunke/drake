@@ -11,39 +11,11 @@
 namespace drake {
 namespace systems {
 namespace trajectory_optimization {
-DirectTranscriptionKinematicsCacheHelper::
-    DirectTranscriptionKinematicsCacheHelper(const RigidBodyTree<double>& tree)
-    : tree_{&tree}, kinsol_(tree.CreateKinematicsCacheWithType<AutoDiffXd>()) {}
-
-KinematicsCache<AutoDiffXd>&
-DirectTranscriptionKinematicsCacheHelper::UpdateKinematics(
-    const Eigen::Ref<const AutoDiffVecXd>& q,
-    const Eigen::Ref<const AutoDiffVecXd>& v) {
-  if (q.size() != last_q_.size() || q != last_q_ ||
-      v.size() != last_v_.size() || v != last_v_) {
-    last_q_ = q;
-    last_v_ = v;
-    kinsol_.initialize(q, v);
-    tree_->doKinematics(kinsol_);
-  }
-  return kinsol_;
-}
-
-KinematicsCache<AutoDiffXd>&
-DirectTranscriptionKinematicsCacheHelper::UpdateKinematics(
-    const Eigen::Ref<const AutoDiffVecXd>& q) {
-  if (q.size() != last_q_.size() || q != last_q_) {
-    last_q_ = q;
-    kinsol_.initialize(q, last_v_);
-    tree_->doKinematics(kinsol_);
-  }
-  return kinsol_;
-}
 
 // This evaluator computes the generalized constraint force Jᵀλ.
 GeneralizedConstraintForceEvaluator::GeneralizedConstraintForceEvaluator(
     const RigidBodyTree<double>& tree, int num_lambda,
-    std::shared_ptr<DirectTranscriptionKinematicsCacheHelper> kinematics_helper)
+    std::shared_ptr<KinematicsCacheWithVHelper<AutoDiffXd>> kinematics_helper)
     : EvaluatorBase(tree.get_num_velocities(),
                     tree.get_num_positions() + num_lambda,
                     "generalized constraint force"),
@@ -108,7 +80,7 @@ class DirectTranscriptionConstraint : public solvers::Constraint {
 
   DirectTranscriptionConstraint(
       const RigidBodyTree<double>& tree, int num_lambda,
-      std::shared_ptr<DirectTranscriptionKinematicsCacheHelper>
+      std::shared_ptr<KinematicsCacheWithVHelper<AutoDiffXd>>
           kinematics_helper)
       : Constraint(tree.get_num_positions() + tree.get_num_velocities(),
                    1 + 2 * tree.get_num_positions() +
@@ -195,7 +167,7 @@ class DirectTranscriptionConstraint : public solvers::Constraint {
   const int num_actuators_;
   const int num_lambda_;
   // Stores the kinematics cache at the right knot point.
-  mutable std::shared_ptr<DirectTranscriptionKinematicsCacheHelper>
+  mutable std::shared_ptr<KinematicsCacheWithVHelper<AutoDiffXd>>
       kinematics_helper1_;
   GeneralizedConstraintForceEvaluator constraint_force_evaluator_;
 };
