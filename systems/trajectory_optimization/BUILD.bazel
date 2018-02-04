@@ -20,7 +20,9 @@ drake_cc_library(
 drake_cc_library(
     name = "contact_implicit_direct_transcription",
     srcs = ["contact_implicit_direct_transcription.cc"],
-    hdrs = ["contact_implicit_direct_transcription.h"],
+    hdrs = [
+        "contact_implicit_direct_transcription.h",
+        "contact_implicit_direct_transcription_internal.h"],
     deps = [
         ":multiple_shooting",
         "//drake/math:autodiff",
@@ -104,6 +106,7 @@ drake_cc_googletest(
     deps = [
         ":contact_implicit_direct_transcription",
         "//drake/common:find_resource",
+        "//drake/common/test_utilities:eigen_matrix_compare",
         "//drake/multibody/parsers:parsers",
         "//drake/math:autodiff",
     ],

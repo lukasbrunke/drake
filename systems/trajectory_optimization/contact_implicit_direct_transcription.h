@@ -43,7 +43,7 @@ class KinematicsCacheWithVHelper {
       last_q_ = q;
       last_v_ = v;
       kinsol_.initialize(q, v);
-      tree_->doKinematics(kinsol_);
+      tree_->doKinematics(kinsol_, true);  // compute Jdotv
     }
     return kinsol_;
   }
@@ -53,7 +53,7 @@ class KinematicsCacheWithVHelper {
     if (q.size() != last_q_.size() || q != last_q_) {
       last_q_ = q;
       kinsol_.initialize(q, last_v_);
-      tree_->doKinematics(kinsol_);
+      tree_->doKinematics(kinsol_, true);  // compute Jdotv
     }
     return kinsol_;
   }

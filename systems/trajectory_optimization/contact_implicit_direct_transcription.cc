@@ -1,4 +1,5 @@
 #include "drake/systems/trajectory_optimization/contact_implicit_direct_transcription.h"
+#include "drake/systems/trajectory_optimization/contact_implicit_direct_transcription_internal.h"
 
 #include <cstddef>
 #include <stdexcept>
@@ -7,6 +8,7 @@
 
 #include "drake/math/autodiff.h"
 #include "drake/math/autodiff_gradient.h"
+#include "drake/common/eigen_types.h"
 
 namespace drake {
 namespace systems {
@@ -74,103 +76,85 @@ void GeneralizedConstraintForceEvaluator::DoEval(
  * c(qᵣ, vᵣ): The Coriolis, gravity and centripedal force on the right knot.
  * h: The duration between the left and right knot.
  */
-class DirectTranscriptionConstraint : public solvers::Constraint {
- public:
-  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(DirectTranscriptionConstraint)
 
-  DirectTranscriptionConstraint(
-      const RigidBodyTree<double>& tree, int num_lambda,
-      std::shared_ptr<KinematicsCacheWithVHelper<AutoDiffXd>>
-          kinematics_helper)
-      : Constraint(tree.get_num_positions() + tree.get_num_velocities(),
-                   1 + 2 * tree.get_num_positions() +
-                       2 * tree.get_num_velocities() +
-                       tree.get_num_actuators() + num_lambda,
-                   Eigen::VectorXd::Zero(tree.get_num_positions() +
-                                         tree.get_num_velocities()),
-                   Eigen::VectorXd::Zero(tree.get_num_positions() +
-                                         tree.get_num_velocities())),
-        tree_(&tree),
-        num_positions_{tree.get_num_positions()},
-        num_velocities_{tree.get_num_velocities()},
-        num_actuators_{tree.get_num_actuators()},
-        num_lambda_{num_lambda},
-        kinematics_helper1_{kinematics_helper},
-        constraint_force_evaluator_(tree, num_lambda, kinematics_helper) {
-    DRAKE_THROW_UNLESS(num_positions_ == num_velocities_);
-  }
+DirectTranscriptionConstraint::DirectTranscriptionConstraint(
+    const RigidBodyTree<double>& tree, int num_lambda,
+    std::shared_ptr<KinematicsCacheWithVHelper<AutoDiffXd>>
+        kinematics_helper)
+    : Constraint(tree.get_num_positions() + tree.get_num_velocities(),
+                 1 + 2 * tree.get_num_positions() +
+                     2 * tree.get_num_velocities() +
+                     tree.get_num_actuators() + num_lambda,
+                 Eigen::VectorXd::Zero(tree.get_num_positions() +
+                                       tree.get_num_velocities()),
+                 Eigen::VectorXd::Zero(tree.get_num_positions() +
+                                       tree.get_num_velocities())),
+      tree_(&tree),
+      num_positions_{tree.get_num_positions()},
+      num_velocities_{tree.get_num_velocities()},
+      num_actuators_{tree.get_num_actuators()},
+      num_lambda_{num_lambda},
+      kinematics_helper1_{kinematics_helper},
+      constraint_force_evaluator_(tree, num_lambda, kinematics_helper) {
+  DRAKE_THROW_UNLESS(num_positions_ == num_velocities_);
+}
 
-  ~DirectTranscriptionConstraint() override = default;
+void DirectTranscriptionConstraint::DoEval(const Eigen::Ref<const Eigen::VectorXd>& x,
+            Eigen::VectorXd& y) const {
+  AutoDiffVecXd y_t;
+  Eval(math::initializeAutoDiff(x), y_t);
+  y = math::autoDiffToValueMatrix(y_t);
+}
 
- protected:
-  void DoEval(const Eigen::Ref<const Eigen::VectorXd>& x,
-              Eigen::VectorXd& y) const override {
-    AutoDiffVecXd y_t;
-    Eval(math::initializeAutoDiff(x), y_t);
-    y = math::autoDiffToValueMatrix(y_t);
-  }
+void DirectTranscriptionConstraint::DoEval(const Eigen::Ref<const AutoDiffVecXd>& x,
+            AutoDiffVecXd& y) const {
+  DRAKE_ASSERT(x.size() == num_vars());
 
-  void DoEval(const Eigen::Ref<const AutoDiffVecXd>& x,
-              AutoDiffVecXd& y) const override {
-    DRAKE_ASSERT(x.size() == num_vars());
+  int x_count = 0;
+  // A lambda expression to take num_element entreis from x, in a certain
+  // order.
+  auto x_segment = [x, &x_count](int num_element) {
+    x_count += num_element;
+    return x.segment(x_count - num_element, num_element);
+  };
 
-    int x_count = 0;
-    // A lambda expression to take num_element entreis from x, in a certain
-    // order.
-    auto x_segment = [x, &x_count](int num_element) {
-      x_count += num_element;
-      return x.segment(x_count - num_element, num_element);
-    };
+  const AutoDiffXd h = x(0);
+  x_count++;
+  const AutoDiffVecXd q_l = x_segment(num_positions_);
+  const AutoDiffVecXd v_l = x_segment(num_velocities_);
+  const AutoDiffVecXd q_r = x_segment(num_positions_);
+  const AutoDiffVecXd v_r = x_segment(num_velocities_);
+  const AutoDiffVecXd u_r = x_segment(num_actuators_);
+  const AutoDiffVecXd lambda_r = x_segment(num_lambda_);
 
-    const AutoDiffXd h = x(0);
-    x_count++;
-    const AutoDiffVecXd q_l = x_segment(num_positions_);
-    const AutoDiffVecXd v_l = x_segment(num_velocities_);
-    const AutoDiffVecXd q_r = x_segment(num_positions_);
-    const AutoDiffVecXd v_r = x_segment(num_velocities_);
-    const AutoDiffVecXd u_r = x_segment(num_actuators_);
-    const AutoDiffVecXd lambda_r = x_segment(num_lambda_);
+  auto kinsol = kinematics_helper1_->UpdateKinematics(q_r, v_r);
 
-    auto kinsol = kinematics_helper1_->UpdateKinematics(q_r, v_r);
+  y.resize(num_constraints());
 
-    y.resize(num_constraints());
+  // By using backward Euler integration, the constraint is
+  // qᵣ - qₗ = q̇ᵣ*h
+  // Mᵣ(vᵣ - vₗ) = (B*uᵣ + Jᵣᵀ*λᵣ -c(qᵣ, vᵣ))h
+  // We assume here q̇ᵣ = vᵣ
+  // TODO(hongkai.dai): compute qdot_r from q_r and v_r.
+  y.head(num_positions_) = q_r - q_l - v_r * h;
 
-    // By using backward Euler integration, the constraint is
-    // qᵣ - qₗ = q̇ᵣ*h
-    // Mᵣ(vᵣ - vₗ) = (B*uᵣ + Jᵣᵀ*λᵣ -c(qᵣ, vᵣ))h
-    // We assume here q̇ᵣ = vᵣ
-    // TODO(hongkai.dai): compute qdot_r from q_r and v_r.
-    y.head(num_positions_) = q_r - q_l - v_r * h;
+  const auto M = tree_->massMatrix(kinsol);
 
-    const auto M = tree_->massMatrix(kinsol);
+  // Compute the Coriolis force, centripedal force, etc.
+  const typename RigidBodyTree<AutoDiffXd>::BodyToWrenchMap
+      no_external_wrenches;
+  const auto c = tree_->dynamicsBiasTerm(kinsol, no_external_wrenches);
 
-    // Compute the Coriolis force, centripedal force, etc.
-    const typename RigidBodyTree<AutoDiffXd>::BodyToWrenchMap
-        no_external_wrenches;
-    const auto c = tree_->dynamicsBiasTerm(kinsol, no_external_wrenches);
+  // Compute Jᵀλ
+  AutoDiffVecXd q_lambda(num_positions_ + num_lambda_);
+  q_lambda << q_r, lambda_r;
+  AutoDiffVecXd generalized_constraint_force(num_velocities_);
+  constraint_force_evaluator_.Eval(q_lambda, generalized_constraint_force);
 
-    // Compute Jᵀλ
-    AutoDiffVecXd q_lambda(num_positions_ + num_lambda_);
-    q_lambda << q_r, lambda_r;
-    AutoDiffVecXd generalized_constraint_force(num_velocities_);
-    constraint_force_evaluator_.Eval(q_lambda, generalized_constraint_force);
-
-    y.tail(num_velocities_) =
-        M * (v_r - v_l) -
-        (tree_->B * u_r + generalized_constraint_force - c) * h;
-  }
-
- private:
-  const RigidBodyTree<double>* tree_;
-  const int num_positions_;
-  const int num_velocities_;
-  const int num_actuators_;
-  const int num_lambda_;
-  // Stores the kinematics cache at the right knot point.
-  mutable std::shared_ptr<KinematicsCacheWithVHelper<AutoDiffXd>>
-      kinematics_helper1_;
-  GeneralizedConstraintForceEvaluator constraint_force_evaluator_;
-};
+  y.tail(num_velocities_) =
+      M * (v_r - v_l) -
+      (tree_->B * u_r + generalized_constraint_force - c) * h;
+}
 }  // namespace trajectory_optimization
 }  // namespace systems
 }  // namespace drake
