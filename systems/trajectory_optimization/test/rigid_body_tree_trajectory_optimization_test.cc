@@ -18,6 +18,7 @@ std::unique_ptr<RigidBodyTree<double>> ConstructFourBarTree() {
   parsers::urdf::AddModelInstanceFromUrdfFileToWorld(
       FindResourceOrThrow("drake/examples/simple_four_bar/FourBar.urdf"),
       multibody::joints::kFixed, tree);
+  DRAKE_DEMAND(tree->get_num_actuators() != 0);
   return std::unique_ptr<RigidBodyTree<double>>(tree);
 }
 
@@ -102,6 +103,15 @@ GTEST_TEST(DirectTranscriptionConstraintTest, TestEval) {
       M * (v_r - v_l) - (tree->B * u_r + J.transpose() * lambda_r - c) * h;
   EXPECT_TRUE(CompareMatrices(math::autoDiffToValueMatrix(ty), y_expected,
                               1E-10, MatrixCompareType::absolute));
+}
+
+GTEST_TEST(RigidBodyTreeTrajectoryOptimizationTest, TestConstructor) {
+  auto tree = ConstructFourBarTree();
+  const int num_time_samples = 4;
+  const std::vector<int> num_lambda(num_time_samples, tree->getNumPositionConstraints());
+  const double minimum_timestep{0.01};
+  const double maximum_timestep{0.1};
+  RigidBodyTreeTrajectoryOptimization traj_opt(*tree, num_lambda, num_time_samples, minimum_timestep, maximum_timestep);
 }
 
 }  // namespace

@@ -88,7 +88,7 @@ class GeneralizedConstraintForceEvaluator : public solvers::EvaluatorBase {
   void DoEval(const Eigen::Ref<const AutoDiffVecXd>& x,
               AutoDiffVecXd& y) const override;
 
- private:
+ protected:
   const RigidBodyTree<double>* tree_;
   const int num_lambda_;
   mutable std::shared_ptr<KinematicsCacheWithVHelper<AutoDiffXd>>
@@ -111,10 +111,23 @@ class RigidBodyTreeTrajectoryOptimization : public MultipleShooting {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(RigidBodyTreeTrajectoryOptimization)
 
+  /**
+   * Constructor.
+   * @param tree The RigidBodyTree whose trajectory will be optimized.
+   * @param num_lambda  num_lambda[i] is the length of λ at knot i.
+   * @param num_time_samples The total number of knots in the trajectory.
+   * @param minimum_timestep The minimum of the time step.
+   * @param maximum_timestep The maximum of the time step.
+   */
   RigidBodyTreeTrajectoryOptimization(const RigidBodyTree<double>& tree,
+                                     const std::vector<int>& num_lambda,
                                      int num_time_samples,
                                      double minimum_timestep,
                                      double maximum_timestep);
+
+  PiecewisePolynomialTrajectory ReconstructInputTrajectory() const override;
+
+  PiecewisePolynomialTrajectory ReconstructStateTrajectory() const override;
 
   ~RigidBodyTreeTrajectoryOptimization() override {}
 
@@ -124,8 +137,14 @@ class RigidBodyTreeTrajectoryOptimization : public MultipleShooting {
   // Store system-relevant data for e.g. computing the derivatives during
   // trajectory reconstruction.
   const RigidBodyTree<double>* tree_{nullptr};
+  const int num_positions_;
+  const int num_velocities_;
+  const std::vector<int> num_lambda_;
   std::vector<std::shared_ptr<KinematicsCacheWithVHelper<AutoDiffXd>>>
-      direct_transcription_kinematics_helpers_;
+      kinematics_with_v_helpers_;
+  solvers::MatrixXDecisionVariable q_vars_;
+  solvers::MatrixXDecisionVariable v_vars_;
+  std::vector<solvers::VectorXDecisionVariable> lambda_vars_;
 };
 }  // namespace trajectory_optimization
 }  // namespace systems

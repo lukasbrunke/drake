@@ -152,6 +152,86 @@ void DirectTranscriptionConstraint::DoEval(
   y.tail(num_velocities_) =
       M * (v_r - v_l) - (tree_->B * u_r + generalized_constraint_force - c) * h;
 }
+
+RigidBodyTreeTrajectoryOptimization::RigidBodyTreeTrajectoryOptimization(
+    const RigidBodyTree<double>& tree, const std::vector<int>& num_lambda,
+    int num_time_samples, double minimum_timestep, double maximum_timestep)
+    : MultipleShooting(tree.get_num_actuators(),
+                       tree.get_num_positions() + tree.get_num_velocities(),
+                       num_time_samples, minimum_timestep, maximum_timestep),
+      tree_{&tree},
+      num_positions_{tree.get_num_positions()},
+      num_velocities_{tree.get_num_velocities()},
+      num_lambda_{num_lambda} {
+  if (static_cast<int>(num_lambda.size()) != num_time_samples) {
+    std::ostringstream oss;
+    oss << "lambda should be a vector of size " << num_time_samples << "\n";
+    throw std::runtime_error(oss.str());
+  }
+  // For each knot, we will need to impose a transcription/collocation
+  // constraint. Each of these constraints require us caching some
+  // kinematics info.
+  kinematics_with_v_helpers_.resize(num_time_samples);
+  for (int i = 0; i < num_time_samples; ++i) {
+    kinematics_with_v_helpers_[i] =
+        std::make_shared<KinematicsCacheWithVHelper<AutoDiffXd>>(*tree_);
+  }
+
+  q_vars_.resize(num_positions_, N());
+  v_vars_.resize(num_velocities_, N());
+  lambda_vars_.resize(N());
+  for (int i = 0; i < N(); ++i) {
+    q_vars_.col(i) = x_vars().segment(num_states() * i, num_positions_);
+    v_vars_.col(i) =
+        x_vars().segment(num_states() * i + num_positions_, num_velocities_);
+    const std::string lambda_name = "lambda[" + std::to_string(i) + "]";
+    lambda_vars_[i] = NewContinuousVariables(num_lambda_[i], lambda_name);
+  }
+  for (int i = 0; i < N() - 1; ++i) {
+    auto transcription_cnstr = std::make_shared<DirectTranscriptionConstraint>(
+        *tree_, num_lambda_[i + 1], kinematics_with_v_helpers_[i + 1]);
+    AddConstraint(
+        transcription_cnstr,
+        transcription_cnstr->CompositeEvalInput(
+            h_vars()(i), q_vars_.col(i), v_vars_.col(i), q_vars_.col(i + 1),
+            v_vars_.col(i + 1),
+            u_vars().segment(i * num_inputs(), num_inputs()), lambda_vars_[i]));
+  }
+}
+
+void RigidBodyTreeTrajectoryOptimization::DoAddRunningCost(const symbolic::Expression& g) {
+  // Add the running cost ∫ g(t, x, u)
+  // We discretize this continuous integration as
+  // sum_{i = 0, ..., N - 2} h_i * g_{i+1}
+  for (int i = 0; i < N() - 2; ++i) {
+    AddCost(SubstitutePlaceholderVariables(g * h_vars()(i), i + 1));
+  }
+}
+
+PiecewisePolynomialTrajectory RigidBodyTreeTrajectoryOptimization::ReconstructStateTrajectory() const {
+  Eigen::VectorXd times = GetSampleTimes();
+  std::vector<double> times_vec(N());
+  std::vector<Eigen::MatrixXd> states(N());
+  
+  for (int i = 0; i < N(); ++i) {
+    times_vec[i] = times(i);
+    states[i] = GetSolution(state(i));
+  }
+  return PiecewisePolynomialTrajectory(PiecewisePolynomial<double>::FirstOrderHold(times_vec, states));
+}
+
+PiecewisePolynomialTrajectory RigidBodyTreeTrajectoryOptimization::ReconstructInputTrajectory() const {
+  Eigen::VectorXd times = GetSampleTimes();
+  std::vector<double> times_vec(N());
+  std::vector<Eigen::MatrixXd> inputs(N());
+
+  for (int i = 0; i < N(); ++i) {
+    times_vec[i] = times(i);
+    inputs[i] = GetSolution(input(i));
+  }
+  return PiecewisePolynomialTrajectory(PiecewisePolynomial<double>::ZeroOrderHold(times_vec, inputs));
+}
+
 }  // namespace trajectory_optimization
 }  // namespace systems
 }  // namespace drake
