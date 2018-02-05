@@ -49,26 +49,22 @@ class DirectTranscriptionConstraint : public solvers::Constraint {
   template <typename Scalar, typename DerivedQL, typename DerivedVL,
             typename DerivedQR, typename DerivedVR, typename DerivedUR,
             typename DerivedLambdaR>
-  Eigen::Matrix<Scalar, Eigen::Dynamic, 1> CompositeEvalInput(
-      const Scalar& h, const Eigen::MatrixBase<DerivedQL>& q_l,
-      const Eigen::MatrixBase<DerivedVL>& v_l,
-      const Eigen::MatrixBase<DerivedQR>& q_r,
-      const Eigen::MatrixBase<DerivedVR>& v_r,
-      const Eigen::MatrixBase<DerivedUR>& u_r,
-      const Eigen::MatrixBase<DerivedLambdaR>& lambda_r) const {
-    if constexpr(is_eigen_vector_of<DerivedQL, Scalar>::value &&
-                is_eigen_vector_of<DerivedVL, Scalar>::value &&
-                is_eigen_vector_of<DerivedQR, Scalar>::value &&
-                is_eigen_vector_of<DerivedVR, Scalar>::value &&
-                is_eigen_vector_of<DerivedUR, Scalar>::value &&
-                is_eigen_vector_of<DerivedLambdaR, Scalar>::value) {
-        Eigen::Matrix<Scalar, Eigen::Dynamic, 1> x(num_vars(), 1);
-        x << h, q_l, v_l, q_r, v_r, u_r, lambda_r;
-        return x;
-      }
-    else {
-      throw std::runtime_error("Incorrect input type.");
-    }
+  typename std::enable_if<is_eigen_vector_of<DerivedQL, Scalar>::value &&
+                              is_eigen_vector_of<DerivedVL, Scalar>::value &&
+                              is_eigen_vector_of<DerivedQR, Scalar>::value &&
+                              is_eigen_vector_of<DerivedVR, Scalar>::value &&
+                              is_eigen_vector_of<DerivedUR, Scalar>::value &&
+                              is_eigen_vector_of<DerivedLambdaR, Scalar>::value,
+                          Eigen::Matrix<Scalar, Eigen::Dynamic, 1>>::type
+  CompositeEvalInput(const Scalar& h, const Eigen::MatrixBase<DerivedQL>& q_l,
+                     const Eigen::MatrixBase<DerivedVL>& v_l,
+                     const Eigen::MatrixBase<DerivedQR>& q_r,
+                     const Eigen::MatrixBase<DerivedVR>& v_r,
+                     const Eigen::MatrixBase<DerivedUR>& u_r,
+                     const Eigen::MatrixBase<DerivedLambdaR>& lambda_r) const {
+    Eigen::Matrix<Scalar, Eigen::Dynamic, 1> x(num_vars(), 1);
+    x << h, q_l, v_l, q_r, v_r, u_r, lambda_r;
+    return x;
   }
 
  protected:

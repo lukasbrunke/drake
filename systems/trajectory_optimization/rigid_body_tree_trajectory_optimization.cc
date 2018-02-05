@@ -1,14 +1,14 @@
-#include "drake/systems/trajectory_optimization/contact_implicit_direct_transcription.h"
-#include "drake/systems/trajectory_optimization/contact_implicit_direct_transcription_internal.h"
+#include "drake/systems/trajectory_optimization/rigid_body_tree_trajectory_optimization.h"
+#include "drake/systems/trajectory_optimization/rigid_body_tree_trajectory_optimization_internal.h"
 
 #include <cstddef>
 #include <stdexcept>
 #include <utility>
 #include <vector>
 
+#include "drake/common/eigen_types.h"
 #include "drake/math/autodiff.h"
 #include "drake/math/autodiff_gradient.h"
-#include "drake/common/eigen_types.h"
 
 namespace drake {
 namespace systems {
@@ -26,8 +26,7 @@ GeneralizedConstraintForceEvaluator::GeneralizedConstraintForceEvaluator(
       kinematics_helper_{kinematics_helper} {}
 
 void GeneralizedConstraintForceEvaluator::DoEval(
-    const Eigen::Ref<const Eigen::VectorXd>& x,
-    Eigen::VectorXd& y) const {
+    const Eigen::Ref<const Eigen::VectorXd>& x, Eigen::VectorXd& y) const {
   AutoDiffVecXd y_t;
   Eval(math::initializeAutoDiff(x), y_t);
   y = math::autoDiffToValueMatrix(y_t);
@@ -79,12 +78,11 @@ void GeneralizedConstraintForceEvaluator::DoEval(
 
 DirectTranscriptionConstraint::DirectTranscriptionConstraint(
     const RigidBodyTree<double>& tree, int num_lambda,
-    std::shared_ptr<KinematicsCacheWithVHelper<AutoDiffXd>>
-        kinematics_helper)
+    std::shared_ptr<KinematicsCacheWithVHelper<AutoDiffXd>> kinematics_helper)
     : Constraint(tree.get_num_positions() + tree.get_num_velocities(),
                  1 + 2 * tree.get_num_positions() +
-                     2 * tree.get_num_velocities() +
-                     tree.get_num_actuators() + num_lambda,
+                     2 * tree.get_num_velocities() + tree.get_num_actuators() +
+                     num_lambda,
                  Eigen::VectorXd::Zero(tree.get_num_positions() +
                                        tree.get_num_velocities()),
                  Eigen::VectorXd::Zero(tree.get_num_positions() +
@@ -99,15 +97,15 @@ DirectTranscriptionConstraint::DirectTranscriptionConstraint(
   DRAKE_THROW_UNLESS(num_positions_ == num_velocities_);
 }
 
-void DirectTranscriptionConstraint::DoEval(const Eigen::Ref<const Eigen::VectorXd>& x,
-            Eigen::VectorXd& y) const {
+void DirectTranscriptionConstraint::DoEval(
+    const Eigen::Ref<const Eigen::VectorXd>& x, Eigen::VectorXd& y) const {
   AutoDiffVecXd y_t;
   Eval(math::initializeAutoDiff(x), y_t);
   y = math::autoDiffToValueMatrix(y_t);
 }
 
-void DirectTranscriptionConstraint::DoEval(const Eigen::Ref<const AutoDiffVecXd>& x,
-            AutoDiffVecXd& y) const {
+void DirectTranscriptionConstraint::DoEval(
+    const Eigen::Ref<const AutoDiffVecXd>& x, AutoDiffVecXd& y) const {
   DRAKE_ASSERT(x.size() == num_vars());
 
   int x_count = 0;
@@ -152,8 +150,7 @@ void DirectTranscriptionConstraint::DoEval(const Eigen::Ref<const AutoDiffVecXd>
   constraint_force_evaluator_.Eval(q_lambda, generalized_constraint_force);
 
   y.tail(num_velocities_) =
-      M * (v_r - v_l) -
-      (tree_->B * u_r + generalized_constraint_force - c) * h;
+      M * (v_r - v_l) - (tree_->B * u_r + generalized_constraint_force - c) * h;
 }
 }  // namespace trajectory_optimization
 }  // namespace systems

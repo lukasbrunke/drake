@@ -1,5 +1,5 @@
-#include "drake/systems/trajectory_optimization/contact_implicit_direct_transcription.h"
-#include "drake/systems/trajectory_optimization/contact_implicit_direct_transcription_internal.h"
+#include "drake/systems/trajectory_optimization/rigid_body_tree_trajectory_optimization.h"
+#include "drake/systems/trajectory_optimization/rigid_body_tree_trajectory_optimization_internal.h"
 
 #include <gtest/gtest.h>
 

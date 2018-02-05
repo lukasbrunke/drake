@@ -96,20 +96,27 @@ class GeneralizedConstraintForceEvaluator : public solvers::EvaluatorBase {
 };
 
 /**
- * Implements the contact implicit trajectory optimization from the paper
- * A Direct Method for Trajectory Optimization of Rigid Bodies Through Contact
- * by Michael Posa, Cecilia Cantu and Russ Tedrake
+ * Implements the trajectory optimization for a RigidBodyTree.
+ * Trajectory optimization for RigidBodyTree is special, because the dynamics
+ * of the tree has some special structures.
+ * 1. Since RigidBodyTree has a second order dynamics, its dynamics can be 
+ * separated as the time derivative on the generalized position, and the time
+ * derivative on the generalized velocities.
+ * 2. Its generalized acceleration can be affected by the external force, under
+ * the term Jᵀλ. We can optimize over λ as decision variables.
+ * 3. The kinematics cache can be reused in each knot of the trajectory, so we
+ * will store the kinematics cache for each knot.
  */
-class ContactImplicitDirectTranscription : public MultipleShooting {
+class RigidBodyTreeTrajectoryOptimization : public MultipleShooting {
  public:
-  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(ContactImplicitDirectTranscription)
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(RigidBodyTreeTrajectoryOptimization)
 
-  ContactImplicitDirectTranscription(const RigidBodyTree<double>& tree,
+  RigidBodyTreeTrajectoryOptimization(const RigidBodyTree<double>& tree,
                                      int num_time_samples,
                                      double minimum_timestep,
                                      double maximum_timestep);
 
-  ~ContactImplicitDirectTranscription() override {}
+  ~RigidBodyTreeTrajectoryOptimization() override {}
 
  private:
   void DoAddRunningCost(const symbolic::Expression& e) override;
