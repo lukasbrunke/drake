@@ -1,5 +1,5 @@
-#include "drake/systems/trajectory_optimization/rigid_body_tree_trajectory_optimization.h"
-#include "drake/systems/trajectory_optimization/rigid_body_tree_trajectory_optimization_internal.h"
+#include "drake/systems/trajectory_optimization/rigid_body_tree_multiple_shooting.h"
+#include "drake/systems/trajectory_optimization/rigid_body_tree_multiple_shooting_internal.h"
 
 #include <cstddef>
 #include <stdexcept>
@@ -153,7 +153,7 @@ void DirectTranscriptionConstraint::DoEval(
       M * (v_r - v_l) - (tree_->B * u_r + generalized_constraint_force - c) * h;
 }
 
-RigidBodyTreeTrajectoryOptimization::RigidBodyTreeTrajectoryOptimization(
+RigidBodyTreeMultipleShooting::RigidBodyTreeMultipleShooting(
     const RigidBodyTree<double>& tree, const std::vector<int>& num_lambda,
     int num_time_samples, double minimum_timestep, double maximum_timestep)
     : MultipleShooting(tree.get_num_actuators(),
@@ -199,7 +199,7 @@ RigidBodyTreeTrajectoryOptimization::RigidBodyTreeTrajectoryOptimization(
   }
 }
 
-void RigidBodyTreeTrajectoryOptimization::DoAddRunningCost(const symbolic::Expression& g) {
+void RigidBodyTreeMultipleShooting::DoAddRunningCost(const symbolic::Expression& g) {
   // Add the running cost ∫ g(t, x, u)
   // We discretize this continuous integration as
   // sum_{i = 0, ..., N - 2} h_i * g_{i+1}
@@ -208,7 +208,7 @@ void RigidBodyTreeTrajectoryOptimization::DoAddRunningCost(const symbolic::Expre
   }
 }
 
-PiecewisePolynomialTrajectory RigidBodyTreeTrajectoryOptimization::ReconstructStateTrajectory() const {
+PiecewisePolynomialTrajectory RigidBodyTreeMultipleShooting::ReconstructStateTrajectory() const {
   Eigen::VectorXd times = GetSampleTimes();
   std::vector<double> times_vec(N());
   std::vector<Eigen::MatrixXd> states(N());
@@ -220,7 +220,7 @@ PiecewisePolynomialTrajectory RigidBodyTreeTrajectoryOptimization::ReconstructSt
   return PiecewisePolynomialTrajectory(PiecewisePolynomial<double>::FirstOrderHold(times_vec, states));
 }
 
-PiecewisePolynomialTrajectory RigidBodyTreeTrajectoryOptimization::ReconstructInputTrajectory() const {
+PiecewisePolynomialTrajectory RigidBodyTreeMultipleShooting::ReconstructInputTrajectory() const {
   Eigen::VectorXd times = GetSampleTimes();
   std::vector<double> times_vec(N());
   std::vector<Eigen::MatrixXd> inputs(N());

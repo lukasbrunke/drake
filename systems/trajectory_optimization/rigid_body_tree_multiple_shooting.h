@@ -107,9 +107,9 @@ class GeneralizedConstraintForceEvaluator : public solvers::EvaluatorBase {
  * 3. The kinematics cache can be reused in each knot of the trajectory, so we
  * will store the kinematics cache for each knot.
  */
-class RigidBodyTreeTrajectoryOptimization : public MultipleShooting {
+class RigidBodyTreeMultipleShooting : public MultipleShooting {
  public:
-  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(RigidBodyTreeTrajectoryOptimization)
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(RigidBodyTreeMultipleShooting)
 
   /**
    * Constructor.
@@ -119,7 +119,7 @@ class RigidBodyTreeTrajectoryOptimization : public MultipleShooting {
    * @param minimum_timestep The minimum of the time step.
    * @param maximum_timestep The maximum of the time step.
    */
-  RigidBodyTreeTrajectoryOptimization(const RigidBodyTree<double>& tree,
+  RigidBodyTreeMultipleShooting(const RigidBodyTree<double>& tree,
                                      const std::vector<int>& num_lambda,
                                      int num_time_samples,
                                      double minimum_timestep,
@@ -129,7 +129,7 @@ class RigidBodyTreeTrajectoryOptimization : public MultipleShooting {
 
   PiecewisePolynomialTrajectory ReconstructStateTrajectory() const override;
 
-  ~RigidBodyTreeTrajectoryOptimization() override {}
+  ~RigidBodyTreeMultipleShooting() override {}
 
  private:
   void DoAddRunningCost(const symbolic::Expression& e) override;

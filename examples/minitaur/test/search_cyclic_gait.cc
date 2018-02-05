@@ -5,7 +5,7 @@
 #include "drake/multibody/rigid_body_plant/drake_visualizer.h"
 #include "drake/multibody/rigid_body_plant/rigid_body_plant.h"
 #include "drake/multibody/rigid_body_tree_construction.h"
-#include "drake/systems/trajectory_optimization/rigid_body_tree_trajectory_optimization.h"
+#include "drake/systems/trajectory_optimization/rigid_body_tree_multiple_shooting.h"
 
 namespace drake {
 namespace examples {

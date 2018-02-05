@@ -16,7 +16,7 @@ drake_cc_binary(
     name = "search_cyclic_gait",
     srcs = ["test/search_cyclic_gait.cc"],
     deps = [
-        "//drake/systems/trajectory_optimization:rigid_body_tree_trajectory_optimization",
+        "//drake/systems/trajectory_optimization:rigid_body_tree_multiple_shooting",
         "//drake/common:find_resource",
         "//drake/lcm:lcm",
         "//drake/manipulation/util:simple_tree_visualizer",

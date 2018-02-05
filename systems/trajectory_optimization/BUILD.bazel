@@ -18,11 +18,11 @@ drake_cc_library(
 )
 
 drake_cc_library(
-    name = "rigid_body_tree_trajectory_optimization",
-    srcs = ["rigid_body_tree_trajectory_optimization.cc"],
+    name = "rigid_body_tree_multiple_shooting",
+    srcs = ["rigid_body_tree_multiple_shooting.cc"],
     hdrs = [
-        "rigid_body_tree_trajectory_optimization.h",
-        "rigid_body_tree_trajectory_optimization_internal.h"],
+        "rigid_body_tree_multiple_shooting.h",
+        "rigid_body_tree_multiple_shooting_internal.h"],
     deps = [
         ":multiple_shooting",
         "//drake/math:autodiff",
@@ -102,9 +102,9 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
-    name = "rigid_body_tree_trajectory_optimization_test",
+    name = "rigid_body_tree_multiple_shooting_test",
     deps = [
-        ":rigid_body_tree_trajectory_optimization",
+        ":rigid_body_tree_multiple_shooting",
         "//drake/common:find_resource",
         "//drake/common/test_utilities:eigen_matrix_compare",
         "//drake/multibody/parsers:parsers",

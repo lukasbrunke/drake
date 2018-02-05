@@ -1,5 +1,5 @@
-#include "drake/systems/trajectory_optimization/rigid_body_tree_trajectory_optimization.h"
-#include "drake/systems/trajectory_optimization/rigid_body_tree_trajectory_optimization_internal.h"
+#include "drake/systems/trajectory_optimization/rigid_body_tree_multiple_shooting.h"
+#include "drake/systems/trajectory_optimization/rigid_body_tree_multiple_shooting_internal.h"
 
 #include <gtest/gtest.h>
 
@@ -105,13 +105,13 @@ GTEST_TEST(DirectTranscriptionConstraintTest, TestEval) {
                               1E-10, MatrixCompareType::absolute));
 }
 
-GTEST_TEST(RigidBodyTreeTrajectoryOptimizationTest, TestConstructor) {
+GTEST_TEST(RigidBodyTreeMultipleShootingTest, TestConstructor) {
   auto tree = ConstructFourBarTree();
   const int num_time_samples = 4;
   const std::vector<int> num_lambda(num_time_samples, tree->getNumPositionConstraints());
   const double minimum_timestep{0.01};
   const double maximum_timestep{0.1};
-  RigidBodyTreeTrajectoryOptimization traj_opt(*tree, num_lambda, num_time_samples, minimum_timestep, maximum_timestep);
+  RigidBodyTreeMultipleShooting traj_opt(*tree, num_lambda, num_time_samples, minimum_timestep, maximum_timestep);
 }
 
 }  // namespace
