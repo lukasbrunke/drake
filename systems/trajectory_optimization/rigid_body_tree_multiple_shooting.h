@@ -129,6 +129,18 @@ class RigidBodyTreeMultipleShooting : public MultipleShooting {
 
   PiecewisePolynomialTrajectory ReconstructStateTrajectory() const override;
 
+  const solvers::VectorXDecisionVariable GeneralizedPosition(int index) const {
+    return q_vars_.col(index);
+  }
+
+  const solvers::VectorXDecisionVariable GeneralizedVelocity(int index) const {
+    return v_vars_.col(index);
+  }
+
+  const solvers::VectorXDecisionVariable ConstraintForce(int index) const {
+    return lambda_vars_[index];
+  }
+
   ~RigidBodyTreeMultipleShooting() override {}
 
  private:
