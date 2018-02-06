@@ -147,7 +147,7 @@ void DirectTranscriptionConstraint::DoEval(
 }
 
 RigidBodyTreeMultipleShooting::RigidBodyTreeMultipleShooting(
-    const RigidBodyTree<double>& tree, const std::vector<int>& num_lambda,
+    const RigidBodyTree<double>& tree, const std::vector<int>& num_lambdas,
     int num_time_samples, double minimum_timestep, double maximum_timestep)
     : MultipleShooting(tree.get_num_actuators(),
                        tree.get_num_positions() + tree.get_num_velocities(),
@@ -155,8 +155,8 @@ RigidBodyTreeMultipleShooting::RigidBodyTreeMultipleShooting(
       tree_{&tree},
       num_positions_{tree.get_num_positions()},
       num_velocities_{tree.get_num_velocities()},
-      num_lambda_{num_lambda} {
-  if (static_cast<int>(num_lambda.size()) != num_time_samples) {
+      num_lambdas_{num_lambdas} {
+  if (static_cast<int>(num_lambdas.size()) != num_time_samples) {
     std::ostringstream oss;
     oss << "lambda should be a vector of size " << num_time_samples << "\n";
     throw std::runtime_error(oss.str());
@@ -178,11 +178,11 @@ RigidBodyTreeMultipleShooting::RigidBodyTreeMultipleShooting(
     v_vars_.col(i) =
         x_vars().segment(num_states() * i + num_positions_, num_velocities_);
     const std::string lambda_name = "lambda[" + std::to_string(i) + "]";
-    lambda_vars_[i] = NewContinuousVariables(num_lambda_[i], lambda_name);
+    lambda_vars_[i] = NewContinuousVariables(num_lambdas_[i], lambda_name);
   }
   for (int i = 0; i < N() - 1; ++i) {
     auto transcription_cnstr = std::make_shared<DirectTranscriptionConstraint>(
-        *tree_, num_lambda_[i + 1], kinematics_with_v_helpers_[i + 1]);
+        *tree_, num_lambdas_[i + 1], kinematics_with_v_helpers_[i + 1]);
     AddConstraint(transcription_cnstr,
                   transcription_cnstr->CompositeEvalInput(
                       h_vars()(i), q_vars_.col(i), v_vars_.col(i),

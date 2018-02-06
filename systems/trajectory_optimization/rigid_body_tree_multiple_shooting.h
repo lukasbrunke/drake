@@ -82,13 +82,21 @@ class GeneralizedConstraintForceEvaluator : public solvers::EvaluatorBase {
       std::shared_ptr<KinematicsCacheWithVHelper<AutoDiffXd>>
           kinematics_helper);
 
+  // Getter for num_lambda.
+  int num_lambda() const { return num_lambda_; }
+
+  // Getter for the tree.
+  const RigidBodyTree<double>* tree() const { return tree_; }
+
+ protected:
   void DoEval(const Eigen::Ref<const Eigen::VectorXd>& x,
               Eigen::VectorXd& y) const override;
 
   void DoEval(const Eigen::Ref<const AutoDiffVecXd>& x,
               AutoDiffVecXd& y) const override;
 
- protected:
+
+ private:
   const RigidBodyTree<double>* tree_;
   const int num_lambda_;
   mutable std::shared_ptr<KinematicsCacheWithVHelper<AutoDiffXd>>
@@ -114,13 +122,13 @@ class RigidBodyTreeMultipleShooting : public MultipleShooting {
   /**
    * Constructor.
    * @param tree The RigidBodyTree whose trajectory will be optimized.
-   * @param num_lambda  num_lambda[i] is the length of λ at knot i.
+   * @param num_lambdas  num_lambdas[i] is the length of λ at knot i.
    * @param num_time_samples The total number of knots in the trajectory.
    * @param minimum_timestep The minimum of the time step.
    * @param maximum_timestep The maximum of the time step.
    */
   RigidBodyTreeMultipleShooting(const RigidBodyTree<double>& tree,
-                                const std::vector<int>& num_lambda,
+                                const std::vector<int>& num_lambdas,
                                 int num_time_samples, double minimum_timestep,
                                 double maximum_timestep);
 
@@ -143,6 +151,15 @@ class RigidBodyTreeMultipleShooting : public MultipleShooting {
 
   ~RigidBodyTreeMultipleShooting() override {}
 
+  const RigidBodyTree<double>* tree() const { return tree_; }
+
+ protected:
+  int num_positions() const { return num_positions_; }
+
+  int num_velocities() const { return num_velocities_; }
+
+  const std::vector<int>& num_lambdas() const { return num_lambdas_; }
+
  private:
   void DoAddRunningCost(const symbolic::Expression& e) override;
 
@@ -151,7 +168,7 @@ class RigidBodyTreeMultipleShooting : public MultipleShooting {
   const RigidBodyTree<double>* tree_{nullptr};
   const int num_positions_;
   const int num_velocities_;
-  const std::vector<int> num_lambda_;
+  const std::vector<int> num_lambdas_;
   std::vector<std::shared_ptr<KinematicsCacheWithVHelper<AutoDiffXd>>>
       kinematics_with_v_helpers_;
   solvers::MatrixXDecisionVariable q_vars_;
