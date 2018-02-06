@@ -39,10 +39,19 @@ class DirectTranscriptionConstraint : public solvers::Constraint {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(DirectTranscriptionConstraint)
 
+  /** Constructor
+   * @param tree The RigidBodyTree whose trajectory will be optimized.
+   * @param num_lambda The number of lambda on the right knot point.
+   * @param kinematics_helper The kinematics helper that stores the kinematics
+   * information for the position and velocity on the right knot.
+   * @param generalized_constraint_force_evaluator The evaluator that computes
+   * Jᵣᵀ*λᵣ on the right knot.
+   */
   DirectTranscriptionConstraint(
-      const RigidBodyTree<double>& tree, int num_lambda,
-      std::shared_ptr<KinematicsCacheWithVHelper<AutoDiffXd>>
-          kinematics_helper);
+      const RigidBodyTree<double>& tree,
+      std::shared_ptr<KinematicsCacheWithVHelper<AutoDiffXd>> kinematics_helper,
+      std::unique_ptr<GeneralizedConstraintForceEvaluator>
+          generalized_constraint_force_evaluator);
 
   ~DirectTranscriptionConstraint() override = default;
 
@@ -89,7 +98,8 @@ class DirectTranscriptionConstraint : public solvers::Constraint {
   // Stores the kinematics cache at the right knot point.
   mutable std::shared_ptr<KinematicsCacheWithVHelper<AutoDiffXd>>
       kinematics_helper1_;
-  GeneralizedConstraintForceEvaluator constraint_force_evaluator_;
+  std::unique_ptr<GeneralizedConstraintForceEvaluator>
+      generalized_constraint_force_evaluator_;
 };
 }  // namespace trajectory_optimization
 }  // namespace systems

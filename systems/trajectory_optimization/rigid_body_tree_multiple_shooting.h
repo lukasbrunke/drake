@@ -72,8 +72,6 @@ class KinematicsCacheWithVHelper {
  * loop constraint (e.g., four-bar linkage).
  * In order to add additional generalized constraint force, the user can
  * derive their evaluator class, and override the DoEval function.
- * TODO(hongkai.dai): add an example of the derived evaluator class, in the
- * minitaur example.
  */
 class GeneralizedConstraintForceEvaluator : public solvers::EvaluatorBase {
  public:
@@ -114,6 +112,17 @@ class GeneralizedConstraintForceEvaluator : public solvers::EvaluatorBase {
  * the term Jᵀλ. We can optimize over λ as decision variables.
  * 3. The kinematics cache can be reused in each knot of the trajectory, so we
  * will store the kinematics cache for each knot.
+ * @note This is the base class for doing trajectory optimization on 
+ * RigidBodyTree. The generalized constraint force Jᵀλ in this base class only
+ * include the force due to RigidBodyTree::positionConstraint() (such as loop 
+ * joints). If the user wants to add more constraints, together with the
+ * constraint forces (e.g., joint limits, foot above the ground, etc), then the
+ * user should derive a constraint force evaluator from
+ * GeneralizedConstraintForceEvaluator, and also override the function
+ * DoAddCollocationOrTranscriptionConstraint in this class, to evaluate the 
+ * derived constraint force evaluator.
+ * TODO(hongkai.dai): Add an example in the unit test, to derive the constraint
+ * force evaluator, and also override this class.
  */
 class RigidBodyTreeMultipleShooting : public MultipleShooting {
  public:
@@ -159,6 +168,8 @@ class RigidBodyTreeMultipleShooting : public MultipleShooting {
   int num_velocities() const { return num_velocities_; }
 
   const std::vector<int>& num_lambdas() const { return num_lambdas_; }
+
+  virtual void DoAddCollocationOrTranscriptionConstraint();
 
  private:
   void DoAddRunningCost(const symbolic::Expression& e) override;

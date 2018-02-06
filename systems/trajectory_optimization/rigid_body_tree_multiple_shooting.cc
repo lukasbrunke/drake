@@ -70,12 +70,14 @@ void GeneralizedConstraintForceEvaluator::DoEval(
  */
 
 DirectTranscriptionConstraint::DirectTranscriptionConstraint(
-    const RigidBodyTree<double>& tree, int num_lambda,
-    std::shared_ptr<KinematicsCacheWithVHelper<AutoDiffXd>> kinematics_helper)
+    const RigidBodyTree<double>& tree, 
+    std::shared_ptr<KinematicsCacheWithVHelper<AutoDiffXd>> kinematics_helper,
+    std::unique_ptr<GeneralizedConstraintForceEvaluator>
+        generalized_constraint_force_evaluator)
     : Constraint(tree.get_num_positions() + tree.get_num_velocities(),
                  1 + 2 * tree.get_num_positions() +
                      2 * tree.get_num_velocities() + tree.get_num_actuators() +
-                     num_lambda,
+                     generalized_constraint_force_evaluator->num_lambda(),
                  Eigen::VectorXd::Zero(tree.get_num_positions() +
                                        tree.get_num_velocities()),
                  Eigen::VectorXd::Zero(tree.get_num_positions() +
@@ -84,9 +86,10 @@ DirectTranscriptionConstraint::DirectTranscriptionConstraint(
       num_positions_{tree.get_num_positions()},
       num_velocities_{tree.get_num_velocities()},
       num_actuators_{tree.get_num_actuators()},
-      num_lambda_{num_lambda},
+      num_lambda_{generalized_constraint_force_evaluator->num_lambda()},
       kinematics_helper1_{kinematics_helper},
-      constraint_force_evaluator_(tree, num_lambda, kinematics_helper) {
+      generalized_constraint_force_evaluator_(
+          std::move(generalized_constraint_force_evaluator)) {
   DRAKE_THROW_UNLESS(num_positions_ == num_velocities_);
 }
 
@@ -140,7 +143,8 @@ void DirectTranscriptionConstraint::DoEval(
   AutoDiffVecXd q_lambda(num_positions_ + num_lambda_);
   q_lambda << q_r, lambda_r;
   AutoDiffVecXd generalized_constraint_force(num_velocities_);
-  constraint_force_evaluator_.Eval(q_lambda, generalized_constraint_force);
+  generalized_constraint_force_evaluator_->Eval(q_lambda,
+                                                generalized_constraint_force);
 
   y.tail(num_velocities_) =
       M * (v_r - v_l) - (tree_->B * u_r + generalized_constraint_force - c) * h;
@@ -180,9 +184,18 @@ RigidBodyTreeMultipleShooting::RigidBodyTreeMultipleShooting(
     const std::string lambda_name = "lambda[" + std::to_string(i) + "]";
     lambda_vars_[i] = NewContinuousVariables(num_lambdas_[i], lambda_name);
   }
+  DoAddCollocationOrTranscriptionConstraint();
+}
+
+void RigidBodyTreeMultipleShooting::
+    DoAddCollocationOrTranscriptionConstraint() {
   for (int i = 0; i < N() - 1; ++i) {
+    auto generalized_constraint_force_evaluator =
+        std::make_unique<GeneralizedConstraintForceEvaluator>(
+            *tree_, num_lambdas_[i + 1], kinematics_with_v_helpers_[i + 1]);
     auto transcription_cnstr = std::make_shared<DirectTranscriptionConstraint>(
-        *tree_, num_lambdas_[i + 1], kinematics_with_v_helpers_[i + 1]);
+        *tree_, kinematics_with_v_helpers_[i + 1],
+        std::move(generalized_constraint_force_evaluator));
     AddConstraint(transcription_cnstr,
                   transcription_cnstr->CompositeEvalInput(
                       h_vars()(i), q_vars_.col(i), v_vars_.col(i),

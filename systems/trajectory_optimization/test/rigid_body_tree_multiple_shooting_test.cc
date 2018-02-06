@@ -65,8 +65,13 @@ GTEST_TEST(DirectTranscriptionConstraintTest, TestEval) {
   auto kinematics_helper =
       std::make_shared<KinematicsCacheWithVHelper<AutoDiffXd>>(*tree);
 
-  DirectTranscriptionConstraint constraint(*tree, num_lambda,
-                                           kinematics_helper);
+  auto generalized_constraint_force_evaluator =
+      std::make_unique<GeneralizedConstraintForceEvaluator>(*tree, num_lambda,
+                                                            kinematics_helper);
+
+  DirectTranscriptionConstraint constraint(
+      *tree, kinematics_helper,
+      std::move(generalized_constraint_force_evaluator));
 
   // Set q, v, u, lambda to arbitrary values.
   const double h = 0.1;
