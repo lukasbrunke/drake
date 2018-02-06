@@ -22,12 +22,13 @@ drake_cc_library(
     srcs = ["rigid_body_tree_multiple_shooting.cc"],
     hdrs = [
         "rigid_body_tree_multiple_shooting.h",
-        "rigid_body_tree_multiple_shooting_internal.h"],
+        "rigid_body_tree_multiple_shooting_internal.h",
+    ],
     deps = [
         ":multiple_shooting",
+        "//drake/common:essential",
         "//drake/math:autodiff",
         "//drake/math:gradient",
-        "//drake/common:essential",
         "//drake/multibody:rigid_body_tree",
         "//drake/solvers:constraint",
     ],
@@ -107,8 +108,8 @@ drake_cc_googletest(
         ":rigid_body_tree_multiple_shooting",
         "//drake/common:find_resource",
         "//drake/common/test_utilities:eigen_matrix_compare",
-        "//drake/multibody/parsers:parsers",
         "//drake/math:autodiff",
+        "//drake/multibody/parsers",
     ],
 )
 

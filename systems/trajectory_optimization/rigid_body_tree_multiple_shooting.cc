@@ -1,14 +1,13 @@
 #include "drake/systems/trajectory_optimization/rigid_body_tree_multiple_shooting.h"
-#include "drake/systems/trajectory_optimization/rigid_body_tree_multiple_shooting_internal.h"
 
-#include <cstddef>
-#include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 
 #include "drake/common/eigen_types.h"
 #include "drake/math/autodiff.h"
 #include "drake/math/autodiff_gradient.h"
+#include "drake/systems/trajectory_optimization/rigid_body_tree_multiple_shooting_internal.h"
 
 namespace drake {
 namespace systems {
@@ -40,12 +39,6 @@ void GeneralizedConstraintForceEvaluator::DoEval(
   const auto lambda = x.tail(num_lambda_);
 
   auto kinsol = kinematics_helper_->UpdateKinematics(q);
-  // TODO: the user need to determine which constraint will be used here. Also
-  // for each constraint, the user needs to compute the Jacobian for that
-  // constraint, and multiply Jacobian with the corresponding lambda.
-  // Here since the tree contains four bar linkages,
-  // tree_->positionConstraints
-  // compute the violation of the four-bar linkage constraint.
   const auto J_position_constraint =
       tree_->positionConstraintsJacobian(kinsol, false);
   const int num_position_constraint_lambda = tree_->getNumPositionConstraints();
@@ -190,16 +183,17 @@ RigidBodyTreeMultipleShooting::RigidBodyTreeMultipleShooting(
   for (int i = 0; i < N() - 1; ++i) {
     auto transcription_cnstr = std::make_shared<DirectTranscriptionConstraint>(
         *tree_, num_lambda_[i + 1], kinematics_with_v_helpers_[i + 1]);
-    AddConstraint(
-        transcription_cnstr,
-        transcription_cnstr->CompositeEvalInput(
-            h_vars()(i), q_vars_.col(i), v_vars_.col(i), q_vars_.col(i + 1),
-            v_vars_.col(i + 1),
-            u_vars().segment(i * num_inputs(), num_inputs()), lambda_vars_[i]));
+    AddConstraint(transcription_cnstr,
+                  transcription_cnstr->CompositeEvalInput(
+                      h_vars()(i), q_vars_.col(i), v_vars_.col(i),
+                      q_vars_.col(i + 1), v_vars_.col(i + 1),
+                      u_vars().segment((i + 1) * num_inputs(), num_inputs()),
+                      lambda_vars_[i + 1]));
   }
 }
 
-void RigidBodyTreeMultipleShooting::DoAddRunningCost(const symbolic::Expression& g) {
+void RigidBodyTreeMultipleShooting::DoAddRunningCost(
+    const symbolic::Expression& g) {
   // Add the running cost ∫ g(t, x, u)
   // We discretize this continuous integration as
   // sum_{i = 0, ..., N - 2} h_i * g_{i+1}
@@ -208,19 +202,22 @@ void RigidBodyTreeMultipleShooting::DoAddRunningCost(const symbolic::Expression&
   }
 }
 
-PiecewisePolynomialTrajectory RigidBodyTreeMultipleShooting::ReconstructStateTrajectory() const {
+PiecewisePolynomialTrajectory
+RigidBodyTreeMultipleShooting::ReconstructStateTrajectory() const {
   Eigen::VectorXd times = GetSampleTimes();
   std::vector<double> times_vec(N());
   std::vector<Eigen::MatrixXd> states(N());
-  
+
   for (int i = 0; i < N(); ++i) {
     times_vec[i] = times(i);
     states[i] = GetSolution(state(i));
   }
-  return PiecewisePolynomialTrajectory(PiecewisePolynomial<double>::FirstOrderHold(times_vec, states));
+  return PiecewisePolynomialTrajectory(
+      PiecewisePolynomial<double>::FirstOrderHold(times_vec, states));
 }
 
-PiecewisePolynomialTrajectory RigidBodyTreeMultipleShooting::ReconstructInputTrajectory() const {
+PiecewisePolynomialTrajectory
+RigidBodyTreeMultipleShooting::ReconstructInputTrajectory() const {
   Eigen::VectorXd times = GetSampleTimes();
   std::vector<double> times_vec(N());
   std::vector<Eigen::MatrixXd> inputs(N());
@@ -229,7 +226,8 @@ PiecewisePolynomialTrajectory RigidBodyTreeMultipleShooting::ReconstructInputTra
     times_vec[i] = times(i);
     inputs[i] = GetSolution(input(i));
   }
-  return PiecewisePolynomialTrajectory(PiecewisePolynomial<double>::ZeroOrderHold(times_vec, inputs));
+  return PiecewisePolynomialTrajectory(
+      PiecewisePolynomial<double>::ZeroOrderHold(times_vec, inputs));
 }
 
 }  // namespace trajectory_optimization

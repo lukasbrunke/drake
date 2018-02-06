@@ -1,5 +1,4 @@
 #include "drake/systems/trajectory_optimization/rigid_body_tree_multiple_shooting.h"
-#include "drake/systems/trajectory_optimization/rigid_body_tree_multiple_shooting_internal.h"
 
 #include <gtest/gtest.h>
 
@@ -7,6 +6,7 @@
 #include "drake/common/test_utilities/eigen_matrix_compare.h"
 #include "drake/math/autodiff.h"
 #include "drake/multibody/parsers/urdf_parser.h"
+#include "drake/systems/trajectory_optimization/rigid_body_tree_multiple_shooting_internal.h"
 
 namespace drake {
 namespace systems {
@@ -105,13 +105,83 @@ GTEST_TEST(DirectTranscriptionConstraintTest, TestEval) {
                               1E-10, MatrixCompareType::absolute));
 }
 
-GTEST_TEST(RigidBodyTreeMultipleShootingTest, TestConstructor) {
+GTEST_TEST(RigidBodyTreeMultipleShootingTest, TestSimpleFourBar) {
   auto tree = ConstructFourBarTree();
-  const int num_time_samples = 4;
-  const std::vector<int> num_lambda(num_time_samples, tree->getNumPositionConstraints());
+  const int num_time_samples = 5;
+  const std::vector<int> num_lambda(num_time_samples,
+                                    tree->getNumPositionConstraints());
   const double minimum_timestep{0.01};
   const double maximum_timestep{0.1};
-  RigidBodyTreeMultipleShooting traj_opt(*tree, num_lambda, num_time_samples, minimum_timestep, maximum_timestep);
+  RigidBodyTreeMultipleShooting traj_opt(*tree, num_lambda, num_time_samples,
+                                         minimum_timestep, maximum_timestep);
+
+  // Add a constraint on position 0 of the initial posture.
+  traj_opt.AddBoundingBoxConstraint(0, 0,
+                                    traj_opt.GeneralizedPositions()(0, 0));
+  // Add a constraint on the final posture.
+  traj_opt.AddBoundingBoxConstraint(
+      M_PI_2, M_PI_2, traj_opt.GeneralizedPositions()(0, num_time_samples - 1));
+  // Add a constraint on the final velocity.
+  traj_opt.AddBoundingBoxConstraint(
+      0, 0, traj_opt.GeneralizedVelocities().col(num_time_samples - 1));
+  // Add a running cost on the control as ∫ u² dt.
+  traj_opt.AddRunningCost(
+      traj_opt.input().cast<symbolic::Expression>().squaredNorm());
+
+  const solvers::SolutionResult result = traj_opt.Solve();
+
+  EXPECT_EQ(result, solvers::SolutionResult::kSolutionFound);
+
+  // First check if dt is within the bounds.
+  const Eigen::VectorXd t_sol = traj_opt.GetSampleTimes();
+  const Eigen::VectorXd dt_sol =
+      t_sol.tail(num_time_samples - 1) - t_sol.head(num_time_samples - 1);
+  EXPECT_TRUE((dt_sol.array() <=
+               Eigen::ArrayXd::Constant(num_time_samples - 1, maximum_timestep))
+                  .all());
+  EXPECT_TRUE((dt_sol.array() >=
+               Eigen::ArrayXd::Constant(num_time_samples - 1, minimum_timestep))
+                  .all());
+  // Check if the interpolation constraint is satisfied
+  KinematicsCache<double> kinsol = tree->CreateKinematicsCache();
+  const double tol{1E-5};
+  const Eigen::MatrixXd q_sol =
+      traj_opt.GetSolution(traj_opt.GeneralizedPositions());
+  const Eigen::MatrixXd v_sol =
+      traj_opt.GetSolution(traj_opt.GeneralizedVelocities());
+  Eigen::MatrixXd u_sol(tree->get_num_actuators(), num_time_samples);
+  std::vector<Eigen::VectorXd> lambda_sol(num_time_samples);
+  for (int i = 0; i < num_time_samples; ++i) {
+    u_sol.col(i) = traj_opt.GetSolution(traj_opt.input(i));
+    lambda_sol[i] = traj_opt.GetSolution(traj_opt.ConstraintForces()[i]);
+  }
+
+  for (int i = 1; i < num_time_samples; ++i) {
+    kinsol.initialize(q_sol.col(i), v_sol.col(i));
+    tree->doKinematics(kinsol, true);
+    // Check qᵣ - qₗ = q̇ᵣ*h
+    EXPECT_TRUE(CompareMatrices(q_sol.col(i) - q_sol.col(i - 1),
+                                v_sol.col(i) * dt_sol(i - 1), tol,
+                                MatrixCompareType::absolute));
+    // Check Mᵣ(vᵣ - vₗ) = (B*uᵣ + Jᵣᵀ*λᵣ -c(qᵣ, vᵣ))h
+    const Eigen::MatrixXd M = tree->massMatrix(kinsol);
+    const Eigen::MatrixXd J_r = tree->positionConstraintsJacobian(kinsol);
+    const typename RigidBodyTree<double>::BodyToWrenchMap no_external_wrenches;
+    const Eigen::VectorXd c =
+        tree->dynamicsBiasTerm(kinsol, no_external_wrenches);
+    EXPECT_TRUE(CompareMatrices(
+        M * (v_sol.col(i) - v_sol.col(i - 1)),
+        (tree->B * u_sol.col(i) + J_r.transpose() * lambda_sol[i] - c) *
+            dt_sol(i - 1),
+        tol, MatrixCompareType::relative));
+  }
+  // Check if the constraints on the initial state and final state are
+  // satisfied.
+  EXPECT_NEAR(q_sol(0, 0), 0, tol);
+  EXPECT_NEAR(q_sol(0, num_time_samples - 1), M_PI_2, tol);
+  EXPECT_TRUE(CompareMatrices(v_sol.col(num_time_samples - 1),
+                              Eigen::VectorXd::Zero(tree->get_num_velocities()),
+                              tol, MatrixCompareType::absolute));
 }
 
 }  // namespace

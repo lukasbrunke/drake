@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <vector>
 
 #include "drake/common/drake_copyable.h"
 #include "drake/multibody/rigid_body_tree.h"
@@ -28,8 +29,7 @@ namespace trajectory_optimization {
 template <typename Scalar>
 class KinematicsCacheWithVHelper {
  public:
-  explicit KinematicsCacheWithVHelper(
-      const RigidBodyTree<double>& tree)
+  explicit KinematicsCacheWithVHelper(const RigidBodyTree<double>& tree)
       : tree_{&tree}, kinsol_(tree.CreateKinematicsCacheWithType<Scalar>()) {
     last_q_.resize(tree.get_num_positions());
     last_v_.resize(tree.get_num_velocities());
@@ -99,7 +99,7 @@ class GeneralizedConstraintForceEvaluator : public solvers::EvaluatorBase {
  * Implements the trajectory optimization for a RigidBodyTree.
  * Trajectory optimization for RigidBodyTree is special, because the dynamics
  * of the tree has some special structures.
- * 1. Since RigidBodyTree has a second order dynamics, its dynamics can be 
+ * 1. Since RigidBodyTree has a second order dynamics, its dynamics can be
  * separated as the time derivative on the generalized position, and the time
  * derivative on the generalized velocities.
  * 2. Its generalized acceleration can be affected by the external force, under
@@ -120,25 +120,25 @@ class RigidBodyTreeMultipleShooting : public MultipleShooting {
    * @param maximum_timestep The maximum of the time step.
    */
   RigidBodyTreeMultipleShooting(const RigidBodyTree<double>& tree,
-                                     const std::vector<int>& num_lambda,
-                                     int num_time_samples,
-                                     double minimum_timestep,
-                                     double maximum_timestep);
+                                const std::vector<int>& num_lambda,
+                                int num_time_samples, double minimum_timestep,
+                                double maximum_timestep);
 
   PiecewisePolynomialTrajectory ReconstructInputTrajectory() const override;
 
   PiecewisePolynomialTrajectory ReconstructStateTrajectory() const override;
 
-  const solvers::VectorXDecisionVariable GeneralizedPosition(int index) const {
-    return q_vars_.col(index);
+  const solvers::MatrixXDecisionVariable& GeneralizedPositions() const {
+    return q_vars_;
   }
 
-  const solvers::VectorXDecisionVariable GeneralizedVelocity(int index) const {
-    return v_vars_.col(index);
+  const solvers::MatrixXDecisionVariable& GeneralizedVelocities() const {
+    return v_vars_;
   }
 
-  const solvers::VectorXDecisionVariable ConstraintForce(int index) const {
-    return lambda_vars_[index];
+  const std::vector<solvers::VectorXDecisionVariable>& ConstraintForces()
+      const {
+    return lambda_vars_;
   }
 
   ~RigidBodyTreeMultipleShooting() override {}
