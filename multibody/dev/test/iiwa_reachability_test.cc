@@ -51,11 +51,11 @@ std::array<Eigen::Vector3d, kNumSampleX * kNumSampleY * kNumSampleZ>
 GenerateEEposition() {
   constexpr int kNumSample = kNumSampleX * kNumSampleY * kNumSampleZ;
   Eigen::Matrix<double, kNumSampleZ, 1> sample_z =
-      Eigen::Matrix<double, kNumSampleZ, 1>::LinSpaced(kNumSampleZ, 0.05, 0.85);
+      Eigen::Matrix<double, kNumSampleZ, 1>::LinSpaced(kNumSampleZ, 0, 1.1);
   Eigen::Matrix<double, kNumSampleX, 1> sample_x =
-      Eigen::Matrix<double, kNumSampleX, 1>::LinSpaced(kNumSampleX, -0.8, 0.8);
+      Eigen::Matrix<double, kNumSampleX, 1>::LinSpaced(kNumSampleX, -1, 1);
   Eigen::Matrix<double, kNumSampleX, 1> sample_y =
-      Eigen::Matrix<double, kNumSampleY, 1>::LinSpaced(kNumSampleY, -0.8, 0.8);
+      Eigen::Matrix<double, kNumSampleY, 1>::LinSpaced(kNumSampleY, -1, 1);
   std::array<Eigen::Vector3d, kNumSample> samples;
   for (int i = 0; i < kNumSampleX; ++i) {
     for (int j = 0; j < kNumSampleY; ++j) {
@@ -73,7 +73,7 @@ void SolveNonlinearIK(RigidBodyTreed* robot, int ee_idx,
                       const Eigen::Quaterniond& ee_quat,
                       const Eigen::VectorXd& q_guess, int* info,
                       Eigen::VectorXd* q_sol) {
-  WorldPositionConstraint pos_cnstr(robot, ee_idx, Eigen::Vector3d::Zero(),
+  WorldPositionConstraint pos_cnstr(robot, ee_idx, Eigen::Vector3d(0, 0, 0.15),
                                     ee_pos, ee_pos);
   WorldQuatConstraint orient_cnstr(
       robot, ee_idx,
@@ -90,7 +90,7 @@ void SolveNonlinearIK(RigidBodyTreed* robot, int ee_idx,
 
 int DoMain() {
   // First generate the sample end effector position
-  constexpr int kNumSampleZ = 21;
+  constexpr int kNumSampleZ = 31;
   constexpr int kNumSampleX = 41;
   constexpr int kNumSampleY = 41;
   const auto ee_pos_samples =
@@ -99,26 +99,26 @@ int DoMain() {
   const auto tree = ConstructKuka();
   // int ee_idx = tree->FindBodyIndex("iiwa_link_ee");
 
-  int link6_idx = tree->FindBodyIndex("iiwa_link_6");
+  int lin7_idx = tree->FindBodyIndex("iiwa_link_7");
   drake::lcm::DrakeLcm lcm;
 
   manipulation::SimpleTreeVisualizer visualizer(*tree.get(), &lcm);
 
   // on ee, the palm direction is body x axis
-  // on link6, the palm direction is body y axis
+  // on link7, the palm direction is body y axis
   Eigen::Matrix3d ee_orient_des;
   ee_orient_des << 0, 1, 0, 0, 0, -1, -1, 0, 0;
   const Eigen::Quaterniond ee_quat_des(ee_orient_des);
 
   // We will count how many different orientations link 6 can reach.
   constexpr int kNumOrient = 15;
-  std::array<Eigen::Matrix3d, kNumOrient> link6_orient_des;
-  link6_orient_des[0] << 1, 0, 0, 0, 0, 1, 0, -1, 0;
+  std::array<Eigen::Matrix3d, kNumOrient> link7_orient_des;
+  link7_orient_des[0] << 1, 0, 0, 0, 0, 1, 0, -1, 0;
   for (int i = 0; i < 8; ++i) {
-    link6_orient_des[i] = link6_orient_des[0] * Eigen::AngleAxisd(M_PI / 4 * i, Eigen::Vector3d::UnitX()).matrix();
+    link7_orient_des[i] = link7_orient_des[0] * Eigen::AngleAxisd(M_PI / 4 * i, Eigen::Vector3d::UnitX()).matrix();
   }
   for (int i = 1; i < 8; ++i) {
-    link6_orient_des[i + 7] = link6_orient_des[0] * Eigen::AngleAxisd(M_PI / 4 * i, Eigen::Vector3d::UnitX()).matrix();
+    link7_orient_des[i + 7] = link7_orient_des[0] * Eigen::AngleAxisd(M_PI / 4 * i, Eigen::Vector3d::UnitX()).matrix();
   }
 
   Eigen::VectorXd q_sol;
@@ -153,15 +153,15 @@ int DoMain() {
   output_file.open(output_file_name, std::ios::app | std::ios::out);
 
   auto pos_cnstr = global_ik.AddBoundingBoxConstraint(
-      0, 0, global_ik.body_position(link6_idx));
-  const auto& link6_R = global_ik.body_rotation_matrix(link6_idx);
-  Eigen::Matrix<double, 9, 1> link6_rotmat_des_flat;
-  link6_rotmat_des_flat << link6_orient_des[0].col(0), link6_orient_des[0].col(1),
-      link6_orient_des[0].col(2);
-  solvers::VectorDecisionVariable<9> link6_R_flat;
-  link6_R_flat << link6_R.col(0), link6_R.col(1), link6_R.col(2);
+      0, 0, global_ik.body_position(lin7_idx));
+  const auto& link7_R = global_ik.body_rotation_matrix(lin7_idx);
+  Eigen::Matrix<double, 9, 1> link7_rotmat_des_flat;
+  link7_rotmat_des_flat << link7_orient_des[0].col(0), link6_orient_des[0].col(1),
+      link7_orient_des[0].col(2);
+  solvers::VectorDecisionVariable<9> link7_R_flat;
+  link7_R_flat << link7_R.col(0), link6_R.col(1), link6_R.col(2);
   auto orient_cnstr = global_ik.AddBoundingBoxConstraint(
-      link6_rotmat_des_flat, link6_rotmat_des_flat, link6_R_flat);
+      link7_rotmat_des_flat, link7_rotmat_des_flat, link6_R_flat);
   int pos_sample_count = 0;
   std::array<Eigen::VectorXd, 20> q0s;
   q0s[0] = Eigen::VectorXd::Zero(7);
@@ -171,9 +171,9 @@ int DoMain() {
   for (const auto& pos_sample : ee_pos_samples) {
     nonlinear_ik_info.fill(13);
     for (int i = 0; i < kNumOrient; ++i) {
-      const Eigen::Quaterniond link6_quat_des(link6_orient_des[i]);
+      const Eigen::Quaterniond link7_quat_des(link7_orient_des[i]);
       for (const auto& q0 : q0s) {
-        SolveNonlinearIK(tree.get(), link6_idx, pos_sample, link6_quat_des, q0,
+        SolveNonlinearIK(tree.get(), lin7_idx, pos_sample, link7_quat_des, q0,
                          &nonlinear_ik_info[i], &q_sol);
         if (nonlinear_ik_info[i] <= 10) {
           break;
@@ -186,16 +186,16 @@ int DoMain() {
       /*if (nonlinear_ik_info[i] > 10) {
         pos_cnstr.constraint()->UpdateLowerBound(pos_sample);
         pos_cnstr.constraint()->UpdateUpperBound(pos_sample);
-        link6_rotmat_des_flat << link6_orient_des[i].col(0),
-            link6_orient_des[i].col(1), link6_orient_des[i].col(2);
-        orient_cnstr.constraint()->UpdateLowerBound(link6_rotmat_des_flat);
-        orient_cnstr.constraint()->UpdateUpperBound(link6_rotmat_des_flat);
+        link7_rotmat_des_flat << link7_orient_des[i].col(0),
+            link7_orient_des[i].col(1), link7_orient_des[i].col(2);
+        orient_cnstr.constraint()->UpdateLowerBound(link7_rotmat_des_flat);
+        orient_cnstr.constraint()->UpdateUpperBound(link7_rotmat_des_flat);
         solvers::GurobiSolver gurobi_solver;
         global_ik_result = gurobi_solver.Solve(global_ik);
         if (global_ik_result == SolutionResult::kSolutionFound) {
           Eigen::VectorXd q_global_ik =
               global_ik.ReconstructGeneralizedPositionSolution();
-          SolveNonlinearIK(tree.get(), link6_idx, pos_sample, link6_quat_des,
+          SolveNonlinearIK(tree.get(), lin7_idx, pos_sample, link7_quat_des,
                            q_global_ik, &nonlinear_ik_resolve_info, &q_sol);
         }
       }*/
