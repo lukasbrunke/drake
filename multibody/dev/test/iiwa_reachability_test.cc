@@ -156,12 +156,12 @@ int DoMain() {
       0, 0, global_ik.body_position(lin7_idx));
   const auto& link7_R = global_ik.body_rotation_matrix(lin7_idx);
   Eigen::Matrix<double, 9, 1> link7_rotmat_des_flat;
-  link7_rotmat_des_flat << link7_orient_des[0].col(0), link6_orient_des[0].col(1),
+  link7_rotmat_des_flat << link7_orient_des[0].col(0), link7_orient_des[0].col(1),
       link7_orient_des[0].col(2);
   solvers::VectorDecisionVariable<9> link7_R_flat;
-  link7_R_flat << link7_R.col(0), link6_R.col(1), link6_R.col(2);
+  link7_R_flat << link7_R.col(0), link7_R.col(1), link7_R.col(2);
   auto orient_cnstr = global_ik.AddBoundingBoxConstraint(
-      link7_rotmat_des_flat, link7_rotmat_des_flat, link6_R_flat);
+      link7_rotmat_des_flat, link7_rotmat_des_flat, link7_R_flat);
   int pos_sample_count = 0;
   std::array<Eigen::VectorXd, 20> q0s;
   q0s[0] = Eigen::VectorXd::Zero(7);

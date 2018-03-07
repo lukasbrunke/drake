@@ -57,7 +57,7 @@ def receiveMessage(msg):
             nonlinear_ik_resolve_status_str = line.split(':')
             nonlinear_ik_resolve_status = int(nonlinear_ik_status_str[1])
 
-            if orient_count == 4:
+            if orient_count == num_orient - 1:
                 reachable_color = [float(num_orient - num_reachable_orient) / num_orient, float(num_reachable_orient) / num_orient, 0]
                 d_reachable[num_reachable_orient].addSphere(pos, radius = 0.01, color = reachable_color)
                 # reset num_reachable_orient
