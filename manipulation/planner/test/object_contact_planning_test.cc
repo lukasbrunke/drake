@@ -143,6 +143,8 @@ GTEST_TEST(ObjectContactPlanningTest, TestStaticSinglePosture) {
       contact_force_cost_lorentz_cone);
   problem.get_mutable_prog()->AddLinearCost(+contact_force_cost);
 
+  problem.get_mutable_prog()->AddBoundingBoxConstraint(0.5, 0.5, f_WV(0, 0));
+
   drake::solvers::GurobiSolver solver;
   problem.get_mutable_prog()->SetSolverOption(solvers::GurobiSolver::id(),
                                               "OutputFlag", 1);
@@ -172,6 +174,8 @@ GTEST_TEST(ObjectContactPlanningTest, TestStaticSinglePosture) {
   for (int i = 0; i < 4; ++i) {
     VisualizeForce(&viewer, p_WV_sol.col(i), f_WV_sol.col(i),
                    block.mass() * kGravity * 5, "f_WV" + std::to_string(i));
+    VisualizeForce(&viewer, p_WV_sol.col(i), R_WB_sol * f_BV_sol.col(i),
+                   block.mass() * kGravity * 5, "R_WB * f_BV" + std::to_string(i));
   }
 
   // Make sure that static equilibrium is satisfied.
@@ -193,10 +197,9 @@ GTEST_TEST(ObjectContactPlanningTest, TestStaticSinglePosture) {
   EXPECT_NEAR(R_WB_quality_factor, 1, 0.05);
 
   // Now make sure that f_WV ≈ R_WB * f_BV
-  // Actually this constraint is violated a lot, it is only satisfied to a high
-  // accuracy, when the ground contact force is vertical, which is the optimal
-  // solution. When the tangential contact force at each vertex is non-zero,
-  // this constraint can be violated by about 0.5
+  // Actually this constraint is violated a lot, in the -x and -y directions.
+  // In the z direction, the difference is very small, to about 1E-10. But in 
+  // the x and y direction, the difference can be 0.4.
   EXPECT_TRUE(CompareMatrices(f_WV_sol, R_WB_sol * f_BV_sol, 1e-3));
 }
 }  // namespace planner

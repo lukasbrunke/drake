@@ -121,18 +121,17 @@ ObjectContactPlanning::CalcContactForceInWorldFrame(
         Eigen::VectorXd::Zero(f_B.rows()));
   }
 
-  // for (int i = 0; i < 3; ++i) {
-  //   for (int j = 0; j < 3; ++j) {
-  //       // Now add the constraint that lambda_R_times_f[i, j].colwise.sum()
-  //       ==
-  //       // lambda_f[j]
-  //       prog_->AddLinearEqualityConstraint(
-  //           lambda_R_times_f[i][j].cast<Expression>().colwise().sum().transpose()
-  //           -
-  //               lambda_f[j],
-  //           Eigen::VectorXd::Zero(lambda_f[j].rows()));
-  //   }
-  // }
+  //for (int i = 0; i < 3; ++i) {
+  //  for (int j = 0; j < 3; ++j) {
+  //      // Now add the constraint that lambda_R_times_f[i, j].colwise.sum() ==
+  //      // lambda_f[j]
+  //      prog_->AddLinearEqualityConstraint(
+  //          lambda_R_times_f[i][j].cast<Expression>().colwise().sum().transpose()
+  //          -
+  //              lambda_f[j],
+  //          Eigen::VectorXd::Zero(lambda_f[j].rows()));
+  //  }
+  //}
 
   return b_f;
 }
