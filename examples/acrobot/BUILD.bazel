@@ -240,6 +240,7 @@ drake_cc_binary(
         "//math:autodiff",
         "//math:gradient",
         "//multibody/parsers:parsers",
+        "//multibody/benchmarks/acrobot:make_acrobot_plant",
         "@gflags",
     ],
 )

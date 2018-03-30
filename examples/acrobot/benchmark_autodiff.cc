@@ -4,12 +4,14 @@
 #include "drake/examples/acrobot/acrobot_plant.h"
 #include "drake/math/autodiff.h"
 #include "drake/math/autodiff_gradient.h"
+#include "drake/multibody/benchmarks/acrobot/make_acrobot_plant.h"
 #include "drake/multibody/parsers/urdf_parser.h"
 #include "drake/multibody/rigid_body_tree.h"
 
 #include <gflags/gflags.h>
 
 using Eigen::Vector2d;
+using drake::multibody::multibody_plant::MultibodyPlant;
 
 namespace drake {
 namespace examples {
@@ -76,12 +78,14 @@ void GetAutoDiffUpTo73dQandV(const Eigen::Ref<const Vector2d>& q,
 }
 
 template <typename DerivedQ, typename DerivedV>
-void EvalRigidBodyTreeFunGeneric(const RigidBodyTreed& tree,
-                                 const Eigen::MatrixBase<DerivedQ>& q,
-                                 const Eigen::MatrixBase<DerivedV>& v) {
-  auto cache = tree.doKinematics(q.eval(), v.eval());
+void EvalRigidBodyTreeGeneric(const RigidBodyTreed& tree,
+                              const Eigen::MatrixBase<DerivedQ>& q,
+                              const Eigen::MatrixBase<DerivedV>& v,
+                              ScalarType scalar_type) {
+  std::cout << "scalar type: " << to_string(scalar_type) << "\n";
   auto t1 = std::chrono::high_resolution_clock::now();
   for (int i = 0; i < 1000; ++i) {
+    auto cache = tree.doKinematics(q.eval(), v.eval());
     tree.massMatrix(cache);
   }
   auto t2 = std::chrono::high_resolution_clock::now();
@@ -92,7 +96,9 @@ void EvalRigidBodyTreeFunGeneric(const RigidBodyTreed& tree,
 }
 
 template <typename T>
-void EvalAcrobotPlantGeneric(const VectorX<T>& q, const VectorX<T>& v) {
+void EvalAcrobotPlantGeneric(const VectorX<T>& q, const VectorX<T>& v,
+                             ScalarType scalar_type) {
+  std::cout << "scalar type: " << to_string(scalar_type) << "\n";
   auto plant = std::make_unique<AcrobotPlant<T>>();
 
   auto context = plant->CreateDefaultContext();
@@ -110,57 +116,27 @@ void EvalAcrobotPlantGeneric(const VectorX<T>& q, const VectorX<T>& v) {
       << " microseconds" << std::endl;
 }
 
-void EvalAcrobotPlant(const Eigen::Ref<const Eigen::Vector2d>& q,
-                      const Eigen::Ref<const Eigen::Vector2d>& v) {
-  for (auto scalar_type : {ScalarType::kDouble, ScalarType::kAutoDiffXd,
-                           ScalarType::kAutoDiffUpTo73d}) {
-    std::cout << "scalar type: " << to_string(scalar_type) << "\n";
-    switch (scalar_type) {
-      case ScalarType::kDouble: {
-        EvalAcrobotPlantGeneric<double>(q, v);
-        break;
-      }
-      case ScalarType::kAutoDiffXd: {
-        AutoDiffVecXd qd, vd;
-        GetAutoDiffXdQandV(q, v, &qd, &vd);
-        EvalAcrobotPlantGeneric<AutoDiffXd>(qd, vd);
-        break;
-      }
-      case ScalarType::kAutoDiffUpTo73d: {
-        VectorX<AutoDiffUpTo73d> qd, vd;
-        GetAutoDiffUpTo73dQandV(q, v, &qd, &vd);
-        EvalAcrobotPlantGeneric<AutoDiffUpTo73d>(qd, vd);
-        break;
-      }
-    }
+template <typename Scalar, typename DerivedQ, typename DerivedV>
+void EvalMultibodyPlantGeneric(
+    const multibody::multibody_plant::MultibodyPlant<Scalar>& plant,
+    const Eigen::MatrixBase<DerivedQ>& q, const Eigen::MatrixBase<DerivedV>& v,
+    ScalarType scalar_type) {
+  std::cout << "scalar type: " << to_string(scalar_type) << "\n";
+  using T = typename DerivedQ::Scalar;
+  auto context = plant.CreateDefaultContext();
+  VectorX<T> x(q.rows() + v.rows());
+  x << q, v;
+  context->get_mutable_continuous_state_vector().SetFromVector(x);
+  MatrixX<T> M(v.rows(), v.rows());
+  auto t1 = std::chrono::high_resolution_clock::now();
+  for (int i = 0; i < 1000; ++i) {
+    plant.model().CalcMassMatrixViaInverseDynamics(*context, &M);
   }
-}
-
-void EvalRigidBodyTreeFun(const RigidBodyTreed& tree,
-                          const Eigen::Ref<const Eigen::VectorXd>& q,
-                          const Eigen::Ref<const Eigen::VectorXd>& v) {
-  for (auto scalar_type : {ScalarType::kDouble, ScalarType::kAutoDiffXd,
-                           ScalarType::kAutoDiffUpTo73d}) {
-    std::cout << "scalar type: " << to_string(scalar_type) << "\n";
-    switch (scalar_type) {
-      case ScalarType::kDouble: {
-        EvalRigidBodyTreeFunGeneric(tree, q, v);
-        break;
-      }
-      case ScalarType::kAutoDiffXd: {
-        AutoDiffVecXd qd, vd;
-        GetAutoDiffXdQandV(q, v, &qd, &vd);
-        EvalRigidBodyTreeFunGeneric(tree, qd, vd);
-        break;
-      }
-      case ScalarType::kAutoDiffUpTo73d: {
-        VectorX<AutoDiffUpTo73d> qd, vd;
-        GetAutoDiffUpTo73dQandV(q, v, &qd, &vd);
-        EvalRigidBodyTreeFunGeneric(tree, qd, vd);
-        break;
-      }
-    }
-  }
+  auto t2 = std::chrono::high_resolution_clock::now();
+  std::cout
+      << "Elapsed time: "
+      << std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count()
+      << " microseconds" << std::endl;
 }
 
 int DoMain(int argc, char* argv[]) {
@@ -168,6 +144,8 @@ int DoMain(int argc, char* argv[]) {
   parsers::urdf::AddModelInstanceFromUrdfFileToWorld(
       FindResourceOrThrow("drake/examples/acrobot/Acrobot.urdf"),
       multibody::joints::kFixed, tree.get());
+  auto plant = multibody::benchmarks::acrobot::MakeAcrobotPlant(
+      multibody::benchmarks::acrobot::AcrobotParameters(), true);
 
   Eigen::VectorXd q(2);
   q << 1, 2;
@@ -175,17 +153,28 @@ int DoMain(int argc, char* argv[]) {
   v << 3, 4;
   Eigen::VectorXd x(4);
   x << q, v;
-  for (auto robot_type :
-       {RobotType::kAcrobotPlant, RobotType::kRigidBodyTree}) {
+  AutoDiffVecXd qd, vd;
+  GetAutoDiffXdQandV(q, v, &qd, &vd);
+  VectorX<AutoDiffUpTo73d> q73, v73;
+  GetAutoDiffUpTo73dQandV(q, v, &q73, &v73);
+  for (auto robot_type : {RobotType::kAcrobotPlant, RobotType::kRigidBodyTree,
+                          RobotType::kMultibodyPlant}) {
     std::cout << "robot type: " << to_string(robot_type) << "\n";
     switch (robot_type) {
       case RobotType::kAcrobotPlant:
-        EvalAcrobotPlant(q, v);
+        EvalAcrobotPlantGeneric(q, v, ScalarType::kDouble);
+        EvalAcrobotPlantGeneric(qd, vd, ScalarType::kAutoDiffXd);
         break;
       case RobotType::kRigidBodyTree:
-        EvalRigidBodyTreeFun(*tree, q, v);
+        EvalRigidBodyTreeGeneric(*tree, q, v, ScalarType::kDouble);
+        EvalRigidBodyTreeGeneric(*tree, qd, vd, ScalarType::kAutoDiffXd);
+        EvalRigidBodyTreeGeneric(*tree, q73, v73, ScalarType::kAutoDiffUpTo73d);
         break;
       case RobotType::kMultibodyPlant:
+        EvalMultibodyPlantGeneric(*plant, q, v, ScalarType::kDouble);
+        EvalMultibodyPlantGeneric(*(dynamic_cast<MultibodyPlant<AutoDiffXd>*>(
+                                      plant->ToAutoDiffXd().get())),
+                                  qd, vd, ScalarType::kAutoDiffXd);
         break;
     }
     std::cout << "\n";
