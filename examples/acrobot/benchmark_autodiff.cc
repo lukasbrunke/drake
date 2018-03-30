@@ -1,6 +1,6 @@
 #include <chrono>
-#include "drake/common/find_resource.h"
 #include "drake/common/eigen_types.h"
+#include "drake/common/find_resource.h"
 #include "drake/examples/acrobot/acrobot_plant.h"
 #include "drake/math/autodiff.h"
 #include "drake/math/autodiff_gradient.h"
@@ -9,15 +9,77 @@
 
 #include <gflags/gflags.h>
 
+using Eigen::Vector2d;
+
 namespace drake {
 namespace examples {
 namespace acrobot {
-DEFINE_int32(scalar_type, 0,
-             "0 for double, 1 for AutoDiffXd, 2 for AutoDiffUpTo73d");
-DEFINE_bool(use_acrobot_plant, false, "Set to true if using AcrobotPlant, otherwise use RigidBodyTree");
+enum class ScalarType {
+  kDouble,
+  kAutoDiffXd,
+  kAutoDiffUpTo73d,
+};
 
-template <typename Derived>
-void EvalRigidBodyTreeFun(const RigidBodyTreed& tree, Derived& cache) {
+std::string to_string(ScalarType type) {
+  switch (type) {
+    case ScalarType::kDouble:
+      return "double";
+    case ScalarType::kAutoDiffXd:
+      return "AutoDiffXd";
+    case ScalarType::kAutoDiffUpTo73d:
+      return "AutoDiffUpTo73d";
+  }
+}
+
+enum class RobotType {
+  kRigidBodyTree,
+  kMultibodyPlant,
+  kAcrobotPlant,
+};
+
+std::string to_string(RobotType type) {
+  switch (type) {
+    case RobotType::kAcrobotPlant:
+      return "AcrobotPlant";
+    case RobotType::kRigidBodyTree:
+      return "RigidBodyTree";
+    case RobotType::kMultibodyPlant:
+      return "MultibodyPlant";
+  }
+}
+
+void GetAutoDiffXdQandV(const Eigen::Ref<const Eigen::VectorXd>& q,
+                        const Eigen::Ref<const Eigen::VectorXd>& v,
+                        AutoDiffVecXd* qd, AutoDiffVecXd* vd) {
+  Eigen::Vector4d x;
+  x << q, v;
+  const AutoDiffVecXd xd = math::initializeAutoDiff(x);
+  *qd = xd.head<2>();
+  *vd = xd.tail<2>();
+}
+
+void GetAutoDiffUpTo73dQandV(const Eigen::Ref<const Vector2d>& q,
+                             const Eigen::Ref<const Vector2d>& v,
+                             VectorX<AutoDiffUpTo73d>* qd,
+                             VectorX<AutoDiffUpTo73d>* vd) {
+  Eigen::Vector4d x;
+  x << q, v;
+  VectorX<AutoDiffUpTo73d> xd(4);
+  for (int i = 0; i < 4; ++i) {
+    xd(i).value() = x(i);
+    xd(i).derivatives().resize(4, 1);
+    xd(i).derivatives() = Eigen::Vector4d::Zero();
+    xd(i).derivatives()(i) = 1;
+  }
+  *qd = xd.head<2>();
+  *vd = xd.tail<2>();
+}
+
+template <typename DerivedQ, typename DerivedV>
+void EvalRigidBodyTreeFunGeneric(const RigidBodyTreed& tree,
+                                 const Eigen::MatrixBase<DerivedQ>& q,
+                                 const Eigen::MatrixBase<DerivedV>& v) {
+  auto cache = tree.doKinematics(q.eval(), v.eval());
   auto t1 = std::chrono::high_resolution_clock::now();
   for (int i = 0; i < 1000; ++i) {
     tree.massMatrix(cache);
@@ -29,8 +91,8 @@ void EvalRigidBodyTreeFun(const RigidBodyTreed& tree, Derived& cache) {
       << " microseconds" << std::endl;
 }
 
-template<typename T>
-void EvalAcrobotPlant(const VectorX<T>& q, const VectorX<T>& v) {
+template <typename T>
+void EvalAcrobotPlantGeneric(const VectorX<T>& q, const VectorX<T>& v) {
   auto plant = std::make_unique<AcrobotPlant<T>>();
 
   auto context = plant->CreateDefaultContext();
@@ -48,17 +110,60 @@ void EvalAcrobotPlant(const VectorX<T>& q, const VectorX<T>& v) {
       << " microseconds" << std::endl;
 }
 
-template <typename Derived, typename T>
-void EvalFun(const RigidBodyTreed& tree, Derived& cache, const VectorX<T>& q, const VectorX<T>& v, bool use_acrobot_plant) {
-  if (use_acrobot_plant) {
-    EvalAcrobotPlant(q, v);
-  } else {
-    EvalRigidBodyTreeFun(tree, cache);
+void EvalAcrobotPlant(const Eigen::Ref<const Eigen::Vector2d>& q,
+                      const Eigen::Ref<const Eigen::Vector2d>& v) {
+  for (auto scalar_type : {ScalarType::kDouble, ScalarType::kAutoDiffXd,
+                           ScalarType::kAutoDiffUpTo73d}) {
+    std::cout << "scalar type: " << to_string(scalar_type) << "\n";
+    switch (scalar_type) {
+      case ScalarType::kDouble: {
+        EvalAcrobotPlantGeneric<double>(q, v);
+        break;
+      }
+      case ScalarType::kAutoDiffXd: {
+        AutoDiffVecXd qd, vd;
+        GetAutoDiffXdQandV(q, v, &qd, &vd);
+        EvalAcrobotPlantGeneric<AutoDiffXd>(qd, vd);
+        break;
+      }
+      case ScalarType::kAutoDiffUpTo73d: {
+        VectorX<AutoDiffUpTo73d> qd, vd;
+        GetAutoDiffUpTo73dQandV(q, v, &qd, &vd);
+        EvalAcrobotPlantGeneric<AutoDiffUpTo73d>(qd, vd);
+        break;
+      }
+    }
+  }
+}
+
+void EvalRigidBodyTreeFun(const RigidBodyTreed& tree,
+                          const Eigen::Ref<const Eigen::VectorXd>& q,
+                          const Eigen::Ref<const Eigen::VectorXd>& v) {
+  for (auto scalar_type : {ScalarType::kDouble, ScalarType::kAutoDiffXd,
+                           ScalarType::kAutoDiffUpTo73d}) {
+    std::cout << "scalar type: " << to_string(scalar_type) << "\n";
+    switch (scalar_type) {
+      case ScalarType::kDouble: {
+        EvalRigidBodyTreeFunGeneric(tree, q, v);
+        break;
+      }
+      case ScalarType::kAutoDiffXd: {
+        AutoDiffVecXd qd, vd;
+        GetAutoDiffXdQandV(q, v, &qd, &vd);
+        EvalRigidBodyTreeFunGeneric(tree, qd, vd);
+        break;
+      }
+      case ScalarType::kAutoDiffUpTo73d: {
+        VectorX<AutoDiffUpTo73d> qd, vd;
+        GetAutoDiffUpTo73dQandV(q, v, &qd, &vd);
+        EvalRigidBodyTreeFunGeneric(tree, qd, vd);
+        break;
+      }
+    }
   }
 }
 
 int DoMain(int argc, char* argv[]) {
-  gflags::ParseCommandLineFlags(&argc, &argv, true);
   auto tree = std::make_unique<RigidBodyTree<double>>();
   parsers::urdf::AddModelInstanceFromUrdfFileToWorld(
       FindResourceOrThrow("drake/examples/acrobot/Acrobot.urdf"),
@@ -70,44 +175,26 @@ int DoMain(int argc, char* argv[]) {
   v << 3, 4;
   Eigen::VectorXd x(4);
   x << q, v;
-  switch (FLAGS_scalar_type) {
-    case 0: {
-      auto cache = tree->doKinematics(q, v, true);
-      EvalFun(*tree, cache, q, v, FLAGS_use_acrobot_plant);
-      break;
+  for (auto robot_type :
+       {RobotType::kAcrobotPlant, RobotType::kRigidBodyTree}) {
+    std::cout << "robot type: " << to_string(robot_type) << "\n";
+    switch (robot_type) {
+      case RobotType::kAcrobotPlant:
+        EvalAcrobotPlant(q, v);
+        break;
+      case RobotType::kRigidBodyTree:
+        EvalRigidBodyTreeFun(*tree, q, v);
+        break;
+      case RobotType::kMultibodyPlant:
+        break;
     }
-    case 1: {
-      const AutoDiffVecXd xd = math::initializeAutoDiff(x);
-      const AutoDiffVecXd qd = xd.head<2>();
-      const AutoDiffVecXd vd = xd.tail<2>();
-
-      auto cache = tree->doKinematics(qd, vd, true);
-      EvalFun(*tree, cache, q, v, FLAGS_use_acrobot_plant);
-      break;
-    }
-    case 2: {
-      VectorX<AutoDiffUpTo73d> xd(4);
-      for (int i = 0; i < 4; ++i) {
-        xd(i).value() = x(i);
-        xd(i).derivatives().resize(4, 1);
-        xd(i).derivatives() = Eigen::Vector4d::Zero();
-        xd(i).derivatives()(i) = 1;
-      }
-      const VectorX<AutoDiffUpTo73d> qd = xd.head<2>();
-      const VectorX<AutoDiffUpTo73d> vd = xd.tail<2>();
-
-      auto cache = tree->doKinematics(qd, vd, true);
-      EvalFun(*tree, cache, q, v, FLAGS_use_acrobot_plant);
-      break;
-    }
-    default:
-      throw std::logic_error("unknow scalar_type");
+    std::cout << "\n";
   }
   return 0;
 }
-}
-}
-}
+}  // namespace acrobot
+}  // namespace examples
+}  // namespace drake
 
 int main(int argc, char* argv[]) {
   return drake::examples::acrobot::DoMain(argc, argv);

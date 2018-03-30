@@ -49,4 +49,5 @@ template SomeType<::drake::symbolic::Expression>;
   DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_NONSYMBOLIC_SCALARS( \
       SomeType) \
 template SomeType<double>; \
-template SomeType<::drake::AutoDiffXd>;
+template SomeType<::drake::AutoDiffXd>;\
+template SomeType<::drake::AutoDiffUpTo73d>;
