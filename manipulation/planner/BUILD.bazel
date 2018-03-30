@@ -62,10 +62,29 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "body_contact_point",
+    srcs = ["body_contact_point.cc"],
+    hdrs = ["body_contact_point.h"],
+    deps = [
+        "//common:essential",
+        "@eigen",
+    ],
+)
+
+drake_cc_library(
+    name = "friction_cone",
+    srcs = ["friction_cone.cc"],
+    hdrs = ["friction_cone.h"],
+    deps = [
+        "//solvers:mathematical_program",
+    ],
+)
+drake_cc_library(
     name = "object_contact_planning",
     srcs = ["object_contact_planning.cc"],
     hdrs = ["object_contact_planning.h"],
     deps = [
+        ":body_contact_point",
         "//solvers:mathematical_program",
         "//solvers:mixed_integer_optimization_util",
         "//solvers:rotation_constraint",
@@ -122,11 +141,21 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
+    name = "friction_cone_test",
+    srcs = ["test/friction_cone_test.cc"],
+    deps = [
+        ":friction_cone",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
     name = "object_contact_planning_test",
     srcs = ["test/object_contact_planning_test.cc"],
     tags = gurobi_test_tags(),
     deps = [
-        "object_contact_planning",
+        ":friction_cone",
+        ":object_contact_planning",
         "//manipulation/dev:remote_tree_viewer_wrapper",
         "//math:geometric_transform",
         "//common/test_utilities:eigen_matrix_compare",

@@ -15,18 +15,24 @@ namespace manipulation {
 namespace planner {
 ObjectContactPlanning::ObjectContactPlanning(
     int nT, double mass, const Eigen::Ref<const Eigen::Vector3d>& p_BC,
-    const Eigen::Ref<const Eigen::Matrix3Xd>& p_BV)
+    const Eigen::Ref<const Eigen::Matrix3Xd>& p_BV, int num_pushers,
+    const Eigen::Ref<const Eigen::Matrix3Xd>& p_BQ)
     : prog_{std::make_unique<MathematicalProgram>()},
       nT_{nT},
       mass_{mass},
       p_BC_{p_BC},
       p_BV_{p_BV},
+      num_pushers_{num_pushers},
+      p_BQ_{p_BQ},
       p_WB_{static_cast<size_t>(nT_)},
       R_WB_{static_cast<size_t>(nT_)},
       b_R_WB_{static_cast<size_t>(nT_)},
       contact_vertex_indices_{static_cast<size_t>(nT_)},
       f_BV_{static_cast<size_t>(nT_)},
-      vertex_contact_flag_{static_cast<size_t>(nT_)} {
+      vertex_contact_flag_{static_cast<size_t>(nT_)},
+      contact_Q_indices_{static_cast<size_t>(nT_)},
+      b_Q_contact_{static_cast<size_t>(nT_)},
+      f_BQ_{static_cast<size_t>(nT_)} {
   for (int i = 0; i < nT_; ++i) {
     p_WB_[i] =
         prog_->NewContinuousVariables<3>("p_WB[" + std::to_string(i) + "]");
@@ -64,6 +70,34 @@ void ObjectContactPlanning::SetContactVertexIndices(
     prog_->AddLinearConstraint(f_BV_[knot].row(i) >=
                                -big_M * vertex_contact_flag_[knot]);
   }
+}
+
+void ObjectContactPlanning::SetPusherContactPointIndices(
+    int knot, const std::vector<int>& indices, double big_M) {
+  DRAKE_DEMAND(big_M >= 0);
+  contact_Q_indices_ = indices;
+  const int num_Q = static_cast<int>(indices.size());
+  // Add contact force at Q
+  f_BQ_[knot] = prog_->NewContinuousVariables<3, Eigen::Dynamic>(
+      3, num_Q, "f_BQ[" + std::to_string(knot) + "]");
+  b_Q_contact_[knot] = prog_->NewBinaryVariables(
+      num_Q, "b_Q_contact_[" + std::to_string(knot) + "]");
+
+  for (int i = 0; i < num_Q; ++i) {
+    const auto& Q = Q_[indices[i]];
+    // Add big_M constraint to activate/deactivate the contact force.
+    prog_->AddLinearConstraint(Q.n_B().dot(f_BQ_[knot].col(i)) <=
+                               big_M * b_Q_contact_[knot](i));
+    // Adds friction cone constraint
+    const auto w_edges = AddLinearizedFrictionConeConstraint(
+        Q.e_B(), f_BQ_[knot].col(i), prog_.get());
+
+    //
+  }
+
+  // Adds the constraint that at most num_pusher_ points can be active.
+  prog_->AddLinearConstraint(Eigen::RowVectorXd::Ones(num_Q), 0, num_pushers_,
+                             b_Q_contact_[knot]);
 }
 
 std::array<VectorXDecisionVariable, 3>
@@ -121,7 +155,7 @@ ObjectContactPlanning::CalcContactForceInWorldFrame(
         Eigen::VectorXd::Zero(f_B.rows()));
   }
 
-  //for (int i = 0; i < 3; ++i) {
+  // for (int i = 0; i < 3; ++i) {
   //  for (int j = 0; j < 3; ++j) {
   //      // Now add the constraint that lambda_R_times_f[i, j].colwise.sum() ==
   //      // lambda_f[j]
@@ -151,27 +185,16 @@ void ObjectContactPlanning::AddStaticEquilibriumConstraint() {
           p_BV_.col(contact_vertex_indices_[knot][i]).cross(f_BV_[knot].col(i));
     }
 
+    for (int i = 0; i < static_cast<int>(contact_Q_indices_[knot].size());
+         ++i) {
+      total_force += f_BQ_[knot].col(i);
+      total_torque +=
+          Q_[contact_Q_indices_[knot][i]].p_BQ().cross(f_BQ_[knot].col(i));
+    }
+
     prog_->AddLinearConstraint(total_force == Eigen::Vector3d::Zero());
     prog_->AddLinearConstraint(total_torque == Eigen::Vector3d::Zero());
   }
-}
-
-void AddFrictionConeConstraint(double mu,
-                               const Eigen::Ref<const Eigen::Vector3d>& n_F,
-                               const Eigen::Ref<const Vector3<Expression>>& f_F,
-                               MathematicalProgram* prog) {
-  const Eigen::Vector3d n_F_normalized = n_F.normalized();
-  // Find two vectors orthogonal to n_F as v1 and v2.
-  Eigen::Vector3d v1 = n_F_normalized.cross(Eigen::Vector3d::UnitX());
-  if (v1.norm() < 1E-2) {
-    v1 = n_F_normalized.cross(Eigen::Vector3d::UnitY());
-  }
-  v1.normalized();
-  const Eigen::Vector3d v2 = n_F_normalized.cross(v1);
-  Vector3<Expression> lorentz_cone_expression;
-  lorentz_cone_expression << mu * n_F_normalized.dot(f_F), v1.dot(f_F),
-      v2.dot(f_F);
-  prog->AddLorentzConeConstraint(lorentz_cone_expression);
 }
 
 }  // namespace planner

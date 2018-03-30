@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "drake/manipulation/planner/body_contact_point.h"
 #include "drake/solvers/mathematical_program.h"
 
 namespace drake {
@@ -20,14 +21,17 @@ class ObjectContactPlanning {
    * B.
    * @param p_BV The position of the vertices of the object, in the object body
    * frame B.
+   * @param Q The candidate pusher contact location Q
    */
   ObjectContactPlanning(int nT, double mass,
                         const Eigen::Ref<const Eigen::Vector3d>& p_BC,
-                        const Eigen::Ref<const Eigen::Matrix3Xd>& p_BV);
+                        const Eigen::Ref<const Eigen::Matrix3Xd>& p_BV,
+                        int num_pushers,
+                        const std::vector<BodyContactPoint>& Q);
 
   ~ObjectContactPlanning() = default;
 
-  /** Set the indices of all possible contact vertices at a knot.
+  /** Sets the indices of all possible contact vertices at a knot.
    * For each vertex in the body indexed by `indices`, we will add binary
    * variable b to indicate whether the vertex is in contact with the
    * environment, and the contact force vector f at the vertex, expressed in the
@@ -35,12 +39,23 @@ class ObjectContactPlanning {
    * -M * b <= f_x <= M * b
    * -M * b <= f_y <= M * b
    * -M * b <= f_z <= M * b
-   *  where M is a big number, so that the binary variable b will determine
-   *  whether the contact force is zero 0 not.
+   * where M is a big number, so that the binary variable b will determine
+   * whether the contact force is zero 0 not.
+   * @note The user should call this function for just once, at a knot point.
    */
   void SetContactVertexIndices(int knot, const std::vector<int>& indices,
                                double big_M);
 
+  /** Sets the indices of all possible pusher contact points at a knot.
+   * For each point Q[indices[i]], we will add a binary variable b to indicate
+   * whether the point is in contact with a pusher, and also add a contact
+   * force vector f at the point. We will further add the constraint
+   * fᵀn ≤ M*b to activate/deactivate the contact force, where `n` is the
+   * normal vector of the friction cone.
+   * @note The user should call this function for just once, at a knot point.
+   */
+  void SetPusherContactPointIndices(int knot, const std::vector<int>& indices,
+                                    double big_M);
   /**
    * Add the variable f_W, for the contact force f expressed in the world frame
    * W.
@@ -107,6 +122,11 @@ class ObjectContactPlanning {
   // p_BV_ contains the position of all vertices of the object, expressed in the
   // body frame.
   const Eigen::Matrix3Xd p_BV_;
+  int num_pushers_;
+  // Q_ contains all candidate pusher contact points on the
+  // surface of the object, expressed in the body frame.
+  const std::vector<BodyContactPoint> Q_;
+
   // p_WB_[i] is the position of the object body frame B, expressed in the world
   // frame W.
   std::vector<solvers::VectorDecisionVariable<3>> p_WB_;
@@ -134,17 +154,17 @@ class ObjectContactPlanning {
   // at knot i; 0 otherwise.
   std::vector<solvers::MatrixDecisionVariable<1, Eigen::Dynamic>>
       vertex_contact_flag_;
-};
 
-/**
- * Adds friction cone constraint to contact force f_F, expressed in a frame F.
- * The friction cone has its unit length normal direction as n_F, expressed in
- * the same frame F, with a coefficient of friction being mu.
- */
-void AddFrictionConeConstraint(
-    double mu, const Eigen::Ref<const Eigen::Vector3d>& n_F,
-    const Eigen::Ref<const Vector3<symbolic::Expression>>& f_F,
-    solvers::MathematicalProgram* prog);
+  // contact_Q_indices_[knot] contains the indices of all possible active pusher
+  // contact points in Q, at a given knot.
+  std::vector<std::vector<int>> contact_Q_indices_;
+  // b_Q_contact_[knot](i) is true, if the point
+  // Q_[contact_Q_indices_[knot](i)] is in contact at a knot; 0 otherwise.
+  std::vector<solvers::VectorXDecisionVariable> b_Q_contact_;
+  // f_BQ_[knot].col(i) is the contact force at the point
+  // Q_[contact_Q_indices_[knot](i)] at a knot, expressed in the body frame B.
+  std::vector<solvers::MatrixDecisionVariable<3, Eigen::Dynamic>> f_BQ_;
+};
 }  // namespace planner
 }  // namespace manipulation
 }  // namespace drake

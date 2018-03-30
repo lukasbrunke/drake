@@ -4,6 +4,7 @@
 
 #include "drake/common/test_utilities/eigen_matrix_compare.h"
 #include "drake/manipulation/dev/remote_tree_viewer_wrapper.h"
+#include "drake/manipulation/planner/friction_cone.h"
 #include "drake/math/rotation_matrix.h"
 #include "drake/solvers/gurobi_solver.h"
 
@@ -79,8 +80,10 @@ GTEST_TEST(ObjectContactPlanningTest, TestStaticSinglePosture) {
   // Find a single posture, that the block is on the table, with bottom vertices
   // in contact with the table.
   Block block;
+  const int num_pusher = 0;
+  const Eigen::Matrix<double, 3, 0> p_BQ;
   ObjectContactPlanning problem(1, block.mass(), block.center_of_mass(),
-                                block.p_BV());
+                                block.p_BV(), num_pusher, p_BQ);
 
   // Constrain that all vertices of the block is above the table.
   for (int i = 0; i < 8; ++i) {
@@ -116,13 +119,17 @@ GTEST_TEST(ObjectContactPlanningTest, TestStaticSinglePosture) {
   phi_f[2] =
       Eigen::Matrix<double, 3, 1>::LinSpaced(0, 1) * block.mass() * kGravity;
   const double mu_table = 1;
+  const auto table_friction_edges = GenerateLinearizedFrictionConeEdges<8>(
+      Eigen::Vector3d::UnitZ(), mu_table);
   for (int i = 0; i < num_bottom_vertices; ++i) {
     problem.CalcContactForceInWorldFrame(problem.f_BV()[0].col(i), f_WV.col(i),
                                          0, false, phi_f);
     // Add friction cone constraint on f_WV
-    AddFrictionConeConstraint(mu_table, Vector3d::UnitZ(),
-                              f_WV.col(i).cast<Expression>(),
-                              problem.get_mutable_prog());
+    // AddFrictionConeConstraint(mu_table, Vector3d::UnitZ(),
+    //                          f_WV.col(i).cast<Expression>(),
+    //                          problem.get_mutable_prog());
+    AddLinearizedFrictionConeConstraint(table_friction_edges, f_WV.col(i),
+                                        problem.get_mutable_prog());
   }
   // Compute the contact force at the vertices in the world frame.
   std::array<Eigen::VectorXd, 3> phi_f_B;
@@ -175,13 +182,14 @@ GTEST_TEST(ObjectContactPlanningTest, TestStaticSinglePosture) {
     VisualizeForce(&viewer, p_WV_sol.col(i), f_WV_sol.col(i),
                    block.mass() * kGravity * 5, "f_WV" + std::to_string(i));
     VisualizeForce(&viewer, p_WV_sol.col(i), R_WB_sol * f_BV_sol.col(i),
-                   block.mass() * kGravity * 5, "R_WB * f_BV" + std::to_string(i));
+                   block.mass() * kGravity * 5,
+                   "R_WB * f_BV" + std::to_string(i));
   }
 
   // Make sure that static equilibrium is satisfied.
   const Eigen::Vector3d mg(0, 0, -block.mass() * kGravity);
   EXPECT_TRUE(CompareMatrices((R_WB_sol * f_BV_sol).rowwise().sum(), -mg, tol));
-  const auto p_WC_sol = p_WB_sol + R_WB_sol * block.center_of_mass();
+  const Eigen::Vector3d p_WC_sol = p_WB_sol + R_WB_sol * block.center_of_mass();
   Eigen::Vector3d total_torque = p_WC_sol.cross(mg);
   for (int i = 0; i < 4; ++i) {
     total_torque += p_WV_sol.col(i).cross(R_WB_sol * f_BV_sol.col(i));
@@ -198,7 +206,7 @@ GTEST_TEST(ObjectContactPlanningTest, TestStaticSinglePosture) {
 
   // Now make sure that f_WV ≈ R_WB * f_BV
   // Actually this constraint is violated a lot, in the -x and -y directions.
-  // In the z direction, the difference is very small, to about 1E-10. But in 
+  // In the z direction, the difference is very small, to about 1E-10. But in
   // the x and y direction, the difference can be 0.4.
   EXPECT_TRUE(CompareMatrices(f_WV_sol, R_WB_sol * f_BV_sol, 1e-3));
 }
