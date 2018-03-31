@@ -150,12 +150,25 @@ drake_cc_googletest(
     ],
 )
 
+drake_cc_library(
+    name = "block_test_util",
+    srcs = ["test/block_test_util.cc"],
+    hdrs = ["test/block_test_util.h"],
+    deps = [
+        ":object_contact_planning",
+        ":friction_cone",
+        "//manipulation/dev:remote_tree_viewer_wrapper",
+    ],
+    testonly = 1,
+)
+
 drake_cc_googletest(
     name = "object_contact_planning_test",
     srcs = ["test/object_contact_planning_test.cc"],
     tags = gurobi_test_tags(),
     deps = [
         ":object_contact_planning",
+        ":block_test_util",
         "//manipulation/dev:remote_tree_viewer_wrapper",
         "//math:geometric_transform",
         "//common/test_utilities:eigen_matrix_compare",
