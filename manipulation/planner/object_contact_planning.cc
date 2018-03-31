@@ -1,5 +1,6 @@
 #include "drake/manipulation/planner/object_contact_planning.h"
 
+#include "drake/manipulation/planner/friction_cone.h"
 #include "drake/solvers/mixed_integer_optimization_util.h"
 #include "drake/solvers/rotation_constraint.h"
 
@@ -16,14 +17,14 @@ namespace planner {
 ObjectContactPlanning::ObjectContactPlanning(
     int nT, double mass, const Eigen::Ref<const Eigen::Vector3d>& p_BC,
     const Eigen::Ref<const Eigen::Matrix3Xd>& p_BV, int num_pushers,
-    const Eigen::Ref<const Eigen::Matrix3Xd>& p_BQ)
+    const std::vector<BodyContactPoint>& Q)
     : prog_{std::make_unique<MathematicalProgram>()},
       nT_{nT},
       mass_{mass},
       p_BC_{p_BC},
       p_BV_{p_BV},
       num_pushers_{num_pushers},
-      p_BQ_{p_BQ},
+      Q_{Q},
       p_WB_{static_cast<size_t>(nT_)},
       R_WB_{static_cast<size_t>(nT_)},
       b_R_WB_{static_cast<size_t>(nT_)},
@@ -75,7 +76,7 @@ void ObjectContactPlanning::SetContactVertexIndices(
 void ObjectContactPlanning::SetPusherContactPointIndices(
     int knot, const std::vector<int>& indices, double big_M) {
   DRAKE_DEMAND(big_M >= 0);
-  contact_Q_indices_ = indices;
+  contact_Q_indices_[knot] = indices;
   const int num_Q = static_cast<int>(indices.size());
   // Add contact force at Q
   f_BQ_[knot] = prog_->NewContinuousVariables<3, Eigen::Dynamic>(
@@ -85,14 +86,13 @@ void ObjectContactPlanning::SetPusherContactPointIndices(
 
   for (int i = 0; i < num_Q; ++i) {
     const auto& Q = Q_[indices[i]];
-    // Add big_M constraint to activate/deactivate the contact force.
-    prog_->AddLinearConstraint(Q.n_B().dot(f_BQ_[knot].col(i)) <=
-                               big_M * b_Q_contact_[knot](i));
     // Adds friction cone constraint
     const auto w_edges = AddLinearizedFrictionConeConstraint(
         Q.e_B(), f_BQ_[knot].col(i), prog_.get());
 
-    //
+    // Now add the big M constraint ∑ᵢ wᵢ ≤ M * b
+    prog_->AddLinearConstraint(w_edges.cast<Expression>().sum() <=
+                               big_M * b_Q_contact_[knot](i));
   }
 
   // Adds the constraint that at most num_pusher_ points can be active.

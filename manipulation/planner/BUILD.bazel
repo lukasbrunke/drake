@@ -85,6 +85,7 @@ drake_cc_library(
     hdrs = ["object_contact_planning.h"],
     deps = [
         ":body_contact_point",
+        ":friction_cone",
         "//solvers:mathematical_program",
         "//solvers:mixed_integer_optimization_util",
         "//solvers:rotation_constraint",
@@ -154,7 +155,6 @@ drake_cc_googletest(
     srcs = ["test/object_contact_planning_test.cc"],
     tags = gurobi_test_tags(),
     deps = [
-        ":friction_cone",
         ":object_contact_planning",
         "//manipulation/dev:remote_tree_viewer_wrapper",
         "//math:geometric_transform",

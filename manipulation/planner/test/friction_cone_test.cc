@@ -15,13 +15,15 @@ void CheckFrictionConeEdges(const Eigen::Ref<const Eigen::Vector3d>& n,
   const Eigen::Vector3d n_normalized = n.normalized();
   const double tol{1E-14};
   EXPECT_TRUE(
-      CompareMatrices(edges.rowwise().sum(), NumEdges * n_normalized, tol));
+      CompareMatrices(edges.rowwise().sum(),
+                      (NumEdges / std::sqrt(1 + mu * mu)) * n_normalized, tol));
 
   const Eigen::Matrix<double, 3, NumEdges> tangentials =
       edges - n_normalized * Eigen::Matrix<double, 1, NumEdges>::Ones();
-  EXPECT_TRUE(CompareMatrices(tangentials.colwise().norm(),
-                              Eigen::Matrix<double, 1, NumEdges>::Constant(mu),
-                              tol));
+  EXPECT_TRUE(CompareMatrices(
+      tangentials.colwise().norm(),
+      Eigen::Matrix<double, 1, NumEdges>::Constant(mu / std::sqrt(1 + mu * mu)),
+      tol));
 }
 
 GTEST_TEST(GenerateLinearizedFrictionConeEdgesTest, Test) {

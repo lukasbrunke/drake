@@ -7,8 +7,8 @@ namespace manipulation {
 namespace planner {
 /**
  * A helper function to generate the edges of a linearized friction cone.
- * The edges would be evenly spaced in the cone, and the magnitude of the normal
- * component of each edge is 1.
+ * The edges would be evenly spaced in the cone, and the magnitude of each edge
+ * is 1.
  */
 template <int NumEdges>
 Eigen::Matrix<double, 3, NumEdges> GenerateLinearizedFrictionConeEdges(
@@ -23,6 +23,8 @@ Eigen::Matrix<double, 3, NumEdges> GenerateLinearizedFrictionConeEdges(
   edges.row(0) = (theta.array().cos() * mu).matrix();
   edges.row(1) = (theta.array().sin() * mu).matrix();
   edges.row(2) = Eigen::Matrix<double, 1, NumEdges>::Ones();
+
+  edges /= std::sqrt(1 + mu * mu);
 
   // Now we need to rotate edges, such that the unit-z vector will be aligned
   // with the normal vector `n`.

@@ -49,9 +49,14 @@ class ObjectContactPlanning {
   /** Sets the indices of all possible pusher contact points at a knot.
    * For each point Q[indices[i]], we will add a binary variable b to indicate
    * whether the point is in contact with a pusher, and also add a contact
-   * force vector f at the point. We will further add the constraint
-   * fᵀn ≤ M*b to activate/deactivate the contact force, where `n` is the
-   * normal vector of the friction cone.
+   * force vector f at the point. We will further add the linearized friction
+   * cone constraint
+   * f = ∑ᵢ  wᵢ * eᵢ
+   * wᵢ ≥ 0
+   * where eᵢ is the i'th edge of the friction cone, with unit length.
+   * together with a big-M constraint to activate/deactivate the contact force
+   * using a binary variable b
+   * ∑ᵢ wᵢ ≤ M * b
    * @note The user should call this function for just once, at a knot point.
    */
   void SetPusherContactPointIndices(int knot, const std::vector<int>& indices,
@@ -89,7 +94,7 @@ class ObjectContactPlanning {
   void AddStaticEquilibriumConstraint();
 
   /** Getter for the optimization program. */
-  const solvers::MathematicalProgram* prog() const { return prog_.get(); }
+  const solvers::MathematicalProgram& prog() const { return *prog_; }
 
   /** Getter for the mutable optimization program. */
   solvers::MathematicalProgram* get_mutable_prog() { return prog_.get(); }
@@ -112,6 +117,10 @@ class ObjectContactPlanning {
   const std::vector<solvers::MatrixDecisionVariable<3, Eigen::Dynamic>>& f_BV()
       const {
     return f_BV_;
+  }
+
+  const std::vector<solvers::MatrixDecisionVariable<3, Eigen::Dynamic>>& f_BQ() const {
+    return f_BQ_;
   }
 
  private:
