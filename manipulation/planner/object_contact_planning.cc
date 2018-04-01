@@ -32,6 +32,7 @@ ObjectContactPlanning::ObjectContactPlanning(
       f_BV_{static_cast<size_t>(nT_)},
       vertex_contact_flag_{static_cast<size_t>(nT_)},
       contact_Q_indices_{static_cast<size_t>(nT_)},
+      Q_to_index_map_{static_cast<size_t>(nT_)},
       b_Q_contact_{static_cast<size_t>(nT_)},
       f_BQ_{static_cast<size_t>(nT_)} {
   for (int i = 0; i < nT_; ++i) {
@@ -77,6 +78,10 @@ void ObjectContactPlanning::SetPusherContactPointIndices(
     int knot, const std::vector<int>& indices, double big_M) {
   DRAKE_DEMAND(big_M >= 0);
   contact_Q_indices_[knot] = indices;
+  Q_to_index_map_[knot].reserve(indices.size());
+  for (int i = 0; i < static_cast<int>(indices.size()); ++i) {
+    Q_to_index_map_[knot].emplace(indices[i], i);
+  }
   const int num_Q = static_cast<int>(indices.size());
   // Add contact force at Q
   f_BQ_[knot] = prog_->NewContinuousVariables<3, Eigen::Dynamic>(
@@ -197,6 +202,49 @@ void ObjectContactPlanning::AddStaticEquilibriumConstraint() {
   }
 }
 
+void ObjectContactPlanning::AddPusherStaticContactConstraint() {
+  for (int knot = 0; knot < nT_ - 1; ++knot) {
+    // We will add the constraint
+    // sum_{point_index} | b[knot-1](point_index) -b[knot](point_index) | ≤ 1
+    // The left-hand side is represented by sum_contact_difference
+    symbolic::Expression sum_contact_difference = 0;
+    for (int i = 0; i < static_cast<int>(Q_.size()); ++i) {
+      // For each point in Q_, find its index in contact_Q_indices_[knot] and
+      // contact_Q_indices_[knot + 1]
+      const auto it1 = Q_to_index_map_[knot].find(i);
+      const auto it2 = Q_to_index_map_[knot + 1].find(i);
+
+      const bool is_candidate_contact0 = it1 != Q_to_index_map_[knot].end();
+      const bool is_candidate_contact1 = it2 != Q_to_index_map_[knot + 1].end();
+      if (!is_candidate_contact0 && !is_candidate_contact1) {
+        // Q_[i] is not a candidate pusher contact point at either knot or knot
+        // + 1
+        continue;
+      } else if (!is_candidate_contact0 && is_candidate_contact1) {
+        // Q_[i] is a candidate pusher contact point at knot + 1, but not knot.
+        sum_contact_difference += b_Q_contact_[knot + 1](it2->second);
+      } else if (is_candidate_contact0 && !is_candidate_contact1) {
+        // Q_[i] is a candidate pusher contact point at knot, but not knot + 1.
+        sum_contact_difference += b_Q_contact_[knot](it1->second);
+      } else {
+        // Q_[i] is a candidate pusher contact point at both knot and knot + 1.
+        // Introduce a slack variable b_Q_difference to represent the absolute
+        // difference | b_Q_contact[knot](pusher) - b_Q_contact[knot +
+        // 1](pusher) |
+        auto b_Q_difference =
+            prog_->NewContinuousVariables<1>("b_Q_difference")(0);
+        prog_->AddLinearConstraint(b_Q_contact_[knot](it1->second) -
+                                       b_Q_contact_[knot + 1](it2->second) <=
+                                   b_Q_difference);
+        prog_->AddLinearConstraint(b_Q_contact_[knot + 1](it2->second) -
+                                       b_Q_contact_[knot](it1->second) <=
+                                   b_Q_difference);
+        sum_contact_difference += b_Q_difference;
+      }
+    }
+    prog_->AddLinearConstraint(sum_contact_difference <= 1);
+  }
+}
 }  // namespace planner
 }  // namespace manipulation
 }  // namespace drake

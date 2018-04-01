@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <unordered_map>
 
 #include "drake/manipulation/planner/body_contact_point.h"
 #include "drake/solvers/mathematical_program.h"
@@ -93,6 +94,18 @@ class ObjectContactPlanning {
    */
   void AddStaticEquilibriumConstraint();
 
+  /**
+   * Between two adjacent knots, the pusher cannot move from sampled contact
+   * point to the another sampled point. So in between two adjacent knots, at
+   * most one pusher can break or  make contact. All other pushers must remain
+   * static in the body frame.
+   * Mathematically, the constraint we impose is that
+   * sum_{point_index} | b[knot-1](point_index) -b[knot](point_index) | ≤ 1
+   * where b are binary variables, b[knot](point_index) = 1 means that the
+   * sampled point with point_index is in contact with a pusher at a knot.
+   */
+  void AddPusherStaticContactConstraint();
+
   /** Getter for the optimization program. */
   const solvers::MathematicalProgram& prog() const { return *prog_; }
 
@@ -119,8 +132,13 @@ class ObjectContactPlanning {
     return f_BV_;
   }
 
-  const std::vector<solvers::MatrixDecisionVariable<3, Eigen::Dynamic>>& f_BQ() const {
+  const std::vector<solvers::MatrixDecisionVariable<3, Eigen::Dynamic>>& f_BQ()
+      const {
     return f_BQ_;
+  }
+
+  const std::vector<solvers::VectorXDecisionVariable>& b_Q_contact() const {
+    return b_Q_contact_;
   }
 
  private:
@@ -167,6 +185,9 @@ class ObjectContactPlanning {
   // contact_Q_indices_[knot] contains the indices of all possible active pusher
   // contact points in Q, at a given knot.
   std::vector<std::vector<int>> contact_Q_indices_;
+  // Q_to_index_map_[knot] is the inverse mapping of contact_Q_indices_[knot],
+  // Q_to_index_map_[knot][contact_Q_indices_[knot][i]] = i.
+  std::vector<std::unordered_map<int, int>> Q_to_index_map_;
   // b_Q_contact_[knot](i) is true, if the point
   // Q_[contact_Q_indices_[knot](i)] is in contact at a knot; 0 otherwise.
   std::vector<solvers::VectorXDecisionVariable> b_Q_contact_;

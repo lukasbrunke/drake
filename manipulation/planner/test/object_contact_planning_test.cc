@@ -16,6 +16,81 @@ using Eigen::Matrix3d;
 namespace drake {
 namespace manipulation {
 namespace planner {
+GTEST_TEST(ObjectContactPlanningTest, TestPusherStaticContactConstraint) {
+  // Test AddPusherStaticContactConstraint.
+  Block block;
+  const int num_pusher = 3;
+  const int nT = 2;
+  ObjectContactPlanning problem(nT, block.mass(), block.center_of_mass(),
+                                block.p_BV(), num_pusher, block.Q());
+  std::vector<std::vector<int>> pusher_contact_point_indices(2);
+  pusher_contact_point_indices[0] = {0, 3, 1, 4, 5};
+  pusher_contact_point_indices[1] = {0, 1, 7, 10};
+  problem.SetPusherContactPointIndices(0, pusher_contact_point_indices[0], 100);
+  problem.SetPusherContactPointIndices(1, pusher_contact_point_indices[1], 100);
+
+  problem.AddPusherStaticContactConstraint();
+
+  auto CheckPusherContactAssignment = [&problem](
+      const Eigen::Ref<const Eigen::Matrix<double, 5, 1>>& b_Q_contact0,
+      const Eigen::Ref<const Eigen::Vector4d>& b_Q_contact1, bool feasible) {
+    auto prog_check = problem.prog().Clone();
+    prog_check->AddBoundingBoxConstraint(b_Q_contact0, b_Q_contact0,
+                                         problem.b_Q_contact()[0]);
+    prog_check->AddBoundingBoxConstraint(b_Q_contact1, b_Q_contact1,
+                                         problem.b_Q_contact()[1]);
+
+    solvers::GurobiSolver solver;
+    prog_check->SetSolverOption(solvers::GurobiSolver::id(), "DualReductions",
+                                0);
+    const auto solution_result = solver.Solve(*prog_check);
+    if (feasible) {
+      EXPECT_EQ(solution_result, solvers::SolutionResult::kSolutionFound);
+    } else {
+      EXPECT_EQ(solution_result,
+                solvers::SolutionResult::kInfeasibleConstraints);
+    }
+  };
+
+  // None of the contacts are active. A feasible case.
+  CheckPusherContactAssignment(Eigen::Matrix<double, 5, 1>::Zero(),
+                               Eigen::Vector4d::Zero(), true);
+  // At knot 0, 4 contacts are active. An infeasible case, as we only have 3
+  // pushers.
+  CheckPusherContactAssignment(
+      (Eigen::Matrix<double, 5, 1>() << 0, 1, 1, 1, 1).finished(),
+      Eigen::Vector4d::Zero(), false);
+  // At knot 0 and 1, point 1 is active, others are inactive. A feasible case.
+  CheckPusherContactAssignment(
+      (Eigen::Matrix<double, 5, 1>() << 0, 0, 1, 0, 0).finished(),
+      (Eigen::Vector4d() << 0, 1, 0, 0).finished(), true);
+  // At knot 0 and 1, point 0 and 1 are active, others are inactive. A feasible
+  // case.
+  CheckPusherContactAssignment(
+      (Eigen::Matrix<double, 5, 1>() << 1, 0, 1, 0, 0).finished(),
+      (Eigen::Vector4d() << 1, 1, 0, 0).finished(), true);
+  // At knot 0, point 0 and 1 are active. At knot 1, point 1 is active, a
+  // feasible case.
+  CheckPusherContactAssignment(
+      (Eigen::Matrix<double, 5, 1>() << 1, 0, 1, 0, 0).finished(),
+      (Eigen::Vector4d() << 0, 1, 0, 0).finished(), true);
+  // At knot 0, point 0 is active. At knot 1, point 0 and 7 are active, a
+  // feasible case.
+  CheckPusherContactAssignment(
+      (Eigen::Matrix<double, 5, 1>() << 1, 0, 0, 0, 0).finished(),
+      (Eigen::Vector4d() << 1, 0, 1, 0).finished(), true);
+  // At knot 0, point 1 is active. At knot 1, point 7 is active, an infeasible
+  // case.
+  CheckPusherContactAssignment(
+      (Eigen::Matrix<double, 5, 1>() << 0, 0, 1, 0, 0).finished(),
+      (Eigen::Vector4d() << 0, 0, 1, 0).finished(), false);
+  // At knot 0, point 0, 1, 4 are active. At knot 1, point 0, 1, 10 are active,
+  // an infeasible case.
+  CheckPusherContactAssignment(
+      (Eigen::Matrix<double, 5, 1>() << 1, 0, 1, 1, 0).finished(),
+      (Eigen::Vector4d() << 1, 1, 0, 1).finished(), false);
+}
+
 GTEST_TEST(ObjectContactPlanningTest, TestStaticSinglePosture) {
   // Find a single posture, that the block is on the table, with bottom vertices
   // in contact with the table.
