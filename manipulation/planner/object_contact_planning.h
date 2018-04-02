@@ -95,16 +95,31 @@ class ObjectContactPlanning {
   void AddStaticEquilibriumConstraint();
 
   /**
-   * Between two adjacent knots, the pusher cannot move from sampled contact
-   * point to the another sampled point. So in between two adjacent knots, at
-   * most one pusher can break or  make contact. All other pushers must remain
-   * static in the body frame.
+   * Between two adjacent knots at the beginning and the end of an interval,
+   * the pushers can make or break contact, but there cannot exist a point
+   * breaking contact, and another point making contact.
+   * Mathematically we introduce two slack continuous variables b_making_contact
+   * and b_breaking_contact, which represents if any point makes (breaks)
+   * contact in the interval, and the constraints
+   * b_making_contact ≥ b_Q_contact[interval + 1](point_index) -
+   * b_Q[contact[interval](point_index) ∀point_index
+   * b_breaking_contact ≥ b_Q_contact[interval](point_index) -
+   * b_Q[contact[interval + 1](point_index) ∀point_index
+   * b_making_contact + b_breaking_contact ≤ 1
+   */
+  void AddPusherStaticContactConstraint(int interval);
+
+  /**
+   * Between two adjacent knots at the beginning and the end of an interval, at
+   * most one pusher can break or make contact. Namely at most only one pusher
+   * contact point can change from inactive to active, or vice versa.
    * Mathematically, the constraint we impose is that
-   * sum_{point_index} | b[knot-1](point_index) -b[knot](point_index) | ≤ 1
-   * where b are binary variables, b[knot](point_index) = 1 means that the
+   * ∑_{point_index} | b[interval](point_index) -b[interval + 1](point_index) |
+   * ≤ 1
+   * where b are binary variables, b[interval](point_index) = 1 means that the
    * sampled point with point_index is in contact with a pusher at a knot.
    */
-  void AddPusherStaticContactConstraint();
+  void AddAtMostOnePusherChangeOfContactConstraint(int interval);
 
   /** Getter for the optimization program. */
   const solvers::MathematicalProgram& prog() const { return *prog_; }
