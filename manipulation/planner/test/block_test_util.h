@@ -40,6 +40,10 @@ class Block {
 
   std::vector<int> negative_y_vertex_indices() const { return {2, 3, 6, 7}; }
 
+  std::vector<int> bottom_and_positive_x_vertex_indices() const {
+    return {0, 1, 2, 3, 5, 7};
+  }
+
   const std::vector<BodyContactPoint>& Q() const { return Q_; }
 
   double mu() const { return 0.5; }
@@ -64,7 +68,7 @@ void AllVerticesAboveTable(const Block& block, ObjectContactPlanning* problem);
 
 solvers::MatrixDecisionVariable<3, Eigen::Dynamic> SetTableContactVertices(
     const Block& block, const std::vector<int>& vertex_indices, double mu_table,
-    int knot, ObjectContactPlanning* problem);
+    int knot, double distance_big_M, ObjectContactPlanning* problem);
 
 }  // namespace planner
 }  // namespace manipulation

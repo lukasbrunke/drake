@@ -5,6 +5,7 @@
 
 #include "drake/manipulation/planner/body_contact_point.h"
 #include "drake/solvers/mathematical_program.h"
+#include "drake/common/drake_optional.h"
 
 namespace drake {
 namespace manipulation {
@@ -22,6 +23,7 @@ class ObjectContactPlanning {
    * B.
    * @param p_BV The position of the vertices of the object, in the object body
    * frame B.
+   * @param num_pushers The total number of pushers.
    * @param Q The candidate pusher contact location Q
    */
   ObjectContactPlanning(int nT, double mass,
@@ -95,6 +97,34 @@ class ObjectContactPlanning {
   void AddStaticEquilibriumConstraint();
 
   /**
+   * A vertex in contact with the world cannot slide within an interval.
+   * Namely if the vertex contact is active at both the beginning and the end
+   * of the interval, then its position in the world frame does not change.
+   * Mathematically, the constraint is
+   * p_WV_x[interval + 1](vertex_index) - p_WV_x[interval](vertex_index) <= M *
+   * (1 - z)
+   * p_WV_y[interval + 1](vertex_index) - p_WV_y[interval](vertex_index) <= M *
+   * (1 - z)
+   * where `z` is a slack variable, that represents if the vertex is in contact
+   * at both knot and knot + 1. The slack variable `z` satisfies the constraint
+   * 0 ≤ z ≤ 1
+   * z ≥ vertex_contact_flag()[knot + 1](vertex_index)
+   * z ≥ vertex_contact_flag()[knot](vertex_index)
+   * @param interval The interval in which the non-sliding constraint is
+   * enforced.
+   * @param vertex_index p_BV()[vertex_index] will be constrained not to slide.
+   * @param x_W The unit length tangential x vector, expressed in the world
+   * frame W.
+   * @param y_W The unit length tangential y vector, expressed in the world
+   * frame W.
+   * @param distance_big_M The big M constant used to enforce the non-sliding
+   * constraint.
+   */
+  optional<symbolic::Variable> AddVertexNonSlidingConstraint(
+      int interval, int vertex_index,
+      const Eigen::Ref<const Eigen::Vector3d>& x_W,
+      const Eigen::Ref<const Eigen::Vector3d>& y_W, double distance_big_M);
+  /**
    * Between two adjacent knots at the beginning and the end of an interval,
    * the pushers can make or break contact, but there cannot exist a point
    * breaking contact, and another point making contact.
@@ -121,11 +151,40 @@ class ObjectContactPlanning {
    */
   void AddAtMostOnePusherChangeOfContactConstraint(int interval);
 
+  /**
+   * Bounds the maximal orientation difference of the block between the
+   * beginning and the end of an interval.
+   * For two rotation matrix R₁, R₂, the angle difference between them is no
+   * larger than θ, if and only if
+   *  |R₁ - R₂|² ≤ 4(1 - cosθ)    (1)
+   * where the left-hand side is the sum of element wise square, namely
+   * |R₁ - R₂|² ≐ ∑ᵢⱼ(R₁(i, j) - R₂(i, j))²
+   * The derivation is that
+   * | R₁ - R₂ |² = trace[(R₁ - R₂)ᵀ(R₁ - R₂)]
+   *              = trace[2I - 2R₁ᵀR₂]
+   *              = trace[2I - 2(I + sinα K + (1 - cosα) K²)]
+   *              = -2 * (1 - cosα) trace[K²]
+   *              = 4(1 - cosα)
+   *              ≤ 4(1-cosθ)
+   * where α is the angle between R₁ and R₂, and K is the 3 x 3 skew-symmetric
+   * matrix, representing cross product with the axis of the rotation matrix
+   * R₁ᵀR₂
+   * Notice that we add a convex quadratic constraint (or a second order cone
+   * constraint) to the program.
+   */
+  solvers::Binding<solvers::LorentzConeConstraint>
+  AddOrientationDifferenceUpperBound(int interval, double max_angle_difference);
+
+  /** Return the position of vertex p_BV_.col(vertex_index) at a knot.*/
+  Vector3<symbolic::Expression> p_WV(int knot, int vertex_index) const;
+
   /** Getter for the optimization program. */
   const solvers::MathematicalProgram& prog() const { return *prog_; }
 
   /** Getter for the mutable optimization program. */
   solvers::MathematicalProgram* get_mutable_prog() { return prog_.get(); }
+
+  int nT() const { return nT_; }
 
   /** Getter for the object position variables. */
   const std::vector<solvers::VectorDecisionVariable<3>>& p_WB() const {
@@ -137,8 +196,8 @@ class ObjectContactPlanning {
     return R_WB_;
   }
 
-  const std::vector<solvers::MatrixDecisionVariable<1, Eigen::Dynamic>>&
-  vertex_contact_flag() const {
+  const std::vector<solvers::VectorXDecisionVariable>& vertex_contact_flag()
+      const {
     return vertex_contact_flag_;
   }
 
@@ -154,6 +213,14 @@ class ObjectContactPlanning {
 
   const std::vector<solvers::VectorXDecisionVariable>& b_Q_contact() const {
     return b_Q_contact_;
+  }
+
+  const std::vector<std::vector<int>>& contact_vertex_indices() const {
+    return contact_vertex_indices_;
+  }
+
+  const std::vector<std::vector<int>>& pusher_Q_indices() const {
+    return contact_Q_indices_;
   }
 
  private:
@@ -187,6 +254,10 @@ class ObjectContactPlanning {
   // contact_vertex_indices_[i] contains all the indices of the vertices in
   // p_BV_, that may or may not be active at the i'th knot.
   std::vector<std::vector<int>> contact_vertex_indices_;
+  // vertex_to_V_map_[knot] is the inverse mapping of
+  // contact_vertex_indices_[knot],
+  // vertex_to_V_map_[knot][contact_vertex_indices_[knot][i]] = i;
+  std::vector<std::unordered_map<int, int>> vertex_to_V_map_;
   // f_BV_[i] is of size 3 x contact_vertex_indices_[i].size(), it contains the
   // contact forces at the possible contact vertices V at knot i, expressed in
   // the body frame.
@@ -194,8 +265,7 @@ class ObjectContactPlanning {
   // vertex_contact_flag_[i](j) is 1, if the vertex
   // p_BV_.col(contact_vertex_indices[i](j)) is in contact with the environment
   // at knot i; 0 otherwise.
-  std::vector<solvers::MatrixDecisionVariable<1, Eigen::Dynamic>>
-      vertex_contact_flag_;
+  std::vector<solvers::VectorXDecisionVariable> vertex_contact_flag_;
 
   // contact_Q_indices_[knot] contains the indices of all possible active pusher
   // contact points in Q, at a given knot.

@@ -56,18 +56,18 @@ Block::Block() {
   };
 
   // The order is
-  // 0 + +
-  // 0 + -
-  // 0 - +
-  // 0 - -
-  // + 0 +
-  // - 0 +
-  // + 0 -
-  // - 0 -
-  // + + 0
-  // + - 0
-  // - + 0
-  // - - 0
+  // 6:  0 + +
+  // 7:  0 + -
+  // 8:  0 - +
+  // 9:  0 - -
+  // 10: + 0 +
+  // 11: - 0 +
+  // 12: + 0 -
+  // 13: - 0 -
+  // 14: + + 0
+  // 15: + - 0
+  // 16: - + 0
+  // 17: - - 0
   for (int dim0 = 0; dim0 < 3; ++dim0) {
     const int dim1 = (dim0 + 1) % 3;
     const int dim2 = (dim1 + 1) % 3;
@@ -116,27 +116,27 @@ void VisualizeForce(dev::RemoteTreeViewerWrapper* viewer,
 
 void AllVerticesAboveTable(const Block& block, ObjectContactPlanning* problem) {
   // Constrain that all vertices of the block is above the table.
-  for (int i = 0; i < 8; ++i) {
-    problem->get_mutable_prog()->AddLinearConstraint(
-        (problem->p_WB()[0] + problem->R_WB()[0] * block.p_BV().col(i))(2) >=
-        0);
+  for (int knot = 0; knot < problem->nT(); ++knot) {
+    for (int i = 0; i < 8; ++i) {
+      problem->get_mutable_prog()->AddLinearConstraint(
+          (problem->p_WB()[knot] +
+           problem->R_WB()[knot] * block.p_BV().col(i))(2) >= 0);
+    }
   }
 }
 
 solvers::MatrixDecisionVariable<3, Eigen::Dynamic> SetTableContactVertices(
     const Block& block, const std::vector<int>& vertex_indices, double mu_table,
-    int knot, ObjectContactPlanning* problem) {
+    int knot, double distance_big_M, ObjectContactPlanning* problem) {
   problem->SetContactVertexIndices(knot, vertex_indices,
                                    block.mass() * kGravity * 2);
 
   // Add the big-M constraint for the contact distance and the binary variable.
   // p_WV_z <= M * (1 - b) where b is the binary variable indicating contact.
-  const double distance_big_M{0.1};
-  for (int i = 0; i < 4; ++i) {
+  for (int i = 0; i < static_cast<int>(vertex_indices.size()); ++i) {
     const int vertex = vertex_indices[i];
     problem->get_mutable_prog()->AddLinearConstraint(
-        (problem->p_WB()[knot] +
-         problem->R_WB()[knot] * block.p_BV().col(vertex))(2) <=
+        problem->p_WV(knot, vertex)(2) <=
         distance_big_M * (1 - problem->vertex_contact_flag()[knot](i)));
   }
 

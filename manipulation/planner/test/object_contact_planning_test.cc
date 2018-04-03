@@ -134,7 +134,7 @@ GTEST_TEST(ObjectContactPlanningTest, TestStaticSinglePosture) {
 
   const double mu_table = 1;
   const auto f_WV = SetTableContactVertices(
-      block, block.positive_x_vertex_indices(), mu_table, 0, &problem);
+      block, block.positive_x_vertex_indices(), mu_table, 0, 0.1, &problem);
 
   // At least one point in contact.
   problem.get_mutable_prog()->AddLinearConstraint(
@@ -230,7 +230,7 @@ GTEST_TEST(ObjectContactPlanningTest, SinglePostureWithPushers) {
 
   const double mu_table = 1;
   const auto f_WV = SetTableContactVertices(
-      block, block.bottom_vertex_indices(), mu_table, 0, &problem);
+      block, block.bottom_vertex_indices(), mu_table, 0, 0.1, &problem);
 
   // Choose all the body contact points except those on the top or bottom.
   std::vector<int> pusher_contact_point_indices = {2, 3, 4, 5, 14, 15, 16, 17};
