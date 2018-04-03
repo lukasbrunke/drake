@@ -18,7 +18,7 @@ namespace planner {
 ObjectContactPlanning::ObjectContactPlanning(
     int nT, double mass, const Eigen::Ref<const Eigen::Vector3d>& p_BC,
     const Eigen::Ref<const Eigen::Matrix3Xd>& p_BV, int num_pushers,
-    const std::vector<BodyContactPoint>& Q)
+    const std::vector<BodyContactPoint>& Q, bool add_second_order_cone_for_R)
     : prog_{std::make_unique<MathematicalProgram>()},
       nT_{nT},
       mass_{mass},
@@ -49,9 +49,12 @@ ObjectContactPlanning::ObjectContactPlanning(
         solvers::AddRotationMatrixBilinearMcCormickMilpConstraints<2>(
             prog_.get(), R_WB_[i]);
 
-    // Adds the SOCP constraint to approximate SO(3) constraint, such as
-    // R_WB_[i].col(j).squaredNorm() <= 1
-    solvers::AddRotationMatrixOrthonormalSocpConstraint(prog_.get(), R_WB_[i]);
+    if (add_second_order_cone_for_R) {
+      // Adds the SOCP constraint to approximate SO(3) constraint, such as
+      // R_WB_[i].col(j).squaredNorm() <= 1
+      solvers::AddRotationMatrixOrthonormalSocpConstraint(prog_.get(),
+                                                          R_WB_[i]);
+    }
   }
 }
 
@@ -323,6 +326,31 @@ ObjectContactPlanning::AddOrientationDifferenceUpperBound(
       R_WB_[knot0].col(1) - R_WB_[knot1].col(1),
       R_WB_[knot0].col(2) - R_WB_[knot1].col(2);
   return prog_->AddLorentzConeConstraint(lorentz_cone_expressions);
+}
+
+void ObjectContactPlanning::
+    AddOrientationDifferenceUpperBoundLinearApproximation(
+        int interval, double max_angle_difference) {
+  DRAKE_ASSERT(max_angle_difference >= 0 && max_angle_difference <= M_PI);
+  const int knot0 = interval;
+  const int knot1 = interval + 1;
+  const auto R1_minus_R2_abs = prog_->NewContinuousVariables<3, 3>(
+      "R_WB[" + std::to_string(knot0) + "]_minus_R_WB[" +
+      std::to_string(knot1) + "]_abs");
+  prog_->AddLinearConstraint((R_WB_[knot0] - R_WB_[knot1]).array() <=
+                             R1_minus_R2_abs.array());
+  prog_->AddLinearConstraint((R_WB_[knot1] - R_WB_[knot0]).array() <=
+                             R1_minus_R2_abs.array());
+  const double two_sqrt2_sin_theta_over_2 =
+      2 * std::sqrt(2) * sin(max_angle_difference / 2);
+  VectorDecisionVariable<9> R1_minus_R2_abs_flat;
+  R1_minus_R2_abs_flat << R1_minus_R2_abs.col(0), R1_minus_R2_abs.col(1),
+      R1_minus_R2_abs.col(2);
+  prog_->AddLinearConstraint(Eigen::Matrix<double, 1, 9>::Ones(), 0,
+                             3 * two_sqrt2_sin_theta_over_2,
+                             R1_minus_R2_abs_flat);
+  prog_->AddBoundingBoxConstraint(0, two_sqrt2_sin_theta_over_2,
+                                  R1_minus_R2_abs_flat);
 }
 
 Vector3<symbolic::Expression> ObjectContactPlanning::p_WV(

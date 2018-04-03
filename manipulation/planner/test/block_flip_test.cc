@@ -119,7 +119,7 @@ GTEST_TEST(ObjectContactPlanningTest, TestOnePusher) {
   // Bound the maximal angle difference in each interval.
   const double max_angle_difference = M_PI / 4;
   for (int interval = 0; interval < nT - 1; ++interval) {
-    problem.AddOrientationDifferenceUpperBound(interval, max_angle_difference);
+    problem.AddOrientationDifferenceUpperBoundLinearApproximation(interval, max_angle_difference);
   }
   //// The block moves less than 10cms in each direction within an interval.
   // for (int interval = 0; interval < nT - 1; ++interval) {

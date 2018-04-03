@@ -25,12 +25,15 @@ class ObjectContactPlanning {
    * frame B.
    * @param num_pushers The total number of pushers.
    * @param Q The candidate pusher contact location Q
+   * @param add_second_order_cone_for_R Set to true if we will add second order
+   * cone constraint to the rotation matrix R_WB, representing the orientation
+   * of the object.
    */
   ObjectContactPlanning(int nT, double mass,
                         const Eigen::Ref<const Eigen::Vector3d>& p_BC,
                         const Eigen::Ref<const Eigen::Matrix3Xd>& p_BV,
-                        int num_pushers,
-                        const std::vector<BodyContactPoint>& Q);
+                        int num_pushers, const std::vector<BodyContactPoint>& Q,
+                        bool add_second_order_cone_for_R = false);
 
   ~ObjectContactPlanning() = default;
 
@@ -166,7 +169,7 @@ class ObjectContactPlanning {
    *              = trace[2I - 2(I + sinα K + (1 - cosα) K²)]
    *              = -2 * (1 - cosα) trace[K²]
    *              = 4(1 - cosα)
-   *              ≤ 4(1 - cosθ)
+   *              ≤ 4(1 - cosθ) = (2√2 sin(θ/2))²
    * where α is the angle between R₁ and R₂, and K is the 3 x 3 skew-symmetric
    * matrix, representing cross product with the axis of the rotation matrix
    * R₁ᵀR₂
@@ -175,6 +178,13 @@ class ObjectContactPlanning {
    */
   solvers::Binding<solvers::LorentzConeConstraint>
   AddOrientationDifferenceUpperBound(int interval, double max_angle_difference);
+
+  /** Approximate the quadratic constraint | R₁ - R₂ |₂ ≤ 2√2 sin(θ/2) with
+   * linear constraint | R₁ - R₂ |₁ ≤ 3| R₁ - R₂ |₂ ≤ 6√2 sin(θ/2)
+   * and | R₁ - R₂ |∞ ≤ | R₁ - R₂ |₂ ≤ 2√2 sin(θ/2)
+   */
+  void AddOrientationDifferenceUpperBoundLinearApproximation(
+      int interval, double max_angle_difference);
 
   /** Return the position of vertex p_BV_.col(vertex_index) at a knot.*/
   Vector3<symbolic::Expression> p_WV(int knot, int vertex_index) const;
