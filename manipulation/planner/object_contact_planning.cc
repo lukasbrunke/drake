@@ -1,6 +1,7 @@
 #include "drake/manipulation/planner/object_contact_planning.h"
 
 #include "drake/manipulation/planner/friction_cone.h"
+#include "drake/solvers/integer_optimization_util.h"
 #include "drake/solvers/mixed_integer_optimization_util.h"
 #include "drake/solvers/rotation_constraint.h"
 
@@ -207,7 +208,8 @@ void ObjectContactPlanning::AddStaticEquilibriumConstraint() {
   }
 }
 
-optional<symbolic::Variable> ObjectContactPlanning::AddVertexNonSlidingConstraint(
+optional<symbolic::Variable>
+ObjectContactPlanning::AddVertexNonSlidingConstraint(
     int interval, int vertex_index,
     const Eigen::Ref<const Eigen::Vector3d>& x_W,
     const Eigen::Ref<const Eigen::Vector3d>& y_W, double distance_big_M) {
@@ -223,22 +225,18 @@ optional<symbolic::Variable> ObjectContactPlanning::AddVertexNonSlidingConstrain
     const Vector3<Expression> p_WV0 = p_WV(knot0, vertex_index);
     const Vector3<Expression> p_WV1 = p_WV(knot1, vertex_index);
     const auto z = prog_->NewContinuousVariables<1>(
-        "V[" + std::to_string(vertex_index) + "] in contact at knot " +
-        std::to_string(knot0) + " and " + std::to_string(knot1))(0);
-    prog_->AddBoundingBoxConstraint(0, 1, z);
-    prog_->AddLinearConstraint(z >= vertex_contact_flag_[knot0](it0->second));
-    prog_->AddLinearConstraint(z >= vertex_contact_flag_[knot1](it1->second));
+        "V[" + std::to_string(vertex_index) + "]_in_contact_at_knot_" +
+        std::to_string(knot0) + "_and_" + std::to_string(knot1))(0);
+    prog_->AddConstraint(solvers::CreateLogicalAndConstraint(
+        Expression(vertex_contact_flag_[knot0](it0->second)),
+        Expression(vertex_contact_flag_[knot1](it1->second)), Expression(z)));
     const Vector3<Expression> delta_p_WV = p_WV0 - p_WV1;
     const Expression delta_p_WV_x = x_W.dot(delta_p_WV);
     const Expression delta_p_WV_y = y_W.dot(delta_p_WV);
-    prog_->AddLinearConstraint(delta_p_WV_x <= 
-                               distance_big_M * (1 - z));
-    prog_->AddLinearConstraint(-delta_p_WV_x <= 
-                               distance_big_M * (1 - z));
-    prog_->AddLinearConstraint(delta_p_WV_y <= 
-                               distance_big_M * (1 - z));
-    prog_->AddLinearConstraint(-delta_p_WV_y <= 
-                               distance_big_M * (1 - z));
+    prog_->AddLinearConstraint(delta_p_WV_x <= distance_big_M * (1 - z));
+    prog_->AddLinearConstraint(-delta_p_WV_x <= distance_big_M * (1 - z));
+    prog_->AddLinearConstraint(delta_p_WV_y <= distance_big_M * (1 - z));
+    prog_->AddLinearConstraint(-delta_p_WV_y <= distance_big_M * (1 - z));
     ret_variable.emplace(z);
   }
   return ret_variable;
@@ -320,14 +318,15 @@ ObjectContactPlanning::AddOrientationDifferenceUpperBound(
   Eigen::Matrix<Expression, 10, 1> lorentz_cone_expressions;
   const int knot0 = interval;
   const int knot1 = interval + 1;
-  lorentz_cone_expressions << 2 * sin(max_angle_difference / 2),
+  lorentz_cone_expressions << 2 * std::sqrt(2) * sin(max_angle_difference / 2),
       R_WB_[knot0].col(0) - R_WB_[knot1].col(0),
       R_WB_[knot0].col(1) - R_WB_[knot1].col(1),
       R_WB_[knot0].col(2) - R_WB_[knot1].col(2);
   return prog_->AddLorentzConeConstraint(lorentz_cone_expressions);
 }
 
-Vector3<symbolic::Expression> ObjectContactPlanning::p_WV(int knot, int vertex_index) const {
+Vector3<symbolic::Expression> ObjectContactPlanning::p_WV(
+    int knot, int vertex_index) const {
   return p_WB_[knot] + R_WB_[knot] * p_BV_.col(vertex_index);
 }
 }  // namespace planner

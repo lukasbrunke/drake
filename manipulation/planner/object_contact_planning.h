@@ -3,9 +3,9 @@
 #include <memory>
 #include <unordered_map>
 
+#include "drake/common/drake_optional.h"
 #include "drake/manipulation/planner/body_contact_point.h"
 #include "drake/solvers/mathematical_program.h"
-#include "drake/common/drake_optional.h"
 
 namespace drake {
 namespace manipulation {
@@ -101,15 +101,16 @@ class ObjectContactPlanning {
    * Namely if the vertex contact is active at both the beginning and the end
    * of the interval, then its position in the world frame does not change.
    * Mathematically, the constraint is
-   * p_WV_x[interval + 1](vertex_index) - p_WV_x[interval](vertex_index) <= M *
-   * (1 - z)
-   * p_WV_y[interval + 1](vertex_index) - p_WV_y[interval](vertex_index) <= M *
-   * (1 - z)
+   *  -M * (1 - z) <=
+   *  p_WV_x[interval + 1](vertex_index) - p_WV_x[interval](vertex_index)
+   *   <= M * (1 - z)
+   * -M * (1 - z) <=
+   *  p_WV_y[interval + 1](vertex_index) - p_WV_y[interval](vertex_index)
+   *   <= M * (1 - z)
    * where `z` is a slack variable, that represents if the vertex is in contact
    * at both knot and knot + 1. The slack variable `z` satisfies the constraint
-   * 0 ≤ z ≤ 1
-   * z ≥ vertex_contact_flag()[knot + 1](vertex_index)
-   * z ≥ vertex_contact_flag()[knot](vertex_index)
+   * z == vertex_contact_flag[interval](point_index) &&
+   * vertex_contact_flag[interval + 1](point_index)
    * @param interval The interval in which the non-sliding constraint is
    * enforced.
    * @param vertex_index p_BV()[vertex_index] will be constrained not to slide.
@@ -165,7 +166,7 @@ class ObjectContactPlanning {
    *              = trace[2I - 2(I + sinα K + (1 - cosα) K²)]
    *              = -2 * (1 - cosα) trace[K²]
    *              = 4(1 - cosα)
-   *              ≤ 4(1-cosθ)
+   *              ≤ 4(1 - cosθ)
    * where α is the angle between R₁ and R₂, and K is the 3 x 3 skew-symmetric
    * matrix, representing cross product with the axis of the rotation matrix
    * R₁ᵀR₂
@@ -219,7 +220,7 @@ class ObjectContactPlanning {
     return contact_vertex_indices_;
   }
 
-  const std::vector<std::vector<int>>& pusher_Q_indices() const {
+  const std::vector<std::vector<int>>& contact_Q_indices() const {
     return contact_Q_indices_;
   }
 

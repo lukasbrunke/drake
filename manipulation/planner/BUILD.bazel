@@ -87,6 +87,7 @@ drake_cc_library(
         ":body_contact_point",
         ":friction_cone",
         "//common:essential",
+        "//solvers:integer_optimization_util",
         "//solvers:mathematical_program",
         "//solvers:mixed_integer_optimization_util",
         "//solvers:rotation_constraint",

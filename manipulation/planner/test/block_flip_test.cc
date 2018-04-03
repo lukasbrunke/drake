@@ -18,6 +18,18 @@ namespace drake {
 namespace manipulation {
 namespace planner {
 namespace {
+GTEST_TEST(ObjectContactPlanning, TestOrientationDifference) {
+  // To verify the math
+  // | R₁ - R₂ |² = (2√2 sin(α/2))²
+  // where α is the angle between the rotation matrix R₁ and R₂.
+  Eigen::AngleAxisd R(0.1, Eigen::Vector3d(0.1, 0.2, 0.3).normalized());
+  EXPECT_NEAR(
+      ((R.toRotationMatrix() - Eigen::Matrix3d::Identity()) *
+       ((R.toRotationMatrix() - Eigen::Matrix3d::Identity()).transpose()))
+          .trace(),
+      std::pow(2 * std::sqrt(2) * std::sin(0.1 / 2), 2), 1E-10);
+}
+
 GTEST_TEST(ObjectContactPlanningTest, TestOnePusher) {
   Block block;
   const int nT = 4;
@@ -109,14 +121,14 @@ GTEST_TEST(ObjectContactPlanningTest, TestOnePusher) {
   for (int interval = 0; interval < nT - 1; ++interval) {
     problem.AddOrientationDifferenceUpperBound(interval, max_angle_difference);
   }
-  // The block moves less than 10cms in each direction within an interval.
-  for (int interval = 0; interval < nT - 1; ++interval) {
-    const Vector3<Expression> delta_p_WB =
-        problem.p_WB()[interval + 1] - problem.p_WB()[interval];
-    problem.get_mutable_prog()->AddLinearConstraint(delta_p_WB(0), -0.1, 0.1);
-    problem.get_mutable_prog()->AddLinearConstraint(delta_p_WB(1), -0.1, 0.1);
-    problem.get_mutable_prog()->AddLinearConstraint(delta_p_WB(2), -0.1, 0.1);
-  }
+  //// The block moves less than 10cms in each direction within an interval.
+  // for (int interval = 0; interval < nT - 1; ++interval) {
+  //  const Vector3<Expression> delta_p_WB =
+  //      problem.p_WB()[interval + 1] - problem.p_WB()[interval];
+  //  problem.get_mutable_prog()->AddLinearConstraint(delta_p_WB(0), -0.1, 0.1);
+  //  problem.get_mutable_prog()->AddLinearConstraint(delta_p_WB(1), -0.1, 0.1);
+  //  problem.get_mutable_prog()->AddLinearConstraint(delta_p_WB(2), -0.1, 0.1);
+  //}
 
   problem.get_mutable_prog()->SetSolverOption(solvers::GurobiSolver::id(),
                                               "OutputFlag", 1);
@@ -167,7 +179,7 @@ GTEST_TEST(ObjectContactPlanningTest, TestOnePusher) {
               << b_Q_contact_sol[knot].transpose() << std::endl;
     std::cout << "f_BQ_sol[" << knot << "]\n" << f_BQ_sol[knot] << std::endl;
     std::cout << "b_non_sliding_sol[" << knot << "]\n"
-              << b_non_sliding_sol[knot] << std::endl;
+              << b_non_sliding_sol[knot].transpose() << std::endl;
   }
 
   // Now visualize the result.
@@ -182,6 +194,15 @@ GTEST_TEST(ObjectContactPlanningTest, TestOnePusher) {
       VisualizeForce(&viewer, p_WV_sol[knot].col(i),
                      R_WB_sol[knot] * f_BV_sol[knot].col(i),
                      viewer_force_normalizer, "f_WV" + std::to_string(i));
+    }
+    // Visualize pusher contact force.
+    for (int i = 0;
+         i < static_cast<int>(problem.contact_Q_indices()[knot].size()); ++i) {
+      const int Q_index = problem.contact_Q_indices()[knot][i];
+      const Eigen::Vector3d p_WQ_sol =
+          p_WB_sol[knot] + R_WB_sol[knot] * block.Q()[Q_index].p_BQ();
+      VisualizeForce(&viewer, p_WQ_sol, R_WB_sol[knot] * f_BQ_sol[knot].col(i),
+                     viewer_force_normalizer, "f_WQ" + std::to_string(i));
     }
     std::this_thread::sleep_for(std::chrono::seconds(5));
   }
