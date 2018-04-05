@@ -186,6 +186,18 @@ class ObjectContactPlanning {
   void AddOrientationDifferenceUpperBoundLinearApproximation(
       int interval, double max_angle_difference);
 
+  /**
+   * If we denote the angle between the object orientation between two
+   * consecutive knots as α = ∠(R₁, R₂), and constrain that α ≤ θ for some given
+   * maximal angle θ, mathematically this means
+   * trace(R₁ᵀR₂) = 1 + 2cosα
+   *              ≥ 1 + 2cosθ
+   * We will use McCormick envelope to approximate the bilinear product on the
+   * left-hand side of the inequality.
+   */
+  void AddOrientationDifferenceUpperBoundBilinearApproximation(
+      int interval, double max_angle_difference);
+
   /** Return the position of vertex p_BV_.col(vertex_index) at a knot.*/
   Vector3<symbolic::Expression> p_WV(int knot, int vertex_index) const;
 

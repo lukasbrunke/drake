@@ -353,6 +353,32 @@ void ObjectContactPlanning::
                                   R1_minus_R2_abs_flat);
 }
 
+void ObjectContactPlanning::
+    AddOrientationDifferenceUpperBoundBilinearApproximation(
+        int interval, double max_angle_difference) {
+  const int knot0 = interval;
+  const int knot1 = interval + 1;
+  // Introduce a slack variable R1_times_R2, such that
+  // R1_times_R2(i, j) approximates R1(i, j) * R2(i, j)
+  const auto R1_times_R2 = prog_->NewContinuousVariables<3, 3>(
+      "R[" + std::to_string(knot0) + "]_times_R[" + std::to_string(knot1) +
+      "]");
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 3; ++j) {
+      AddBilinearProductMcCormickEnvelopeSos2(
+          prog_.get(), R_WB()[knot0](i, j), R_WB()[knot1](i, j),
+          R1_times_R2(i, j), phi_R_WB_, phi_R_WB_,
+          b_R_WB_[knot0][i][j].cast<Expression>(),
+          b_R_WB_[knot1][i][j].cast<Expression>(),
+          solvers::IntervalBinning::kLogarithmic);
+    }
+  }
+  prog_->AddLinearConstraint(
+      Eigen::Matrix<double, 1, 9>::Ones(),
+      1 + 2 * std::cos(max_angle_difference), 3,
+      {R1_times_R2.col(0), R1_times_R2.col(1), R1_times_R2.col(2)});
+}
+
 Vector3<symbolic::Expression> ObjectContactPlanning::p_WV(
     int knot, int vertex_index) const {
   return p_WB_[knot] + R_WB_[knot] * p_BV_.col(vertex_index);
