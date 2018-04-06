@@ -103,15 +103,25 @@ void VisualizeBlock(dev::RemoteTreeViewerWrapper* viewer,
 void VisualizeForce(dev::RemoteTreeViewerWrapper* viewer,
                     const Eigen::Ref<const Eigen::Vector3d>& p_WP,
                     const Eigen::Ref<const Eigen::Vector3d>& f_WP,
-                    double normalizer, const std::string& path) {
+                    double normalizer, const std::string& path,
+                    const Eigen::Ref<const Eigen::Vector4d>& color) {
   const Eigen::Vector3d f_WP_normalized = f_WP / normalizer;
   const std::vector<double> color_red = {1, 0.2, 0.2};
   if (f_WP_normalized.norm() > 1E-3) {
     viewer->PublishArrow(p_WP, p_WP + f_WP_normalized, {path}, 0.01, 0.02,
-                         0.01);
+                         0.01, color);
   } else {
     viewer->PublishPointCloud(p_WP, {path}, {color_red});
   }
+}
+
+void VisualizeTable(dev::RemoteTreeViewerWrapper* viewer) {
+  const Eigen::Vector4d color_gray(0.9, 0.9, 0.9, 0.3);
+  Eigen::Affine3d tf_table;
+  tf_table.setIdentity();
+  tf_table.translation()(2) = -0.01;
+  viewer->PublishGeometry(DrakeShapes::Box({1, 1, 0.02}), tf_table, color_gray,
+                          {"table"});
 }
 
 void AllVerticesAboveTable(const Block& block, ObjectContactPlanning* problem) {

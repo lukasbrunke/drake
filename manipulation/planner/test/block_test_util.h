@@ -62,7 +62,10 @@ void VisualizeBlock(dev::RemoteTreeViewerWrapper* viewer,
 void VisualizeForce(dev::RemoteTreeViewerWrapper* viewer,
                     const Eigen::Ref<const Eigen::Vector3d>& p_WP,
                     const Eigen::Ref<const Eigen::Vector3d>& f_WP,
-                    double normalizer, const std::string& path);
+                    double normalizer, const std::string& path,
+                    const Eigen::Ref<const Eigen::Vector4d>& color);
+
+void VisualizeTable(dev::RemoteTreeViewerWrapper* viewer);
 
 void AllVerticesAboveTable(const Block& block, ObjectContactPlanning* problem);
 

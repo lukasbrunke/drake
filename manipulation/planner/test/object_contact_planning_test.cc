@@ -53,7 +53,7 @@ GTEST_TEST(ObjectContactPlanningTest, TestAddPusherStaticContactConstraint) {
 
   problem.AddPusherStaticContactConstraint(0);
 
-  // None of the points are active, a feasible case. 
+  // None of the points are active, a feasible case.
   CheckPusherContactAssignment(problem, {0, 0, 0, 0, 0}, {0, 0, 0, 0}, true);
   // One point goes from inactive to active.
   CheckPusherContactAssignment(problem, {0, 0, 0, 0, 0}, {0, 1, 0, 0}, true);
@@ -178,6 +178,7 @@ GTEST_TEST(ObjectContactPlanningTest, TestStaticSinglePosture) {
 
   const Eigen::Vector4d color_gray(0.7, 0.7, 0.7, 0.9);
   const Eigen::Vector4d color_blue(0.3, 0.3, 1.0, 0.9);
+  const Eigen::Vector4d color_red(1, 0, 0, 0.9);
   dev::RemoteTreeViewerWrapper viewer;
   viewer.PublishGeometry(DrakeShapes::MeshPoints(p_WV_sol),
                          Eigen::Affine3d::Identity(), color_gray, {"p_WV"});
@@ -188,10 +189,10 @@ GTEST_TEST(ObjectContactPlanningTest, TestStaticSinglePosture) {
   for (int i = 0; i < 4; ++i) {
     VisualizeForce(&viewer, p_WV_sol.col(block.positive_x_vertex_indices()[i]),
                    f_WV_sol.col(i), block.mass() * kGravity * 5,
-                   "f_WV" + std::to_string(i));
+                   "f_WV" + std::to_string(i), color_red);
     VisualizeForce(&viewer, p_WV_sol.col(i), R_WB_sol * f_BV_sol.col(i),
                    block.mass() * kGravity * 5,
-                   "R_WB * f_BV" + std::to_string(i));
+                   "R_WB * f_BV" + std::to_string(i), color_blue);
   }
 
   // Make sure that static equilibrium is satisfied.
@@ -271,10 +272,13 @@ GTEST_TEST(ObjectContactPlanningTest, SinglePostureWithPushers) {
       p_WB_sol * Eigen::Matrix<double, 1, 8>::Ones() + R_WB_sol * block.p_BV();
   const auto f_WV_sol = problem.prog().GetSolution(f_WV);
   const double viewer_force_normalizer = block.mass() * kGravity * 5;
+
+  const Eigen::Vector4d color_red(1, 0, 0, 0.9);
+  const Eigen::Vector4d color_blue(0, 0, 1, 0.9);
   for (int i = 0; i < 4; ++i) {
     VisualizeForce(&viewer, p_WV_sol.col(block.bottom_vertex_indices()[i]),
                    f_WV_sol.col(i), viewer_force_normalizer,
-                   "f_WV" + std::to_string(i));
+                   "f_WV" + std::to_string(i), color_red);
   }
 
   const auto f_BQ_sol = problem.prog().GetSolution(problem.f_BQ()[0]);
@@ -284,7 +288,8 @@ GTEST_TEST(ObjectContactPlanningTest, SinglePostureWithPushers) {
     p_WQ_sol.col(i) =
         p_WB_sol + R_WB_sol * block.Q()[pusher_contact_point_indices[i]].p_BQ();
     VisualizeForce(&viewer, p_WQ_sol.col(i), f_WQ_sol.col(i),
-                   viewer_force_normalizer, "f_WQ" + std::to_string(i));
+                   viewer_force_normalizer, "f_WQ" + std::to_string(i),
+                   color_blue);
   }
 
   // Check the solution.

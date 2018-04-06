@@ -168,9 +168,12 @@ class BlockFlipTest : public ::testing::TestWithParam<std::tuple<int, int>> {
     sol->b_V_contact_sol.reserve(nT_);
     sol->b_Q_contact_sol.reserve(nT_);
     for (int knot = 0; knot < nT_; ++knot) {
-      sol->p_WB_sol.push_back(problem_.prog().GetSolution(problem_.p_WB()[knot]));
-      sol->R_WB_sol.push_back(problem_.prog().GetSolution(problem_.R_WB()[knot]));
-      sol->f_BV_sol.push_back(problem_.prog().GetSolution(problem_.f_BV()[knot]));
+      sol->p_WB_sol.push_back(
+          problem_.prog().GetSolution(problem_.p_WB()[knot]));
+      sol->R_WB_sol.push_back(
+          problem_.prog().GetSolution(problem_.R_WB()[knot]));
+      sol->f_BV_sol.push_back(
+          problem_.prog().GetSolution(problem_.f_BV()[knot]));
       sol->f_WV_sol.push_back(problem_.prog().GetSolution(f_WV_[knot]));
       const int num_vertices_knot =
           problem_.contact_vertex_indices()[knot].size();
@@ -186,18 +189,21 @@ class BlockFlipTest : public ::testing::TestWithParam<std::tuple<int, int>> {
       for (int i = 0; i < num_Q_points; ++i) {
         const int Q_index = problem_.contact_Q_indices()[knot][i];
         sol->p_WQ_sol[knot].col(i) =
-            sol->p_WB_sol[knot] + sol->R_WB_sol[knot] * block_.Q()[Q_index].p_BQ();
+            sol->p_WB_sol[knot] +
+            sol->R_WB_sol[knot] * block_.Q()[Q_index].p_BQ();
       }
       sol->b_V_contact_sol.push_back(
           problem_.prog().GetSolution(problem_.vertex_contact_flag()[knot]));
-      sol->f_BQ_sol.push_back(problem_.prog().GetSolution(problem_.f_BQ()[knot]));
+      sol->f_BQ_sol.push_back(
+          problem_.prog().GetSolution(problem_.f_BQ()[knot]));
       sol->f_WQ_sol.push_back(sol->R_WB_sol[knot] * sol->f_BQ_sol[knot]);
       sol->b_Q_contact_sol.push_back(
           problem_.prog().GetSolution(problem_.b_Q_contact()[knot]));
       std::cout << "knot " << knot << std::endl;
       std::cout << "p_WB[" << knot << "]\n " << sol->p_WB_sol[knot].transpose()
                 << std::endl;
-      std::cout << "R_WB[" << knot << "]\n " << sol->R_WB_sol[knot] << std::endl;
+      std::cout << "R_WB[" << knot << "]\n " << sol->R_WB_sol[knot]
+                << std::endl;
       std::cout << "b_V_contact[" << knot << "]\n "
                 << sol->b_V_contact_sol[knot].transpose() << std::endl;
       std::cout << "f_BV_sol[" << knot << "]\n"
@@ -215,6 +221,12 @@ class BlockFlipTest : public ::testing::TestWithParam<std::tuple<int, int>> {
   void VisualizeResult(const Solution& sol) const {
     // Now visualize the result.
     dev::RemoteTreeViewerWrapper viewer;
+
+    const Eigen::Vector4d color_red(1, 0, 0, 0.9);
+    const Eigen::Vector4d color_green(0, 1, 0, 0.9);
+
+    // VisualizeTable(&viewer);
+
     const double viewer_force_normalizer = block_.mass() * kGravity * 5;
     for (int knot = 0; knot < nT_; ++knot) {
       VisualizeBlock(&viewer, sol.R_WB_sol[knot], sol.p_WB_sol[knot], block_);
@@ -224,7 +236,8 @@ class BlockFlipTest : public ::testing::TestWithParam<std::tuple<int, int>> {
            ++i) {
         VisualizeForce(&viewer, sol.p_WV_sol[knot].col(i),
                        sol.R_WB_sol[knot] * sol.f_BV_sol[knot].col(i),
-                       viewer_force_normalizer, "f_WV" + std::to_string(i));
+                       viewer_force_normalizer, "f_WV" + std::to_string(i),
+                       color_red);
       }
       // Visualize pusher contact force.
       for (int i = 0;
@@ -232,12 +245,12 @@ class BlockFlipTest : public ::testing::TestWithParam<std::tuple<int, int>> {
            ++i) {
         VisualizeForce(&viewer, sol.p_WQ_sol[knot].col(i),
                        sol.R_WB_sol[knot] * sol.f_BQ_sol[knot].col(i),
-                       viewer_force_normalizer, "f_WQ" + std::to_string(i));
+                       viewer_force_normalizer, "f_WQ" + std::to_string(i),
+                       color_green);
       }
       std::this_thread::sleep_for(std::chrono::seconds(5));
     }
   }
-
 
  protected:
   Block block_;
@@ -267,10 +280,25 @@ TEST_P(BlockFlipTest, TestOnePusher) {
   }
 }
 
+TEST_P(BlockFlipTest, TestTwoPushers) {
+  if (num_pushers_ == 2) {
+    problem_.get_mutable_prog()->SetSolverOption(solvers::GurobiSolver::id(),
+                                                 "OutputFlag", 1);
+
+    // Some pusher points should not be active simultaneously. For example, if a 
+    solvers::GurobiSolver solver;
+    const auto solution_result = solver.Solve(*(problem_.get_mutable_prog()));
+    EXPECT_EQ(solution_result, solvers::SolutionResult::kSolutionFound);
+    Solution sol;
+    GetSolution(&sol);
+    VisualizeResult(sol);
+  }
+}
+
 std::vector<std::tuple<int, int>> test_params() {
   std::vector<std::tuple<int, int>> params;
   params.push_back(std::make_tuple(1, 4));
-  params.push_back(std::make_tuple(1, 5));
+  //params.push_back(std::make_tuple(1, 5));
   return params;
 }
 
