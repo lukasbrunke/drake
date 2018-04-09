@@ -12,6 +12,7 @@
 #include "drake/solvers/gurobi_solver.h"
 
 using drake::solvers::MatrixDecisionVariable;
+using drake::solvers::VectorDecisionVariable;
 using drake::symbolic::Expression;
 
 namespace drake {
@@ -285,7 +286,33 @@ TEST_P(BlockFlipTest, TestTwoPushers) {
     problem_.get_mutable_prog()->SetSolverOption(solvers::GurobiSolver::id(),
                                                  "OutputFlag", 1);
 
-    // Some pusher points should not be active simultaneously. For example, if a 
+    // Some pusher points should not be active simultaneously. For example, if
+    // an edge point is active, then no other point should be.
+    const auto edge_Q_indices = block_.edge_Q_indices();
+    std::unordered_set<int> edge_Q_index_set(edge_Q_indices.begin(),
+                                             edge_Q_indices.end());
+    for (int knot = 0; knot < nT_; ++knot) {
+      for (int i = 0;
+           i < static_cast<int>(problem_.contact_Q_indices()[knot].size());
+           ++i) {
+        const bool is_Qi_on_edge =
+            edge_Q_index_set.find(problem_.contact_Q_indices()[knot][i]) !=
+            edge_Q_index_set.end();
+        for (int j = i + 1;
+             j < static_cast<int>(problem_.contact_Q_indices()[knot].size());
+             ++j) {
+          const bool is_Qj_on_edge =
+              edge_Q_index_set.find(problem_.contact_Q_indices()[knot][j]) !=
+              edge_Q_index_set.end();
+          if (is_Qi_on_edge || is_Qj_on_edge) {
+            problem_.get_mutable_prog()->AddLinearConstraint(
+                Eigen::RowVector2d::Ones(), 0, 1,
+                VectorDecisionVariable<2>(problem_.b_Q_contact()[knot](i),
+                                          problem_.b_Q_contact()[knot](j)));
+          }
+        }
+      }
+    }
     solvers::GurobiSolver solver;
     const auto solution_result = solver.Solve(*(problem_.get_mutable_prog()));
     EXPECT_EQ(solution_result, solvers::SolutionResult::kSolutionFound);
@@ -297,8 +324,9 @@ TEST_P(BlockFlipTest, TestTwoPushers) {
 
 std::vector<std::tuple<int, int>> test_params() {
   std::vector<std::tuple<int, int>> params;
-  params.push_back(std::make_tuple(1, 4));
-  //params.push_back(std::make_tuple(1, 5));
+  // params.push_back(std::make_tuple(1, 4));
+  // params.push_back(std::make_tuple(1, 5));
+  params.push_back(std::make_tuple(2, 5));
   return params;
 }
 
