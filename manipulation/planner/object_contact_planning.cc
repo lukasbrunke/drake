@@ -184,31 +184,28 @@ ObjectContactPlanning::CalcContactForceInWorldFrame(
   return b_f;
 }
 
-void ObjectContactPlanning::AddStaticEquilibriumConstraint() {
+void ObjectContactPlanning::AddStaticEquilibriumConstraintAtKnot(int knot) {
   // Write the static equilibrium constraint in the body frame.
   const Eigen::Vector3d mg(0, 0, -mass_ * kGravity);
-  for (int knot = 0; knot < nT_; ++knot) {
-    const Vector3<Expression> mg_B = R_WB_[knot].transpose() * mg;
-    Vector3<Expression> total_force = mg_B;
-    Vector3<Expression> total_torque = p_BC_.cross(mg_B);
+  const Vector3<Expression> mg_B = R_WB_[knot].transpose() * mg;
+  Vector3<Expression> total_force = mg_B;
+  Vector3<Expression> total_torque = p_BC_.cross(mg_B);
 
-    for (int i = 0; i < static_cast<int>(contact_vertex_indices_[knot].size());
-         ++i) {
-      total_force += f_BV_[knot].col(i);
-      total_torque +=
-          p_BV_.col(contact_vertex_indices_[knot][i]).cross(f_BV_[knot].col(i));
-    }
-
-    for (int i = 0; i < static_cast<int>(contact_Q_indices_[knot].size());
-         ++i) {
-      total_force += f_BQ_[knot].col(i);
-      total_torque +=
-          Q_[contact_Q_indices_[knot][i]].p_BQ().cross(f_BQ_[knot].col(i));
-    }
-
-    prog_->AddLinearConstraint(total_force == Eigen::Vector3d::Zero());
-    prog_->AddLinearConstraint(total_torque == Eigen::Vector3d::Zero());
+  for (int i = 0; i < static_cast<int>(contact_vertex_indices_[knot].size());
+       ++i) {
+    total_force += f_BV_[knot].col(i);
+    total_torque +=
+        p_BV_.col(contact_vertex_indices_[knot][i]).cross(f_BV_[knot].col(i));
   }
+
+  for (int i = 0; i < static_cast<int>(contact_Q_indices_[knot].size()); ++i) {
+    total_force += f_BQ_[knot].col(i);
+    total_torque +=
+        Q_[contact_Q_indices_[knot][i]].p_BQ().cross(f_BQ_[knot].col(i));
+  }
+
+  prog_->AddLinearConstraint(total_force == Eigen::Vector3d::Zero());
+  prog_->AddLinearConstraint(total_torque == Eigen::Vector3d::Zero());
 }
 
 optional<symbolic::Variable>

@@ -94,6 +94,24 @@ drake_cc_library(
     ],
 )
 
+drake_cc_library(
+    name = "quasi_static_object_contact_planning",
+    srcs = ["quasi_static_object_contact_planning.cc"],
+    hdrs = ["quasi_static_object_contact_planning.h"],
+    deps = [
+        ":object_contact_planning",
+    ],
+)
+
+drake_cc_library(
+    name = "quasi_dynamic_object_contact_planning",
+    srcs = ["quasi_dynamic_object_contact_planning.cc"],
+    hdrs = ["quasi_dynamic_object_contact_planning.h"],
+    deps = [
+        ":object_contact_planning",
+    ],
+)
+
 # === test/ ===
 
 drake_cc_googletest(
@@ -182,7 +200,7 @@ drake_cc_googletest(
     srcs = ["test/block_flip_test.cc"],
     tags = gurobi_test_tags(),
     deps = [
-        ":object_contact_planning",
+        ":quasi_static_object_contact_planning",
         ":block_test_util",
         "//math:geometric_transform",
         "//common/test_utilities:eigen_matrix_compare",

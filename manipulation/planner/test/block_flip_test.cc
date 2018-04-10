@@ -1,4 +1,4 @@
-#include "drake/manipulation/planner/object_contact_planning.h"
+#include "drake/manipulation/planner/quasi_static_object_contact_planning.h"
 
 #include <chrono>
 #include <thread>
@@ -257,7 +257,7 @@ class BlockFlipTest : public ::testing::TestWithParam<std::tuple<int, int>> {
   Block block_;
   int num_pushers_;
   int nT_;
-  ObjectContactPlanning problem_;
+  QuasiStaticObjectContactPlanning problem_;
   std::vector<MatrixDecisionVariable<3, Eigen::Dynamic>> f_WV_;
 };
 

@@ -95,9 +95,9 @@ class ObjectContactPlanning {
       bool binning_f_B, const std::array<Eigen::VectorXd, 3>& phi_f);
 
   /**
-   * Adds static equilibrium constraint at each knot.
+   * Adds static equilibrium constraint at a knot.
    */
-  void AddStaticEquilibriumConstraint();
+  void AddStaticEquilibriumConstraintAtKnot(int knot);
 
   /**
    * A vertex in contact with the world cannot slide within an interval.

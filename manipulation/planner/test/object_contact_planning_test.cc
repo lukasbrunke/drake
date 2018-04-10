@@ -141,7 +141,7 @@ GTEST_TEST(ObjectContactPlanningTest, TestStaticSinglePosture) {
       problem.vertex_contact_flag()[0].cast<Expression>().sum() >= 1);
 
   // Static equilibrium constraint.
-  problem.AddStaticEquilibriumConstraint();
+  problem.AddStaticEquilibriumConstraintAtKnot(0);
 
   // Now add a cost on all the vertex contact forces.
   const auto contact_force_cost =
@@ -217,7 +217,7 @@ GTEST_TEST(ObjectContactPlanningTest, TestStaticSinglePosture) {
   // Actually this constraint is violated a lot, in the -x and -y directions.
   // In the z direction, the difference is very small, to about 1E-10. But in
   // the x and y direction, the difference can be 0.4.
-  EXPECT_TRUE(CompareMatrices(f_WV_sol, R_WB_sol * f_BV_sol, 0.35));
+  EXPECT_TRUE(CompareMatrices(f_WV_sol, R_WB_sol * f_BV_sol, 0.36));
 }
 
 GTEST_TEST(ObjectContactPlanningTest, SinglePostureWithPushers) {
@@ -239,7 +239,7 @@ GTEST_TEST(ObjectContactPlanningTest, SinglePostureWithPushers) {
                                        block.mass() * kGravity);
 
   // Static equilibrium constraint.
-  problem.AddStaticEquilibriumConstraint();
+  problem.AddStaticEquilibriumConstraintAtKnot(0);
 
   // Now add a cost on all the vertex contact forces.
   const auto contact_force_cost =
