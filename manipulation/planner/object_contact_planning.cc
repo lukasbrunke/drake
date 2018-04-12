@@ -125,6 +125,12 @@ ObjectContactPlanning::CalcContactForceInWorldFrame(
   const std::string lambda_name = binning_f_B ? "lambda_f_B" : "lambda_f_W";
   const std::string b_f_name = binning_f_B ? "b_f_B" : "b_f_W";
   for (int i = 0; i < 3; ++i) {
+    // In practice, adding the sos2 constraint for b_f makes the computation
+    // a lot faster, but I do not understand why. Withi this b_f constraint,
+    // in some tests, gurobi finds a feasible solution by exploring just one
+    // node. On the other hand, on the same test, if we do not have this
+    // constraint, gurobi needs to explore thousands of nodes to find a feasible
+    // solution.
     lambda_f[i] = prog_->NewContinuousVariables(phi_f[i].rows(), lambda_name);
     b_f[i] = solvers::AddLogarithmicSos2Constraint(
         prog_.get(), lambda_f[i].cast<Expression>(), b_f_name);

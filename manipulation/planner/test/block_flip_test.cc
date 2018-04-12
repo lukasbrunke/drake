@@ -324,8 +324,8 @@ TEST_P(BlockFlipTest, TestTwoPushers) {
 
 std::vector<std::tuple<int, int>> test_params() {
   std::vector<std::tuple<int, int>> params;
-  // params.push_back(std::make_tuple(1, 4));
-  // params.push_back(std::make_tuple(1, 5));
+  params.push_back(std::make_tuple(1, 4));
+  params.push_back(std::make_tuple(1, 5));
   params.push_back(std::make_tuple(2, 5));
   return params;
 }

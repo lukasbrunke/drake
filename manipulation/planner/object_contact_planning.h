@@ -246,6 +246,15 @@ class ObjectContactPlanning {
     return contact_Q_indices_;
   }
 
+ protected:
+  const Eigen::Matrix<double, 5, 1>& phi_R_WB() const { return phi_R_WB_; }
+
+  const std::vector<
+      std::array<std::array<solvers::VectorDecisionVariable<2>, 3>, 3>>&
+  b_R_WB() const {
+    return b_R_WB_;
+  }
+
  private:
   std::unique_ptr<solvers::MathematicalProgram> prog_;
   const int nT_;

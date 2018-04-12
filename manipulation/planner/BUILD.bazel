@@ -109,6 +109,7 @@ drake_cc_library(
     hdrs = ["quasi_dynamic_object_contact_planning.h"],
     deps = [
         ":object_contact_planning",
+        "//solvers:bilinear_product_util",
     ],
 )
 
