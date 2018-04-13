@@ -13,6 +13,13 @@ Block::Block() {
   p_BV_.topRows<2>() *= width() / 2;
   p_BV_.row(2) *= height() / 2;
 
+  // Set body inertia.
+  I_B_ = 1.0 / 12 * mass() *
+         Eigen::Vector3d(width() * width() + height() * height(),
+                         width() * width() + height() * height(),
+                         2 * width() * width())
+             .asDiagonal();
+
   // Add body contact point at the middle of each block edge, and the center
   // of each facet.
   Q_.reserve(18);
@@ -108,8 +115,8 @@ void VisualizeForce(dev::RemoteTreeViewerWrapper* viewer,
   const Eigen::Vector3d f_WP_normalized = f_WP / normalizer;
   const std::vector<double> color_red = {1, 0.2, 0.2};
   if (f_WP_normalized.norm() > 1E-3) {
-    viewer->PublishArrow(p_WP, p_WP + f_WP_normalized, {path}, 0.01, 0.02,
-                         0.01, color);
+    viewer->PublishArrow(p_WP, p_WP + f_WP_normalized, {path}, 0.01, 0.02, 0.01,
+                         color);
   } else {
     viewer->PublishPointCloud(p_WP, {path}, {color_red});
   }

@@ -54,9 +54,11 @@ class Block {
 
   double mu() const { return 0.5; }
 
+  const Eigen::Matrix3d& I_B() const { return I_B_; }
+
  private:
   Eigen::Matrix<double, 3, 8> p_BV_;
-
+  Eigen::Matrix3d I_B_;
   std::vector<BodyContactPoint> Q_;
 };
 

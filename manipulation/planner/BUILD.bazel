@@ -197,6 +197,17 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
+    name = "quasi_dynamic_object_contact_planning_test",
+    srcs = ["test/quasi_dynamic_object_contact_planning_test.cc"],
+    tags = gurobi_test_tags(),
+    deps = [
+        ":quasi_dynamic_object_contact_planning",
+        ":block_test_util",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
     name = "block_flip_test",
     srcs = ["test/block_flip_test.cc"],
     tags = gurobi_test_tags(),
