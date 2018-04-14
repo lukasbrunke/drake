@@ -4,6 +4,7 @@
 
 #include "drake/common/test_utilities/eigen_matrix_compare.h"
 #include "drake/manipulation/planner/test/block_test_util.h"
+#include "drake/solvers/gurobi_solver.h"
 
 namespace drake {
 namespace manipulation {
@@ -22,9 +23,9 @@ GTEST_TEST(QuasiDynamicObjectContactPlanningTest, TestInterpolation) {
   auto p_WB1_constraint = problem.get_mutable_prog()->AddBoundingBoxConstraint(
       Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero(), problem.p_WB()[1]);
   auto R_WB0_constraint = problem.get_mutable_prog()->AddBoundingBoxConstraint(
-      Eigen::Matrix3d::Zero(), Eigen::Matrix3d::Zero(), problem.R_WB()[0]);
+      0, 0, problem.R_WB()[0]);
   auto R_WB1_constraint = problem.get_mutable_prog()->AddBoundingBoxConstraint(
-      Eigen::Matrix3d::Zero(), Eigen::Matrix3d::Zero(), problem.R_WB()[1]);
+      0, 0, problem.R_WB()[1]);
   auto v_B0_constraint = problem.get_mutable_prog()->AddBoundingBoxConstraint(
       Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero(), problem.v_B().col(0));
   auto v_B1_constraint = problem.get_mutable_prog()->AddBoundingBoxConstraint(
@@ -62,7 +63,34 @@ GTEST_TEST(QuasiDynamicObjectContactPlanningTest, TestInterpolation) {
     R_WB0_constraint.evaluator()->UpdateUpperBound(R_WB0_flat);
     R_WB1_constraint.evaluator()->UpdateLowerBound(R_WB1_flat);
     R_WB1_constraint.evaluator()->UpdateUpperBound(R_WB1_flat);
+    v_B0_constraint.evaluator()->UpdateLowerBound(v_B0);
+    v_B0_constraint.evaluator()->UpdateUpperBound(v_B0);
+    v_B1_constraint.evaluator()->UpdateLowerBound(v_B1);
+    v_B1_constraint.evaluator()->UpdateUpperBound(v_B1);
+    omega_B0_constraint.evaluator()->UpdateLowerBound(omega_B0);
+    omega_B0_constraint.evaluator()->UpdateUpperBound(omega_B0);
+    omega_B1_constraint.evaluator()->UpdateLowerBound(omega_B1);
+    omega_B1_constraint.evaluator()->UpdateUpperBound(omega_B1);
+    prog->SetSolverOption(solvers::GurobiSolver::id(), "DualReductions", 0);
+    const auto solution_result = prog->Solve();
+    EXPECT_EQ(solution_result,
+              feasible ? solvers::SolutionResult::kSolutionFound
+                       : solvers::SolutionResult::kInfeasibleConstraints);
   };
+
+  // Case 1, static
+  CheckFeasibility(problem.get_mutable_prog(), Eigen::Vector3d::Ones(),
+                   Eigen::Vector3d::Ones(), Eigen::Matrix3d::Identity(),
+                   Eigen::Matrix3d::Identity(), Eigen::Vector3d::Zero(),
+                   Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero(),
+                   Eigen::Vector3d::Zero(), true);
+
+  // Case 2, only translational motion, no rotational motion.
+  CheckFeasibility(problem.get_mutable_prog(), Eigen::Vector3d::Zero(),
+                   Eigen::Vector3d(0.05, 0.06, 0.07), Eigen::Matrix3d::Identity(),
+                   Eigen::Matrix3d::Identity(), Eigen::Vector3d(0.8, 0.9, 0.7),
+                   Eigen::Vector3d(0.2, 0.3, 0.7), Eigen::Vector3d::Zero(),
+                   Eigen::Vector3d::Zero(), true);
 }
 }  // namespace planner
 }  // namespace manipulation
