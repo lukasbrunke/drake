@@ -131,9 +131,15 @@ ObjectContactPlanning::CalcContactForceInWorldFrame(
     // node. On the other hand, on the same test, if we do not have this
     // constraint, gurobi needs to explore thousands of nodes to find a feasible
     // solution.
-    lambda_f[i] = prog_->NewContinuousVariables(phi_f[i].rows(), lambda_name);
-    b_f[i] = solvers::AddLogarithmicSos2Constraint(
-        prog_.get(), lambda_f[i].cast<Expression>(), b_f_name);
+    //lambda_f[i] = prog_->NewContinuousVariables(phi_f[i].rows(), lambda_name);
+    //b_f[i] = solvers::AddLogarithmicSos2Constraint(
+    //    prog_.get(), lambda_f[i].cast<Expression>(), b_f_name);
+    //if (binning_f_B) {
+    //  prog_->AddLinearEqualityConstraint(phi_f[i].dot(lambda_f[i]) - f_B(i), 0);
+    //} else {
+    //  prog_->AddLinearEqualityConstraint(phi_f[i].dot(lambda_f[i]) - f_W(i), 0);
+    //}
+    b_f[i] = prog_->NewBinaryVariables(solvers::CeilLog2(phi_f[i].rows() - 1), b_f_name);
   }
 
   // If binning_f_B = true, then R_times_f(i, j) is an approximation of
