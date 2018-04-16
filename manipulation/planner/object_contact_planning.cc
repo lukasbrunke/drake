@@ -121,8 +121,8 @@ ObjectContactPlanning::CalcContactForceInWorldFrame(
     bool binning_f_B, const std::array<Eigen::VectorXd, 3>& phi_f) {
   std::array<VectorXDecisionVariable, 3> b_f;
 
-  std::array<VectorXDecisionVariable, 3> lambda_f;
-  const std::string lambda_name = binning_f_B ? "lambda_f_B" : "lambda_f_W";
+  // std::array<VectorXDecisionVariable, 3> lambda_f;
+  // const std::string lambda_name = binning_f_B ? "lambda_f_B" : "lambda_f_W";
   const std::string b_f_name = binning_f_B ? "b_f_B" : "b_f_W";
   for (int i = 0; i < 3; ++i) {
     // In practice, adding the sos2 constraint for b_f makes the computation
@@ -131,15 +131,19 @@ ObjectContactPlanning::CalcContactForceInWorldFrame(
     // node. On the other hand, on the same test, if we do not have this
     // constraint, gurobi needs to explore thousands of nodes to find a feasible
     // solution.
-    //lambda_f[i] = prog_->NewContinuousVariables(phi_f[i].rows(), lambda_name);
-    //b_f[i] = solvers::AddLogarithmicSos2Constraint(
+    // lambda_f[i] = prog_->NewContinuousVariables(phi_f[i].rows(),
+    // lambda_name);
+    // b_f[i] = solvers::AddLogarithmicSos2Constraint(
     //    prog_.get(), lambda_f[i].cast<Expression>(), b_f_name);
-    //if (binning_f_B) {
-    //  prog_->AddLinearEqualityConstraint(phi_f[i].dot(lambda_f[i]) - f_B(i), 0);
+    // if (binning_f_B) {
+    //  prog_->AddLinearEqualityConstraint(phi_f[i].dot(lambda_f[i]) - f_B(i),
+    //  0);
     //} else {
-    //  prog_->AddLinearEqualityConstraint(phi_f[i].dot(lambda_f[i]) - f_W(i), 0);
+    //  prog_->AddLinearEqualityConstraint(phi_f[i].dot(lambda_f[i]) - f_W(i),
+    //  0);
     //}
-    b_f[i] = prog_->NewBinaryVariables(solvers::CeilLog2(phi_f[i].rows() - 1), b_f_name);
+    b_f[i] = prog_->NewBinaryVariables(solvers::CeilLog2(phi_f[i].rows() - 1),
+                                       b_f_name);
   }
 
   // If binning_f_B = true, then R_times_f(i, j) is an approximation of
@@ -181,6 +185,22 @@ ObjectContactPlanning::CalcContactForceInWorldFrame(
         Eigen::VectorXd::Zero(f_B.rows()));
   }
 
+  // Now impose the constraint that lambda_R_times_f[i][j].colwise().sum() 
+  // is lambda_f[j], where lambda_f[j]ᵀ * phi_f = f(j).
+  for (int j = 0; j < 3; ++j) {
+    const VectorX<symbolic::Expression> lambda_f =
+        lambda_R_times_f[0][j].cast<Expression>().colwise().sum().transpose();
+    for (int i = 1; i < 3; ++i) {
+      prog_->AddLinearEqualityConstraint(
+          lambda_R_times_f[i][j]
+                  .cast<Expression>()
+                  .colwise()
+                  .sum()
+                  .transpose() -
+              lambda_f,
+          Eigen::VectorXd::Zero(lambda_R_times_f[0][j].cols()));
+    }
+  }
   // for (int i = 0; i < 3; ++i) {
   //  for (int j = 0; j < 3; ++j) {
   //      // Now add the constraint that lambda_R_times_f[i, j].colwise.sum() ==

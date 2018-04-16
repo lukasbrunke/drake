@@ -121,6 +121,85 @@ GTEST_TEST(ObjectContactPlanningTest,
   CheckPusherContactAssignment(problem, {1, 0, 0, 0, 0}, {1, 1, 0, 1}, false);
 }
 
+GTEST_TEST(ObjectContactPlanningTest, TestCalcContactForceInWorldFrame) {
+  // Check if the relaxation on the bilinear constraint f_W = R_WB * f_B.
+  Block block;
+  const int num_pusher = 0;
+  ObjectContactPlanning problem(1, block.mass(), block.center_of_mass(),
+                                block.p_BV(), num_pusher, block.Q());
+  problem.SetContactVertexIndices(0, {0}, 10);
+
+  const auto f_W = problem.get_mutable_prog()->NewContinuousVariables<3>("f_W");
+
+  std::array<Eigen::VectorXd, 3> phi_f_W;
+  phi_f_W[0].resize(5);
+  phi_f_W[0] << -10, -5, 0, 5, 10;
+  phi_f_W[1].resize(5);
+  phi_f_W[1] << -10, -5, 0, 5, 10;
+  phi_f_W[2].resize(3);
+  phi_f_W[2] << 0, 5, 10;
+
+  const std::array<Eigen::VectorXd, 3> phi_f_B = phi_f_W;
+
+  bool binning_f_B = true;
+  const auto b_f_B = problem.CalcContactForceInWorldFrame(
+      problem.f_BV()[0].col(0), f_W, 0, binning_f_B, phi_f_B);
+  binning_f_B = false;
+  const auto b_f_W = problem.CalcContactForceInWorldFrame(
+      problem.f_BV()[0].col(0), f_W, 0, binning_f_B, phi_f_W);
+
+  auto f_B_constraint = problem.get_mutable_prog()->AddBoundingBoxConstraint(
+      0, 0, problem.f_BV()[0].col(0));
+  auto f_W_constraint =
+      problem.get_mutable_prog()->AddBoundingBoxConstraint(0, 0, f_W);
+  auto R_WB_constraint = problem.get_mutable_prog()->AddBoundingBoxConstraint(
+      0, 0, problem.R_WB()[0]);
+
+  auto CheckFeasibility = [&f_B_constraint, &f_W_constraint, &R_WB_constraint](
+      solvers::MathematicalProgram* prog,
+      const Eigen::Ref<const Eigen::Vector3d>& f_B_val,
+      const Eigen::Ref<const Eigen::Vector3d>& f_W_val,
+      const Eigen::Ref<const Eigen::Matrix3d>& R_WB_val, bool is_feasible) {
+    f_B_constraint.evaluator()->UpdateLowerBound(f_B_val);
+    f_B_constraint.evaluator()->UpdateUpperBound(f_B_val);
+    f_W_constraint.evaluator()->UpdateLowerBound(f_W_val);
+    f_W_constraint.evaluator()->UpdateUpperBound(f_W_val);
+    Eigen::Matrix<double, 9, 1> R_WB_flat_val;
+    R_WB_flat_val << R_WB_val.col(0), R_WB_val.col(1), R_WB_val.col(2);
+    R_WB_constraint.evaluator()->UpdateLowerBound(R_WB_flat_val);
+    R_WB_constraint.evaluator()->UpdateUpperBound(R_WB_flat_val);
+    prog->SetSolverOption(solvers::GurobiSolver::id(), "DualReductions", 0);
+    const auto result = prog->Solve();
+    EXPECT_EQ(result,
+              is_feasible ? solvers::SolutionResult::kSolutionFound
+                          : solvers::SolutionResult::kInfeasibleConstraints);
+  };
+
+  CheckFeasibility(problem.get_mutable_prog(), Eigen::Vector3d::Zero(),
+                   Eigen::Vector3d::Zero(), Eigen::Matrix3d::Identity(), true);
+  CheckFeasibility(problem.get_mutable_prog(), Eigen::Vector3d(1, 2, 3),
+                   Eigen::Vector3d(1, 2, 3), Eigen::Matrix3d::Identity(), true);
+  CheckFeasibility(problem.get_mutable_prog(), Eigen::Vector3d(1, 2, 3),
+                   Eigen::Vector3d(0, 0, 0), Eigen::Matrix3d::Identity(),
+                   false);
+  // Test with some arbitrary pose and force.
+  Eigen::Matrix3d R_WB_val =
+      Eigen::AngleAxisd(0.2, Eigen::Vector3d(0.1, 0.2, 0.3).normalized())
+          .toRotationMatrix();
+  Eigen::Vector3d f_B_val(0.5, -0.2, 1.3);
+  CheckFeasibility(problem.get_mutable_prog(), f_B_val, R_WB_val * f_B_val,
+                   R_WB_val, true);
+
+  R_WB_val =
+      Eigen::AngleAxisd(0.3, Eigen::Vector3d::UnitZ()).toRotationMatrix();
+  f_B_val << 0.7, -0.1, 2.5;
+  CheckFeasibility(problem.get_mutable_prog(), f_B_val, R_WB_val * f_B_val,
+                   R_WB_val, true);
+  CheckFeasibility(problem.get_mutable_prog(), f_B_val,
+                   R_WB_val * f_B_val + Eigen::Vector3d(0.4, 0.2, -0.4),
+                   R_WB_val, false);
+}
+
 GTEST_TEST(ObjectContactPlanningTest, TestStaticSinglePosture) {
   // Find a single posture, that the block is on the table, with bottom vertices
   // in contact with the table.
