@@ -109,7 +109,7 @@ void QuasiDynamicObjectContactPlanning::AddInterpolationConstraint() {
     }
   }
 
-  /*for (int interval = 0; interval < nT() - 1; ++interval) {
+  for (int interval = 0; interval < nT() - 1; ++interval) {
     const int knot0 = interval;
     const int knot1 = interval + 1;
     get_mutable_prog()->AddLinearEqualityConstraint(
@@ -122,7 +122,7 @@ void QuasiDynamicObjectContactPlanning::AddInterpolationConstraint() {
             0.5 * dt_ *
                 (R_times_omega_B_hat[knot0] + R_times_omega_B_hat[knot1]),
         Eigen::Matrix3d::Zero());
-  }*/
+  }
 }
 }  // namespace planner
 }  // namespace manipulation
