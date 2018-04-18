@@ -33,19 +33,11 @@ void QuasiDynamicObjectContactPlanning::AddInterpolationConstraint() {
     b_v_B_[i].resize(nT());
     b_omega_B_[i].resize(nT());
     for (int j = 0; j < nT(); ++j) {
-      const auto lambda_v_B = get_mutable_prog()->NewContinuousVariables(
-          phi_v_B_.rows(),
-          "lambda_v_B[" + std::to_string(i) + "][" + std::to_string(j) + "]");
-      b_v_B_[i][j] = AddLogarithmicSos2Constraint(
-          get_mutable_prog(), lambda_v_B.cast<symbolic::Expression>(),
+      b_v_B_[i][j] = get_mutable_prog()->NewBinaryVariables(
+          solvers::CeilLog2(phi_v_B_.rows() - 1),
           "b_v_B_[" + std::to_string(i) + "][" + std::to_string(j) + "]");
-
-      const auto lambda_omega_B = get_mutable_prog()->NewContinuousVariables(
-          phi_omega_B_.rows(),
-          "lambda_omega_B[" + std::to_string(i) + "][" + std::to_string(j) +
-              "]");
-      b_omega_B_[i][j] = AddLogarithmicSos2Constraint(
-          get_mutable_prog(), lambda_omega_B.cast<symbolic::Expression>(),
+      b_omega_B_[i][j] = get_mutable_prog()->NewBinaryVariables(
+          solvers::CeilLog2(phi_omega_B_.rows() - 1),
           "b_omega_B_[" + std::to_string(i) + "][" + std::to_string(j) + "]");
     }
   }
@@ -74,13 +66,16 @@ void QuasiDynamicObjectContactPlanning::AddInterpolationConstraint() {
 
     // R_times_omega_B_hat_element(i, j) approximates R_WB_flat[knot](i) *
     // omega_B(j, knot)
-    const auto R_times_omega_B_hat_element =
-        get_mutable_prog()->NewContinuousVariables<9, 3>(
-            "R_times_omega_B_hat_element[" + std::to_string(knot) + "]");
+    Eigen::Matrix<symbolic::Expression, 9, 3> R_times_omega_B_hat_element;
     for (int i = 0; i < 3; ++i) {
       for (int j = 0; j < 3; ++j) {
         for (int k = 0; k < 3; ++k) {
           if (k != j) {
+            R_times_omega_B_hat_element(3 * j + i, k) =
+                get_mutable_prog()->NewContinuousVariables<1, 1>(
+                    "R_WB[" + std::to_string(knot) + "](" + std::to_string(i) +
+                    "," + std::to_string(j) + ")*omega_B(" + std::to_string(k) +
+                    "," + std::to_string(knot) + ")")(0);
             solvers::AddBilinearProductMcCormickEnvelopeSos2(
                 get_mutable_prog(), R_WB()[knot](i, j), omega_B_(k, knot),
                 R_times_omega_B_hat_element(3 * j + i, k), phi_R_WB(),

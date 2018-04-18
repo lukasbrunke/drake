@@ -4,6 +4,7 @@
 
 #include "drake/common/test_utilities/eigen_matrix_compare.h"
 #include "drake/manipulation/planner/test/block_test_util.h"
+#include "drake/math/rotation_matrix.h"
 #include "drake/solvers/gurobi_solver.h"
 
 namespace drake {
@@ -32,12 +33,26 @@ void ComputeFinalPoseUsingMidPointInterpolation(
     const Eigen::Ref<const Eigen::Vector3d>& omega_B1, Eigen::Vector3d* p_WB1,
     Eigen::Matrix3d* R_WB1) {
   const Eigen::Matrix3d Dt_R_WB0 = R_WB0 * SkewSymmetric(omega_B0);
-  // The mid point interpolation we use is
+  // The mid point interpolation for orientation is
   // R_WB1 - R_WB0 = (R_WB0 * SkewSymmetric(omega_B0) + R_WB1 *
   // SkewSymmetric(omega_B1)) * dt / 2
   // Notice that this interpolation does not guarantee to satisfy SO(3)
   // constraint.
-  
+  *R_WB1 = (R_WB0 + Dt_R_WB0 * dt / 2) *
+           ((Eigen::Matrix3d::Identity() - SkewSymmetric(omega_B1 * dt / 2))
+                .inverse());
+  std::cout << *R_WB1 - R_WB0 -
+                   (R_WB0 * SkewSymmetric(omega_B0) +
+                    *R_WB1 * SkewSymmetric(omega_B1)) *
+                       dt / 2
+            << std::endl;
+  *R_WB1 =
+      math::RotationMatrix<double>::ProjectToRotationMatrix(*R_WB1, nullptr)
+          .matrix();
+
+  // The mid point interpolation for position is
+  // p_WB1 - p_WB0 = (R_WB1 * v_B1 + R_WB0 * v_B0) * dt / 2
+  *p_WB1 = p_WB0 + (*R_WB1 * v_B1 + R_WB0 * v_B0) * dt / 2;
 }
 
 GTEST_TEST(QuasiDynamicObjectContactPlanningTest, TestInterpolation) {
@@ -115,19 +130,42 @@ GTEST_TEST(QuasiDynamicObjectContactPlanningTest, TestInterpolation) {
                    Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero(),
                    Eigen::Vector3d::Zero(), true);
 
+  Eigen::Matrix3d R_WB0 = Eigen::Matrix3d::Identity();
+  Eigen::Vector3d p_WB0(0, 0, 0);
+  Eigen::Vector3d v_B0(0.8, 0.9, 0.7);
+  Eigen::Vector3d omega_B0(0, 0, 0);
+  Eigen::Matrix3d R_WB1;
+  Eigen::Vector3d p_WB1;
+  Eigen::Vector3d v_B1(0.2, 0.3, 0.7);
+  Eigen::Vector3d omega_B1(0, 0, 0);
+  ComputeFinalPoseUsingMidPointInterpolation(dt, p_WB0, R_WB0, v_B0, omega_B0,
+                                             v_B1, omega_B1, &p_WB1, &R_WB1);
   // Case 2, only translational motion, no rotational motion.
-  CheckFeasibility(problem.get_mutable_prog(), Eigen::Vector3d::Zero(),
-                   Eigen::Vector3d(0.05, 0.06, 0.07),
-                   Eigen::Matrix3d::Identity(), Eigen::Matrix3d::Identity(),
-                   Eigen::Vector3d(0.8, 0.9, 0.7),
-                   Eigen::Vector3d(0.2, 0.3, 0.7), Eigen::Vector3d::Zero(),
-                   Eigen::Vector3d::Zero(), true);
+  CheckFeasibility(problem.get_mutable_prog(), p_WB0, p_WB1, R_WB0, R_WB1, v_B0,
+                   v_B1, omega_B0, omega_B1, true);
 
   // Case 3, only translational motion, no rotational motion. The orientation
   // is not identity.
-  Eigen::Matrix3d R_WB0 =
-      Eigen::AngleAxisd(0.2, Eigen::Vector3d(0.1, 0.2, 0.3).normalized())
-          .toRotationMatrix();
+  R_WB0 = Eigen::AngleAxisd(0.2, Eigen::Vector3d(0.1, 0.2, 0.3).normalized())
+              .toRotationMatrix();
+  ComputeFinalPoseUsingMidPointInterpolation(dt, p_WB0, R_WB0, v_B0, omega_B0,
+                                             v_B1, omega_B1, &p_WB1, &R_WB1);
+  CheckFeasibility(problem.get_mutable_prog(), p_WB0, p_WB1, R_WB0, R_WB1, v_B0,
+                   v_B1, omega_B0, omega_B1, true);
+
+  // Case 4, only rotational motion, no translational motion.
+  R_WB0 = Eigen::Matrix3d::Identity();
+  p_WB0 = Eigen::Vector3d::Zero();
+  v_B0 = Eigen::Vector3d::Zero();
+  omega_B0 = Eigen::Vector3d(0.2, 0.4, 1.2);
+  v_B1 = Eigen::Vector3d::Zero();
+  omega_B1 = Eigen::Vector3d(0.2, 0.4, 1.2);
+  ComputeFinalPoseUsingMidPointInterpolation(dt, p_WB0, R_WB0, v_B0, omega_B0,
+                                             v_B1, omega_B1, &p_WB1, &R_WB1);
+  std::cout << "p_WB1: " << p_WB1.transpose() << "\n";
+  std::cout << "R_WB1\n" << R_WB1 << "\n";
+  CheckFeasibility(problem.get_mutable_prog(), p_WB0, p_WB1, R_WB0, R_WB1, v_B0,
+                   v_B1, omega_B0, omega_B1, true);
 }
 }  // namespace planner
 }  // namespace manipulation

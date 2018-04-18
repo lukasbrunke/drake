@@ -204,6 +204,7 @@ drake_cc_googletest(
         ":quasi_dynamic_object_contact_planning",
         ":block_test_util",
         "//common/test_utilities:eigen_matrix_compare",
+        "//math:geometric_transform",
     ],
 )
 
