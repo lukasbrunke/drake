@@ -33,11 +33,17 @@ class QuasiDynamicObjectContactPlanning : public ObjectContactPlanning {
 
  private:
   // Add the interpolation constraint
+  void AddInterpolationConstraint();
+
+  // Add the translation interpolation constraint
   // p_WB[knot+1] - p_WB[knot] = 0.5 * (R_WB[knot] * v_B_.col(knot) + R_WB[knot
   // + 1] * v_B_.col[knot + 1]) * dt
-  // R_WB[knot+1] - R_WB[knot] = 0.5 * (R_WB[knot] * hat(omega_B.col(knot)) +
-  // R_WB[knot + 1] * hat(omega_B.col(knot + 1))) * dt
-  void AddInterpolationConstraint();
+  void AddTranslationInterpolationConstraint();
+
+  // Add the orientation interpolation constraint
+  // R_WB[knot+1] - R_WB[knot] = 0.5 * (R_WB[knot] + R_WB[knot+1]) *
+  // SkewSymmetric((omega_B_.col(knot) + omega_B_.col(knot + 1))  * dt / 2)
+  void AddOrientationInterpolationConstraint();
 
   double dt_;
   Eigen::Matrix3d I_B_;
@@ -50,10 +56,9 @@ class QuasiDynamicObjectContactPlanning : public ObjectContactPlanning {
   // b_v_B[i][j] are the binary variables, indicating which interval v_B_(i, j)
   // is in.
   std::array<std::vector<solvers::VectorXDecisionVariable>, 3> b_v_B_;
-  // b_omega_B[i][j] are the binary variables, indicating which interval
-  // omega_B_(i, j) is in.
-  std::array<std::vector<solvers::VectorXDecisionVariable>, 3> b_omega_B_;
-  
+  // b_omega_average[i][j] are the binary variables, indicating which interval
+  // (omega_B_(i, j) + omega_B_(i, j+1)) / 2 is in.
+  std::array<std::vector<solvers::VectorXDecisionVariable>, 3> b_omega_average_;
 };
 }  // namespace planner
 }  // namespace manipulation

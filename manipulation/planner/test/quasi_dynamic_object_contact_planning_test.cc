@@ -32,23 +32,15 @@ void ComputeFinalPoseUsingMidPointInterpolation(
     const Eigen::Ref<const Eigen::Vector3d>& v_B1,
     const Eigen::Ref<const Eigen::Vector3d>& omega_B1, Eigen::Vector3d* p_WB1,
     Eigen::Matrix3d* R_WB1) {
-  const Eigen::Matrix3d Dt_R_WB0 = R_WB0 * SkewSymmetric(omega_B0);
   // The mid point interpolation for orientation is
-  // R_WB1 - R_WB0 = (R_WB0 * SkewSymmetric(omega_B0) + R_WB1 *
-  // SkewSymmetric(omega_B1)) * dt / 2
-  // Notice that this interpolation does not guarantee to satisfy SO(3)
-  // constraint.
-  *R_WB1 = (R_WB0 + Dt_R_WB0 * dt / 2) *
-           ((Eigen::Matrix3d::Identity() - SkewSymmetric(omega_B1 * dt / 2))
-                .inverse());
-  std::cout << *R_WB1 - R_WB0 -
-                   (R_WB0 * SkewSymmetric(omega_B0) +
-                    *R_WB1 * SkewSymmetric(omega_B1)) *
-                       dt / 2
-            << std::endl;
+  // R_WB1 - R_WB0 = (R_WB1 + R_WB0) * (SkewSymmetric((omega_B0 + omega_B1)/2))
+  // * dt / 2
+  const Eigen::Vector3d omega_average = (omega_B0 + omega_B1) / 2;
   *R_WB1 =
-      math::RotationMatrix<double>::ProjectToRotationMatrix(*R_WB1, nullptr)
-          .matrix();
+      R_WB0 *
+      (Eigen::Matrix3d::Identity() + SkewSymmetric(omega_average * dt / 2)) *
+      ((Eigen::Matrix3d::Identity() - SkewSymmetric(omega_average * dt / 2))
+           .inverse());
 
   // The mid point interpolation for position is
   // p_WB1 - p_WB0 = (R_WB1 * v_B1 + R_WB0 * v_B0) * dt / 2
@@ -153,7 +145,8 @@ GTEST_TEST(QuasiDynamicObjectContactPlanningTest, TestInterpolation) {
   CheckFeasibility(problem.get_mutable_prog(), p_WB0, p_WB1, R_WB0, R_WB1, v_B0,
                    v_B1, omega_B0, omega_B1, true);
 
-  // Case 4, only rotational motion, no translational motion.
+  // Case 4, only rotational motion, no translational motion, same angular
+  // velocity
   R_WB0 = Eigen::Matrix3d::Identity();
   p_WB0 = Eigen::Vector3d::Zero();
   v_B0 = Eigen::Vector3d::Zero();
@@ -162,10 +155,25 @@ GTEST_TEST(QuasiDynamicObjectContactPlanningTest, TestInterpolation) {
   omega_B1 = Eigen::Vector3d(0.2, 0.4, 1.2);
   ComputeFinalPoseUsingMidPointInterpolation(dt, p_WB0, R_WB0, v_B0, omega_B0,
                                              v_B1, omega_B1, &p_WB1, &R_WB1);
-  std::cout << "p_WB1: " << p_WB1.transpose() << "\n";
-  std::cout << "R_WB1\n" << R_WB1 << "\n";
   CheckFeasibility(problem.get_mutable_prog(), p_WB0, p_WB1, R_WB0, R_WB1, v_B0,
                    v_B1, omega_B0, omega_B1, true);
+
+  // Case 5, only rotation motion, no translational motion, different angular
+  // velocity.
+  omega_B1 = Eigen::Vector3d(0.1, 0.5, 1.4);
+  ComputeFinalPoseUsingMidPointInterpolation(dt, p_WB0, R_WB0, v_B0, omega_B0,
+                                             v_B1, omega_B1, &p_WB1, &R_WB1);
+  CheckFeasibility(problem.get_mutable_prog(), p_WB0, p_WB1, R_WB0, R_WB1, v_B0,
+                   v_B1, omega_B0, omega_B1, true);
+
+  // Case 6, with both rotation and translational motion.
+  v_B0 = Eigen::Vector3d(0.4, -0.1, 0.5);
+  v_B1 = Eigen::Vector3d(0.2, -0.4, 0.3);
+  ComputeFinalPoseUsingMidPointInterpolation(dt, p_WB0, R_WB0, v_B0, omega_B0,
+                                             v_B1, omega_B1, &p_WB1, &R_WB1);
+  CheckFeasibility(problem.get_mutable_prog(), p_WB0, p_WB1, R_WB0, R_WB1, v_B0,
+                   v_B1, omega_B0, omega_B1, true);
+
 }
 }  // namespace planner
 }  // namespace manipulation
