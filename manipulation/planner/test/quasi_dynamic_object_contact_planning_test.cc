@@ -52,9 +52,11 @@ GTEST_TEST(QuasiDynamicObjectContactPlanningTest, TestInterpolation) {
   const int nT = 2;
   const double dt = 0.1;
   const int num_pushers = 0;
+  const double max_linear_velocity = 1;
+  const double max_angular_velocity = M_PI;
   QuasiDynamicObjectContactPlanning problem(
       nT, dt, block.mass(), block.I_B(), block.center_of_mass(), block.p_BV(),
-      num_pushers, block.Q(), false);
+      num_pushers, block.Q(), max_linear_velocity, max_angular_velocity, false);
 
   auto p_WB0_constraint = problem.get_mutable_prog()->AddBoundingBoxConstraint(
       Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero(), problem.p_WB()[0]);
@@ -173,7 +175,6 @@ GTEST_TEST(QuasiDynamicObjectContactPlanningTest, TestInterpolation) {
                                              v_B1, omega_B1, &p_WB1, &R_WB1);
   CheckFeasibility(problem.get_mutable_prog(), p_WB0, p_WB1, R_WB0, R_WB1, v_B0,
                    v_B1, omega_B0, omega_B1, true);
-
 }
 }  // namespace planner
 }  // namespace manipulation

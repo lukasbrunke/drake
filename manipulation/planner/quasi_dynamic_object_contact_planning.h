@@ -9,12 +9,29 @@ class QuasiDynamicObjectContactPlanning : public ObjectContactPlanning {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(QuasiDynamicObjectContactPlanning)
 
+  /**
+   * @param nT The number of knots.
+   * @param dt The length of each time interval.
+   * @param mass The mass of the object.
+   * @param I_B The inertia matrix, measured in the body frame.
+   * @param p_BC The position of object CoM "C", measured in the body frame B.
+   * @param p_BV The positions of all the vertices on the object, measured in
+   * the body frame B.
+   * @param num_pushers Number of pushers.
+   * @param Q The candidate pusher contact point on the object.
+   * @param max_linear_velocity. The maximal linear velocity along each axis of
+   * the body frame. The linear velocity is measured in the body frame.
+   * @param max_angular_velocity. The maximal angular velocity along each axis
+   * of the body frame. The angular velocity is measured in the body frame.
+   */
   QuasiDynamicObjectContactPlanning(
       int nT, double dt, double mass,
       const Eigen::Ref<const Eigen::Matrix3d>& I_B,
       const Eigen::Ref<const Eigen::Vector3d>& p_BC,
       const Eigen::Ref<const Eigen::Matrix3Xd>& p_BV, int num_pushers,
       const std::vector<BodyContactPoint>& Q,
+      double max_linear_velocity,
+      double max_angular_velocity,
       bool add_second_order_cone_for_R = false);
 
   ~QuasiDynamicObjectContactPlanning() = default;
@@ -32,18 +49,15 @@ class QuasiDynamicObjectContactPlanning : public ObjectContactPlanning {
   }
 
  private:
-  // Add the interpolation constraint
-  void AddInterpolationConstraint();
-
   // Add the translation interpolation constraint
   // p_WB[knot+1] - p_WB[knot] = 0.5 * (R_WB[knot] * v_B_.col(knot) + R_WB[knot
   // + 1] * v_B_.col[knot + 1]) * dt
-  void AddTranslationInterpolationConstraint();
+  void AddTranslationInterpolationConstraint(double max_linear_velocity);
 
   // Add the orientation interpolation constraint
   // R_WB[knot+1] - R_WB[knot] = 0.5 * (R_WB[knot] + R_WB[knot+1]) *
   // SkewSymmetric((omega_B_.col(knot) + omega_B_.col(knot + 1))  * dt / 2)
-  void AddOrientationInterpolationConstraint();
+  void AddOrientationInterpolationConstraint(double max_angular_velocity);
 
   double dt_;
   Eigen::Matrix3d I_B_;

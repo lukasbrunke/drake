@@ -12,7 +12,8 @@ QuasiDynamicObjectContactPlanning::QuasiDynamicObjectContactPlanning(
     const Eigen::Ref<const Eigen::Matrix3d>& I_B,
     const Eigen::Ref<const Eigen::Vector3d>& p_BC,
     const Eigen::Ref<const Eigen::Matrix3Xd>& p_BV, int num_pushers,
-    const std::vector<BodyContactPoint>& Q, bool add_second_order_cone_for_R)
+    const std::vector<BodyContactPoint>& Q, double max_linear_velocity,
+    double max_angular_velocity, bool add_second_order_cone_for_R)
     : ObjectContactPlanning(nT, mass, p_BC, p_BV, num_pushers, Q,
                             add_second_order_cone_for_R),
       dt_{dt},
@@ -21,19 +22,17 @@ QuasiDynamicObjectContactPlanning::QuasiDynamicObjectContactPlanning(
           3, this->nT(), "v_B")},
       omega_B_{get_mutable_prog()->NewContinuousVariables<3, Eigen::Dynamic>(
           3, this->nT(), "omega_B")} {
-  // Add the interpolation constraint
   DRAKE_DEMAND(dt_ > 0);
-  AddInterpolationConstraint();
+  // Add the interpolation constraint
+  AddTranslationInterpolationConstraint(max_linear_velocity);
+  AddOrientationInterpolationConstraint(max_angular_velocity);
 }
 
-void QuasiDynamicObjectContactPlanning::AddInterpolationConstraint() {
-  AddTranslationInterpolationConstraint();
-  AddOrientationInterpolationConstraint();
-}
-
-void QuasiDynamicObjectContactPlanning::
-    AddTranslationInterpolationConstraint() {
-  phi_v_B_ << -1, -0.5, 0, 0.5, 1;
+void QuasiDynamicObjectContactPlanning::AddTranslationInterpolationConstraint(
+    double max_linear_velocity) {
+  phi_v_B_ = Eigen::Matrix<double, 5, 1>::LinSpaced(-max_linear_velocity,
+                                                    max_linear_velocity);
+  phi_v_B_(2) = 0;
   for (int i = 0; i < 3; ++i) {
     b_v_B_[i].resize(nT());
     for (int j = 0; j < nT(); ++j) {
@@ -74,9 +73,11 @@ void QuasiDynamicObjectContactPlanning::
   }
 }
 
-void QuasiDynamicObjectContactPlanning::
-    AddOrientationInterpolationConstraint() {
-  phi_omega_B_ << -M_PI, -M_PI / 2, 0, M_PI / 2, M_PI;
+void QuasiDynamicObjectContactPlanning::AddOrientationInterpolationConstraint(
+    double max_angular_velocity) {
+  phi_omega_B_ = Eigen::Matrix<double, 5, 1>::LinSpaced(-max_angular_velocity,
+                                                        max_angular_velocity);
+  phi_omega_B_(2) = 0;
   for (int i = 0; i < 3; ++i) {
     b_omega_average_[i].resize(nT() - 1);
     for (int j = 0; j < nT() - 1; ++j) {
