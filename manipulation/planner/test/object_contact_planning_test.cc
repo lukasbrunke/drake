@@ -403,6 +403,19 @@ GTEST_TEST(ObjectContactPlanningTest, SinglePostureWithPushers) {
   EXPECT_TRUE(CompareMatrices(total_force, Eigen::Vector3d::Zero(), tol));
   EXPECT_TRUE(CompareMatrices(total_torque, Eigen::Vector3d::Zero(), tol));
 }
+
+GTEST_TEST(ObjectContactPlanning, TestOrientationDifference) {
+  // To verify the math
+  // | R₁ - R₂ |² = (2√2 sin(α/2))²
+  // where α is the angle between the rotation matrix R₁ and R₂.
+  Eigen::AngleAxisd R(0.1, Eigen::Vector3d(0.1, 0.2, 0.3).normalized());
+  EXPECT_NEAR(
+      ((R.toRotationMatrix() - Eigen::Matrix3d::Identity()) *
+       ((R.toRotationMatrix() - Eigen::Matrix3d::Identity()).transpose()))
+          .trace(),
+      std::pow(2 * std::sqrt(2) * std::sin(0.1 / 2), 2), 1E-10);
+}
+
 }  // namespace planner
 }  // namespace manipulation
 }  // namespace drake

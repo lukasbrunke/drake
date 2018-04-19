@@ -209,8 +209,8 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
-    name = "block_flip_test",
-    srcs = ["test/block_flip_test.cc"],
+    name = "quasi_static_block_flip_test",
+    srcs = ["test/quasi_static_block_flip_test.cc"],
     tags = gurobi_test_tags(),
     deps = [
         ":quasi_static_object_contact_planning",

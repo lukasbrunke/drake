@@ -19,18 +19,6 @@ namespace drake {
 namespace manipulation {
 namespace planner {
 namespace {
-GTEST_TEST(ObjectContactPlanning, TestOrientationDifference) {
-  // To verify the math
-  // | R₁ - R₂ |² = (2√2 sin(α/2))²
-  // where α is the angle between the rotation matrix R₁ and R₂.
-  Eigen::AngleAxisd R(0.1, Eigen::Vector3d(0.1, 0.2, 0.3).normalized());
-  EXPECT_NEAR(
-      ((R.toRotationMatrix() - Eigen::Matrix3d::Identity()) *
-       ((R.toRotationMatrix() - Eigen::Matrix3d::Identity()).transpose()))
-          .trace(),
-      std::pow(2 * std::sqrt(2) * std::sin(0.1 / 2), 2), 1E-10);
-}
-
 class BlockFlipTest : public ::testing::TestWithParam<std::tuple<int, int>> {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(BlockFlipTest)
@@ -253,16 +241,7 @@ class BlockFlipTest : public ::testing::TestWithParam<std::tuple<int, int>> {
     }
   }
 
- protected:
-  Block block_;
-  int num_pushers_;
-  int nT_;
-  QuasiStaticObjectContactPlanning problem_;
-  std::vector<MatrixDecisionVariable<3, Eigen::Dynamic>> f_WV_;
-};
-
-TEST_P(BlockFlipTest, TestOnePusher) {
-  if (num_pushers_ == 1) {
+  void TestOnePusher() {
     problem_.get_mutable_prog()->SetSolverOption(solvers::GurobiSolver::id(),
                                                  "OutputFlag", 1);
 
@@ -279,10 +258,8 @@ TEST_P(BlockFlipTest, TestOnePusher) {
     GetSolution(&sol);
     VisualizeResult(sol);
   }
-}
 
-TEST_P(BlockFlipTest, TestTwoPushers) {
-  if (num_pushers_ == 2) {
+  void TestTwoPushers() {
     problem_.get_mutable_prog()->SetSolverOption(solvers::GurobiSolver::id(),
                                                  "OutputFlag", 1);
 
@@ -319,6 +296,21 @@ TEST_P(BlockFlipTest, TestTwoPushers) {
     Solution sol;
     GetSolution(&sol);
     VisualizeResult(sol);
+  }
+
+ protected:
+  Block block_;
+  int num_pushers_;
+  int nT_;
+  QuasiStaticObjectContactPlanning problem_;
+  std::vector<MatrixDecisionVariable<3, Eigen::Dynamic>> f_WV_;
+};
+
+TEST_P(BlockFlipTest, Test) {
+  if (num_pushers_ == 1) {
+    TestOnePusher();
+  } else if (num_pushers_ == 2) {
+    TestTwoPushers();
   }
 }
 
