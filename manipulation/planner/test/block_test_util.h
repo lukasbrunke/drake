@@ -56,6 +56,23 @@ class Block {
 
   const Eigen::Matrix3d& I_B() const { return I_B_; }
 
+  Eigen::Matrix3Xd vertex_position(
+      const std::vector<int>& vertex_indices) const {
+    Eigen::Matrix3Xd pos(3, vertex_indices.size());
+    for (int i = 0; i < static_cast<int>(vertex_indices.size()); ++i) {
+      pos.col(i) = p_BV_.col(vertex_indices[i]);
+    }
+    return pos;
+  }
+
+  Eigen::Matrix3Xd contact_Q_position(const std::vector<int>& Q_indices) const {
+    Eigen::Matrix3Xd pos(3, Q_indices.size());
+    for (int i = 0; i < static_cast<int>(Q_indices.size()); ++i) {
+      pos.col(i) = Q_[Q_indices[i]].p_BQ();
+    }
+    return pos;
+  }
+
  private:
   Eigen::Matrix<double, 3, 8> p_BV_;
   Eigen::Matrix3d I_B_;

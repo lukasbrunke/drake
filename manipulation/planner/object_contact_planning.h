@@ -246,6 +246,8 @@ class ObjectContactPlanning {
     return contact_Q_indices_;
   }
 
+  double mass() const { return mass_; }
+
  protected:
   const Eigen::Matrix<double, 5, 1>& phi_R_WB() const { return phi_R_WB_; }
 
@@ -256,7 +258,7 @@ class ObjectContactPlanning {
   }
 
   /**
-   * Return the total wrench ([torque force]) at the object body frame origin,
+   * Returns the total wrench ([torque force]) at the object body frame origin,
    * expressed in the object body frame. This wrench includes the gravity
    * wrench, the pusher wrench and the vertex contact wrench.
    */

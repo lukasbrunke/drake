@@ -187,6 +187,20 @@ void QuasiDynamicObjectContactPlanning::AddOrientationInterpolationConstraint(
         Eigen::Matrix3d::Zero());
   }
 }
+
+void QuasiDynamicObjectContactPlanning::AddQuasiDynamicConstraint() {
+  for (int knot = 1; knot < nT(); ++knot) {
+    const Vector6<Expression> total_wrench = TotalWrench(knot);
+    get_mutable_prog()->AddLinearEqualityConstraint(
+        mass() * (v_B_.col(knot) - v_B_.col(knot - 1)) -
+            total_wrench.tail<3>() * dt_,
+        Eigen::Vector3d::Zero());
+    get_mutable_prog()->AddLinearEqualityConstraint(
+        I_B_ * (omega_B_.col(knot) - omega_B_.col(knot - 1)) -
+            total_wrench.head<3>() * dt_,
+        Eigen::Vector3d::Zero());
+  }
+}
 }  // namespace planner
 }  // namespace manipulation
 }  // namespace drake

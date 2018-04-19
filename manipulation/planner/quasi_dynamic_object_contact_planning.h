@@ -29,10 +29,8 @@ class QuasiDynamicObjectContactPlanning : public ObjectContactPlanning {
       const Eigen::Ref<const Eigen::Matrix3d>& I_B,
       const Eigen::Ref<const Eigen::Vector3d>& p_BC,
       const Eigen::Ref<const Eigen::Matrix3Xd>& p_BV, int num_pushers,
-      const std::vector<BodyContactPoint>& Q,
-      double max_linear_velocity,
-      double max_angular_velocity,
-      bool add_second_order_cone_for_R = false);
+      const std::vector<BodyContactPoint>& Q, double max_linear_velocity,
+      double max_angular_velocity, bool add_second_order_cone_for_R = false);
 
   ~QuasiDynamicObjectContactPlanning() = default;
 
@@ -48,6 +46,19 @@ class QuasiDynamicObjectContactPlanning : public ObjectContactPlanning {
     return omega_B_;
   }
 
+  const Eigen::Matrix3d& I_B() const { return I_B_; }
+
+  /**
+   * Add quasi-dynamic constraints
+   * m * (v_B().col(knot + 1) - v_B().col(knot)) = total_force.col(knot + 1) *
+   * dt
+   * I_B * (omega_B().col(knot + 1) - omega_B().col(knot)) =
+   * total_torque.col(knot + 1) * dt
+   * Notice we use a backward Euler integration scheme, that we only consider
+   * the total wrench at the end of the interval.
+   */
+  void AddQuasiDynamicConstraint();
+
  private:
   // Add the translation interpolation constraint
   // p_WB[knot+1] - p_WB[knot] = 0.5 * (R_WB[knot] * v_B_.col(knot) + R_WB[knot
@@ -58,8 +69,6 @@ class QuasiDynamicObjectContactPlanning : public ObjectContactPlanning {
   // R_WB[knot+1] - R_WB[knot] = 0.5 * (R_WB[knot] + R_WB[knot+1]) *
   // SkewSymmetric((omega_B_.col(knot) + omega_B_.col(knot + 1))  * dt / 2)
   void AddOrientationInterpolationConstraint(double max_angular_velocity);
-
-  void AddQuasiDynamicConstraint();
 
   double dt_;
   Eigen::Matrix3d I_B_;
