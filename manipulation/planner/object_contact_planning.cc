@@ -216,8 +216,7 @@ ObjectContactPlanning::CalcContactForceInWorldFrame(
   return b_f;
 }
 
-void ObjectContactPlanning::AddStaticEquilibriumConstraintAtKnot(int knot) {
-  // Write the static equilibrium constraint in the body frame.
+Vector6<Expression> ObjectContactPlanning::TotalWrench(int knot) const {
   const Eigen::Vector3d mg(0, 0, -mass_ * kGravity);
   const Vector3<Expression> mg_B = R_WB_[knot].transpose() * mg;
   Vector3<Expression> total_force = mg_B;
@@ -236,8 +235,12 @@ void ObjectContactPlanning::AddStaticEquilibriumConstraintAtKnot(int knot) {
         Q_[contact_Q_indices_[knot][i]].p_BQ().cross(f_BQ_[knot].col(i));
   }
 
-  prog_->AddLinearConstraint(total_force == Eigen::Vector3d::Zero());
-  prog_->AddLinearConstraint(total_torque == Eigen::Vector3d::Zero());
+  return (Vector6<Expression>() << total_torque, total_force).finished();
+}
+void ObjectContactPlanning::AddStaticEquilibriumConstraintAtKnot(int knot) {
+  // Write the static equilibrium constraint in the body frame.
+  const Vector6<Expression> total_wrench = TotalWrench(knot);
+  prog_->AddLinearConstraint(total_wrench == Vector6<double>::Zero());
 }
 
 optional<symbolic::Variable>

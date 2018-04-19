@@ -255,6 +255,13 @@ class ObjectContactPlanning {
     return b_R_WB_;
   }
 
+  /**
+   * Return the total wrench ([torque force]) at the object body frame origin,
+   * expressed in the object body frame. This wrench includes the gravity
+   * wrench, the pusher wrench and the vertex contact wrench.
+   */
+  Vector6<symbolic::Expression> TotalWrench(int knot) const;
+
  private:
   std::unique_ptr<solvers::MathematicalProgram> prog_;
   const int nT_;

@@ -59,6 +59,8 @@ class QuasiDynamicObjectContactPlanning : public ObjectContactPlanning {
   // SkewSymmetric((omega_B_.col(knot) + omega_B_.col(knot + 1))  * dt / 2)
   void AddOrientationInterpolationConstraint(double max_angular_velocity);
 
+  void AddQuasiDynamicConstraint();
+
   double dt_;
   Eigen::Matrix3d I_B_;
   solvers::MatrixDecisionVariable<3, Eigen::Dynamic> v_B_;
