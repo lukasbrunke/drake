@@ -98,6 +98,9 @@ solvers::MatrixDecisionVariable<3, Eigen::Dynamic> SetTableContactVertices(
     const Block& block, const std::vector<int>& vertex_indices, double mu_table,
     int knot, double distance_big_M, ObjectContactPlanning* problem);
 
+void SetUpBlockFlipTest(
+    const Block& block, int num_pushers, int nT, ObjectContactPlanning* problem,
+    std::vector<solvers::MatrixDecisionVariable<3, Eigen::Dynamic>>* f_WV);
 }  // namespace planner
 }  // namespace manipulation
 }  // namespace drake

@@ -184,6 +184,107 @@ solvers::MatrixDecisionVariable<3, Eigen::Dynamic> SetTableContactVertices(
 
   return f_WV;
 }
+
+void SetUpBlockFlipTest(
+    const Block& block, int num_pushers, int nT, ObjectContactPlanning* problem,
+    std::vector<solvers::MatrixDecisionVariable<3, Eigen::Dynamic>>* f_WV) {
+  AllVerticesAboveTable(block, problem);
+  f_WV->resize(nT);
+
+  const double mu_table = 1;
+
+  const Eigen::Vector3d p_WB0(0, 0, block.height() / 2);
+  problem->get_mutable_prog()->AddBoundingBoxConstraint(p_WB0, p_WB0,
+                                                        problem->p_WB()[0]);
+  // Initially, the bottom vertices are on the table.
+  (*f_WV)[0] = SetTableContactVertices(block, block.bottom_vertex_indices(),
+                                       mu_table, 0, 0, problem);
+  problem->get_mutable_prog()->AddBoundingBoxConstraint(
+      1, 1, problem->vertex_contact_flag()[0]);
+
+  // Finally, the positive x vertices are on the table.
+  (*f_WV)[nT - 1] = SetTableContactVertices(
+      block, block.positive_x_vertex_indices(), mu_table, nT - 1, 0, problem);
+  problem->get_mutable_prog()->AddBoundingBoxConstraint(
+      1, 1, problem->vertex_contact_flag()[nT - 1]);
+
+  // For all the points in between the first and last knots, the candidate
+  // table contact vertices are bottom and positive x vertices.
+  for (int knot = 1; knot < nT - 1; ++knot) {
+    (*f_WV)[knot] = SetTableContactVertices(
+        block, block.bottom_and_positive_x_vertex_indices(), mu_table, knot,
+        block.mass() * kGravity * 1.1, problem);
+
+    // At least one vertex on the table, at most 4 vertices on the table
+    problem->get_mutable_prog()->AddLinearConstraint(
+        Eigen::RowVectorXd::Ones(
+            block.bottom_and_positive_x_vertex_indices().size()),
+        1, 4, problem->vertex_contact_flag()[knot]);
+  }
+
+  // Choose all body contact points except those on the bottom or the positive
+  // x facet.
+  std::vector<int> pusher_contact_point_indices;
+  for (int i = 0; i < static_cast<int>(block.Q().size()); ++i) {
+    if (block.Q()[i].p_BQ()(0) <= 1E-10 && block.Q()[i].p_BQ()(2) >= -1E-10) {
+      pusher_contact_point_indices.push_back(i);
+    }
+  }
+  for (int knot = 0; knot < nT; ++knot) {
+    problem->SetPusherContactPointIndices(knot, pusher_contact_point_indices,
+                                          block.mass() * kGravity);
+  }
+  // Pusher remain in static contact, no sliding is allowed.
+  for (int interval = 0; interval < nT - 1; ++interval) {
+    problem->AddPusherStaticContactConstraint(interval);
+  }
+
+  // Add non-sliding contact constraint on the vertex.
+  std::vector<solvers::VectorXDecisionVariable> b_non_sliding(nT);
+  auto AddVertexNonSlidingConstraintAtKnot = [&b_non_sliding](
+      ObjectContactPlanning* problem, int knot,
+      const std::vector<int>& common_vertex_indices, double distance_big_M) {
+    const int num_vertex_knot = common_vertex_indices.size();
+    b_non_sliding[knot].resize(num_vertex_knot);
+    for (int i = 0; i < num_vertex_knot; ++i) {
+      b_non_sliding[knot](i) =
+          (problem->AddVertexNonSlidingConstraint(
+               knot, common_vertex_indices[i], Eigen::Vector3d::UnitX(),
+               Eigen::Vector3d::UnitY(), distance_big_M))
+              .value();
+    }
+  };
+
+  AddVertexNonSlidingConstraintAtKnot(problem, 0, block.bottom_vertex_indices(),
+                                      0.1);
+  AddVertexNonSlidingConstraintAtKnot(problem, nT - 2,
+                                      block.positive_x_vertex_indices(), 0.1);
+  for (int interval = 1; interval < nT - 2; ++interval) {
+    AddVertexNonSlidingConstraintAtKnot(
+        problem, interval, block.bottom_and_positive_x_vertex_indices(), 0.1);
+  }
+
+  // Bound the maximal angle difference in each interval.
+  const double max_angle_difference = M_PI / 4;
+  for (int interval = 0; interval < nT - 1; ++interval) {
+    problem->AddOrientationDifferenceUpperBoundLinearApproximation(
+        interval, max_angle_difference);
+    problem->AddOrientationDifferenceUpperBoundBilinearApproximation(
+        interval, max_angle_difference);
+  }
+  //// The block moves less than 10cms in each direction within an interval.
+  // for (int interval = 0; interval < nT - 1; ++interval) {
+  //  const Vector3<Expression> delta_p_WB =
+  //      problem->p_WB()[interval + 1] - problem->p_WB()[interval];
+  //  problem->get_mutable_prog()->AddLinearConstraint(delta_p_WB(0), -0.1,
+  //  0.1);
+  //  problem->get_mutable_prog()->AddLinearConstraint(delta_p_WB(1), -0.1,
+  //  0.1);
+  //  problem->get_mutable_prog()->AddLinearConstraint(delta_p_WB(2), -0.1,
+  //  0.1);
+  //}
+}
+
 }  // namespace planner
 }  // namespace manipulation
 }  // namespace drake

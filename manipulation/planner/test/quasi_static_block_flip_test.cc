@@ -19,118 +19,24 @@ namespace drake {
 namespace manipulation {
 namespace planner {
 namespace {
-class BlockFlipTest : public ::testing::TestWithParam<std::tuple<int, int>> {
+class QuasiStaticBlockFlipTest
+    : public ::testing::TestWithParam<std::tuple<int, int>> {
  public:
-  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(BlockFlipTest)
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(QuasiStaticBlockFlipTest)
 
-  BlockFlipTest()
+  QuasiStaticBlockFlipTest()
       : block_(),
         num_pushers_(std::get<0>(GetParam())),
         nT_(std::get<1>(GetParam())),
         problem_(nT_, block_.mass(), block_.center_of_mass(), block_.p_BV(),
                  num_pushers_, block_.Q()),
         f_WV_(nT_) {
-    AllVerticesAboveTable(block_, &problem_);
-
-    const double mu_table = 1;
-
-    const Eigen::Vector3d p_WB0(0, 0, block_.height() / 2);
-    problem_.get_mutable_prog()->AddBoundingBoxConstraint(p_WB0, p_WB0,
-                                                          problem_.p_WB()[0]);
-    // Initially, the bottom vertices are on the table.
-    f_WV_[0] = SetTableContactVertices(block_, block_.bottom_vertex_indices(),
-                                       mu_table, 0, 0, &problem_);
-    problem_.get_mutable_prog()->AddBoundingBoxConstraint(
-        1, 1, problem_.vertex_contact_flag()[0]);
-
-    // Finally, the positive x vertices are on the table.
-    f_WV_[nT_ - 1] =
-        SetTableContactVertices(block_, block_.positive_x_vertex_indices(),
-                                mu_table, nT_ - 1, 0, &problem_);
-    problem_.get_mutable_prog()->AddBoundingBoxConstraint(
-        1, 1, problem_.vertex_contact_flag()[nT_ - 1]);
-
-    // For all the points in between the first and last knots, the candidate
-    // table contact vertices are bottom and positive x vertices.
-    for (int knot = 1; knot < nT_ - 1; ++knot) {
-      f_WV_[knot] = SetTableContactVertices(
-          block_, block_.bottom_and_positive_x_vertex_indices(), mu_table, knot,
-          block_.mass() * kGravity * 1.1, &problem_);
-
-      // At least one vertex on the table, at most 4 vertices on the table
-      problem_.get_mutable_prog()->AddLinearConstraint(
-          Eigen::RowVectorXd::Ones(
-              block_.bottom_and_positive_x_vertex_indices().size()),
-          1, 4, problem_.vertex_contact_flag()[knot]);
-    }
-
-    // Choose all body contact points except those on the bottom or the positive
-    // x facet.
-    std::vector<int> pusher_contact_point_indices;
-    for (int i = 0; i < static_cast<int>(block_.Q().size()); ++i) {
-      if (block_.Q()[i].p_BQ()(0) <= 1E-10 &&
-          block_.Q()[i].p_BQ()(2) >= -1E-10) {
-        pusher_contact_point_indices.push_back(i);
-      }
-    }
-    for (int knot = 0; knot < nT_; ++knot) {
-      problem_.SetPusherContactPointIndices(knot, pusher_contact_point_indices,
-                                            block_.mass() * kGravity);
-    }
-    // Pusher remain in static contact, no sliding is allowed.
-    for (int interval = 0; interval < nT_ - 1; ++interval) {
-      problem_.AddPusherStaticContactConstraint(interval);
-    }
-
-    // Add non-sliding contact constraint on the vertex.
-    std::vector<solvers::VectorXDecisionVariable> b_non_sliding(nT_);
-    auto AddVertexNonSlidingConstraintAtKnot = [this, &b_non_sliding](
-        int knot, const std::vector<int>& common_vertex_indices,
-        double distance_big_M) {
-      const int num_vertex_knot = common_vertex_indices.size();
-      b_non_sliding[knot].resize(num_vertex_knot);
-      for (int i = 0; i < num_vertex_knot; ++i) {
-        b_non_sliding[knot](i) =
-            (this->problem_.AddVertexNonSlidingConstraint(
-                 knot, common_vertex_indices[i], Eigen::Vector3d::UnitX(),
-                 Eigen::Vector3d::UnitY(), distance_big_M))
-                .value();
-      }
-    };
-
-    AddVertexNonSlidingConstraintAtKnot(0, block_.bottom_vertex_indices(), 0.1);
-    AddVertexNonSlidingConstraintAtKnot(
-        nT_ - 2, block_.positive_x_vertex_indices(), 0.1);
-    for (int interval = 1; interval < nT_ - 2; ++interval) {
-      AddVertexNonSlidingConstraintAtKnot(
-          interval, block_.bottom_and_positive_x_vertex_indices(), 0.1);
-    }
-
+    SetUpBlockFlipTest(block_, num_pushers_, nT_, &problem_, &f_WV_);
     // Static equilibrium constraint.
     problem_.AddStaticEquilibriumConstraint();
-
-    // Bound the maximal angle difference in each interval.
-    const double max_angle_difference = M_PI / 4;
-    for (int interval = 0; interval < nT_ - 1; ++interval) {
-      problem_.AddOrientationDifferenceUpperBoundLinearApproximation(
-          interval, max_angle_difference);
-      problem_.AddOrientationDifferenceUpperBoundBilinearApproximation(
-          interval, max_angle_difference);
-    }
-    //// The block moves less than 10cms in each direction within an interval.
-    // for (int interval = 0; interval < nT - 1; ++interval) {
-    //  const Vector3<Expression> delta_p_WB =
-    //      problem_.p_WB()[interval + 1] - problem_.p_WB()[interval];
-    //  problem_.get_mutable_prog()->AddLinearConstraint(delta_p_WB(0), -0.1,
-    //  0.1);
-    //  problem_.get_mutable_prog()->AddLinearConstraint(delta_p_WB(1), -0.1,
-    //  0.1);
-    //  problem_.get_mutable_prog()->AddLinearConstraint(delta_p_WB(2), -0.1,
-    //  0.1);
-    //}
   }
 
-  ~BlockFlipTest() = default;
+  ~QuasiStaticBlockFlipTest() = default;
 
   struct Solution {
     std::vector<Eigen::Matrix3d> R_WB_sol;
@@ -306,7 +212,7 @@ class BlockFlipTest : public ::testing::TestWithParam<std::tuple<int, int>> {
   std::vector<MatrixDecisionVariable<3, Eigen::Dynamic>> f_WV_;
 };
 
-TEST_P(BlockFlipTest, Test) {
+TEST_P(QuasiStaticBlockFlipTest, Test) {
   if (num_pushers_ == 1) {
     TestOnePusher();
   } else if (num_pushers_ == 2) {
@@ -322,7 +228,7 @@ std::vector<std::tuple<int, int>> test_params() {
   return params;
 }
 
-INSTANTIATE_TEST_CASE_P(ObjectContactPlanningTest, BlockFlipTest,
+INSTANTIATE_TEST_CASE_P(ObjectContactPlanningTest, QuasiStaticBlockFlipTest,
                         ::testing::ValuesIn(test_params()));
 }  // namespace
 }  // namespace planner
