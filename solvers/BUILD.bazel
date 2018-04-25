@@ -1216,6 +1216,16 @@ drake_cc_googletest(
     ],
 )
 
+drake_cc_binary(
+    name = "evans_lcp",
+    srcs = ["test/evans_lcp.cc"],
+    tags = gurobi_test_tags(gurobi_required = False),
+    deps = [
+        ":gurobi_solver",
+        ":mixed_integer_linear_program_LCP",
+    ],
+)
+
 # The extra_srcs are required here because add_lint_tests() doesn't understand
 # how to extract labels from select() functions yet.
 add_lint_tests(cpplint_extra_srcs = [

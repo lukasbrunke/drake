@@ -51,6 +51,14 @@ class MixedIntegerLinearProgramLCP {
 
   MathematicalProgram* get_mutable_prog() { return prog_.get(); }
 
+  /**
+   * Given the assignment of the binary variables b_val, solve the following 
+   * linear equations to polish the solution.
+   * w = q + M * z
+   * w(i) = 0 if b(i) = 0
+   * z(i) = 0 if b(i) = 1
+   */
+  void PolishSolution(const Eigen::Ref<const Eigen::VectorXd>& b_val, Eigen::VectorXd* w_sol, Eigen::VectorXd* z_sol) const;
  private:
   const int n_;
   const Eigen::VectorXd q_;
