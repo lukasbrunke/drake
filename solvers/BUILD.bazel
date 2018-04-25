@@ -721,6 +721,15 @@ drake_cc_library(
     ],
 )
 
+drake_cc_library(
+    name = "mixed_integer_linear_program_LCP",
+    srcs = ["mixed_integer_linear_program_LCP.cc"],
+    hdrs = ["mixed_integer_linear_program_LCP.h"],
+    deps = [
+        ":mathematical_program",
+    ],
+)
+
 # === test/ ===
 drake_cc_googletest(
     name = "bilinear_product_util_test",
@@ -1193,6 +1202,16 @@ drake_cc_googletest(
     deps = [
         ":gurobi_solver",
         ":mixed_integer_optimization_util",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "mixed_integer_linear_program_LCP_test",
+    tags = gurobi_test_tags(gurobi_required = False),
+    deps = [
+        ":gurobi_solver",
+        ":mixed_integer_linear_program_LCP",
         "//common/test_utilities:eigen_matrix_compare",
     ],
 )
