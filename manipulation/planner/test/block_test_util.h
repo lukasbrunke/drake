@@ -101,6 +101,27 @@ solvers::MatrixDecisionVariable<3, Eigen::Dynamic> SetTableContactVertices(
 void SetUpBlockFlipTest(
     const Block& block, int num_pushers, int nT, ObjectContactPlanning* problem,
     std::vector<solvers::MatrixDecisionVariable<3, Eigen::Dynamic>>* f_WV);
+
+struct BlockFlipSolution {
+  std::vector<Eigen::Matrix3d> R_WB_sol;
+  std::vector<Eigen::Vector3d> p_WB_sol;
+  std::vector<Eigen::Matrix3Xd> p_WV_sol;
+  std::vector<Eigen::Matrix3Xd> p_WQ_sol;
+  std::vector<Eigen::Matrix3Xd> f_BV_sol;
+  std::vector<Eigen::Matrix3Xd> f_BQ_sol;
+  std::vector<Eigen::Matrix3Xd> f_WV_sol;
+  std::vector<Eigen::Matrix3Xd> f_WQ_sol;
+  std::vector<Eigen::VectorXd> b_V_contact_sol;
+  std::vector<Eigen::VectorXd> b_Q_contact_sol;
+};
+
+void SetBlockFlipSolution(
+    const ObjectContactPlanning& problem, const Block& block,
+    const std::vector<solvers::MatrixDecisionVariable<3, Eigen::Dynamic>>& f_WV,
+    bool print_flag, BlockFlipSolution* sol);
+
+void VisualizeResult(const ObjectContactPlanning& problem, const Block& block,
+                     const BlockFlipSolution& sol); 
 }  // namespace planner
 }  // namespace manipulation
 }  // namespace drake

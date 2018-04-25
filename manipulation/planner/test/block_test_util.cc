@@ -285,6 +285,100 @@ void SetUpBlockFlipTest(
   //}
 }
 
+void SetBlockFlipSolution(
+    const ObjectContactPlanning& problem, const Block& block,
+    const std::vector<solvers::MatrixDecisionVariable<3, Eigen::Dynamic>>& f_WV,
+    bool print_flag, BlockFlipSolution* sol) {
+  sol->R_WB_sol.reserve(problem.nT());
+  sol->p_WB_sol.reserve(problem.nT());
+  sol->p_WV_sol.reserve(problem.nT());
+  sol->p_WQ_sol.reserve(problem.nT());
+  sol->f_BV_sol.reserve(problem.nT());
+  sol->f_BQ_sol.reserve(problem.nT());
+  sol->f_WV_sol.reserve(problem.nT());
+  sol->f_WQ_sol.reserve(problem.nT());
+  sol->b_V_contact_sol.reserve(problem.nT());
+  sol->b_Q_contact_sol.reserve(problem.nT());
+  for (int knot = 0; knot < problem.nT(); ++knot) {
+    sol->p_WB_sol.push_back(problem.prog().GetSolution(problem.p_WB()[knot]));
+    sol->R_WB_sol.push_back(problem.prog().GetSolution(problem.R_WB()[knot]));
+    sol->f_BV_sol.push_back(problem.prog().GetSolution(problem.f_BV()[knot]));
+    sol->f_WV_sol.push_back(problem.prog().GetSolution(f_WV[knot]));
+    const int num_vertices_knot = problem.contact_vertex_indices()[knot].size();
+    sol->p_WV_sol.emplace_back(3, num_vertices_knot);
+    for (int i = 0; i < num_vertices_knot; ++i) {
+      sol->p_WV_sol[knot].col(i) =
+          sol->p_WB_sol[knot] +
+          sol->R_WB_sol[knot] *
+              block.p_BV().col(problem.contact_vertex_indices()[knot][i]);
+    }
+    const int num_Q_points = problem.contact_Q_indices()[knot].size();
+    sol->p_WQ_sol.emplace_back(3, num_Q_points);
+    for (int i = 0; i < num_Q_points; ++i) {
+      const int Q_index = problem.contact_Q_indices()[knot][i];
+      sol->p_WQ_sol[knot].col(i) =
+          sol->p_WB_sol[knot] + sol->R_WB_sol[knot] * block.Q()[Q_index].p_BQ();
+    }
+    sol->b_V_contact_sol.push_back(
+        problem.prog().GetSolution(problem.vertex_contact_flag()[knot]));
+    sol->f_BQ_sol.push_back(problem.prog().GetSolution(problem.f_BQ()[knot]));
+    sol->f_WQ_sol.push_back(sol->R_WB_sol[knot] * sol->f_BQ_sol[knot]);
+    sol->b_Q_contact_sol.push_back(
+        problem.prog().GetSolution(problem.b_Q_contact()[knot]));
+    if (print_flag) {
+      std::cout << "knot " << knot << std::endl;
+      std::cout << "p_WB[" << knot << "]\n " << sol->p_WB_sol[knot].transpose()
+                << std::endl;
+      std::cout << "R_WB[" << knot << "]\n " << sol->R_WB_sol[knot]
+                << std::endl;
+      std::cout << "b_V_contact[" << knot << "]\n "
+                << sol->b_V_contact_sol[knot].transpose() << std::endl;
+      std::cout << "f_BV_sol[" << knot << "]\n"
+                << sol->f_BV_sol[knot] << std::endl;
+      std::cout << "p_WV_sol[" << knot << "]\n"
+                << sol->p_WV_sol[knot] << std::endl;
+
+      std::cout << "b_Q_contact[" << knot << "]\n "
+                << sol->b_Q_contact_sol[knot].transpose() << std::endl;
+      std::cout << "f_BQ_sol[" << knot << "]\n"
+                << sol->f_BQ_sol[knot] << std::endl;
+    }
+  }
+}
+
+void VisualizeResult(const ObjectContactPlanning& problem, const Block& block,
+                     const BlockFlipSolution& sol) {
+  // Now visualize the result.
+  dev::RemoteTreeViewerWrapper viewer;
+
+  const Eigen::Vector4d color_red(1, 0, 0, 0.9);
+  const Eigen::Vector4d color_green(0, 1, 0, 0.9);
+
+  // VisualizeTable(&viewer);
+
+  const double viewer_force_normalizer = block.mass() * kGravity * 5;
+  for (int knot = 0; knot < problem.nT(); ++knot) {
+    VisualizeBlock(&viewer, sol.R_WB_sol[knot], sol.p_WB_sol[knot], block);
+    // Visualize vertex contact force.
+    for (int i = 0;
+         i < static_cast<int>(problem.contact_vertex_indices()[knot].size());
+         ++i) {
+      VisualizeForce(&viewer, sol.p_WV_sol[knot].col(i),
+                     sol.R_WB_sol[knot] * sol.f_BV_sol[knot].col(i),
+                     viewer_force_normalizer, "f_WV" + std::to_string(i),
+                     color_red);
+    }
+    // Visualize pusher contact force.
+    for (int i = 0;
+         i < static_cast<int>(problem.contact_Q_indices()[knot].size()); ++i) {
+      VisualizeForce(&viewer, sol.p_WQ_sol[knot].col(i),
+                     sol.R_WB_sol[knot] * sol.f_BQ_sol[knot].col(i),
+                     viewer_force_normalizer, "f_WQ" + std::to_string(i),
+                     color_green);
+    }
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+  }
+}
 }  // namespace planner
 }  // namespace manipulation
 }  // namespace drake
