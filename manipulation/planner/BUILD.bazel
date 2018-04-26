@@ -220,4 +220,15 @@ drake_cc_googletest(
     ],
 )
 
+drake_cc_googletest(
+    name = "quasi_dynamic_block_flip_test",
+    srcs = ["test/quasi_dynamic_block_flip_test.cc"],
+    tags = gurobi_test_tags(),
+    deps = [
+        ":quasi_dynamic_object_contact_planning",
+        ":block_test_util",
+        "//math:geometric_transform",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
 add_lint_tests()
