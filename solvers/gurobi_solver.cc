@@ -845,6 +845,19 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
         } else {
           solver_result.set_optimal_cost_lower_bound(lower_bound);
         }
+
+        int solution_count;
+        GRBgetintattr(model, GRB_INT_ATTR_SOLCOUNT, &solution_count);
+        prog.multiple_solutions_.resize(solution_count);
+        for (int i = 0; i < solution_count; ++i) {
+          GRBsetintparam(model_env, GRB_INT_PAR_SOLUTIONNUMBER, i);
+          std::vector<double> solver_sol_vector_i(num_total_variables);
+          GRBgetdblattrarray(model, GRB_DBL_ATTR_XN, 0, num_total_variables,
+                             solver_sol_vector_i.data());
+          prog.multiple_solutions_[i].resize(num_prog_vars);
+          SetProgramSolutionVector(is_new_variable, solver_sol_vector_i,
+                                   &(prog.multiple_solutions_[i]));
+        }
       }
     }
   }

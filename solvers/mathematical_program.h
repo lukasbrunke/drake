@@ -2596,6 +2596,8 @@ class MathematicalProgram {
   // of MathematicalProgram.
   void SetSolverResult(const SolverResult& solver_result);
 
+  std::vector<Eigen::VectorXd> multiple_solutions_;
+
  private:
   static void AppendNanToEnd(int new_var_size, Eigen::VectorXd* vector);
   // maps the ID of a symbolic variable to the index of the variable stored in

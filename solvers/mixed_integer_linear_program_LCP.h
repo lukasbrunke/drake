@@ -58,7 +58,7 @@ class MixedIntegerLinearProgramLCP {
    * w(i) = 0 if b(i) = 0
    * z(i) = 0 if b(i) = 1
    */
-  void PolishSolution(const Eigen::Ref<const Eigen::VectorXd>& b_val, Eigen::VectorXd* w_sol, Eigen::VectorXd* z_sol) const;
+  bool PolishSolution(const Eigen::Ref<const Eigen::VectorXd>& b_val, Eigen::VectorXd* w_sol, Eigen::VectorXd* z_sol) const;
  private:
   const int n_;
   const Eigen::VectorXd q_;

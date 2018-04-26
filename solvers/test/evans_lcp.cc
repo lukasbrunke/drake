@@ -49,30 +49,58 @@ int DoMain() {
   Eigen::MatrixXd M;
   ReadData(&q, &M);
 
-  MixedIntegerLinearProgramLCP milp_lcp(q, M, Eigen::VectorXd::Constant(73, 2), Eigen::VectorXd::Constant(73, 2));
+  MixedIntegerLinearProgramLCP milp_lcp(q, M, Eigen::VectorXd::Constant(73, 2),
+                                        Eigen::VectorXd::Constant(73, 2));
 
   GurobiSolver solver;
-  milp_lcp.get_mutable_prog()->SetSolverOption(GurobiSolver::id(), "FeasibilityTol", 1E-9);
+  // milp_lcp.get_mutable_prog()->SetSolverOption(GurobiSolver::id(),
+  //                                             "FeasibilityTol", 1E-9);
+  milp_lcp.get_mutable_prog()->SetSolverOption(GurobiSolver::id(),
+                                               "PoolSearchMode", 2);
+  milp_lcp.get_mutable_prog()->SetSolverOption(GurobiSolver::id(),
+                                               "PoolSolutions", 1000);
   const auto result = solver.Solve(*(milp_lcp.get_mutable_prog()));
 
   std::cout << result << "\n";
   if (result == SolutionResult::kSolutionFound) {
-    const auto w_sol = milp_lcp.prog().GetSolution(milp_lcp.w());
-    const auto z_sol = milp_lcp.prog().GetSolution(milp_lcp.z());
-    const auto b_sol = milp_lcp.prog().GetSolution(milp_lcp.b());
-    std::cout << "w:\n" << w_sol.transpose() << "\n";
-    std::cout << "z:\n" << z_sol.transpose() << "\n";
-    std::cout << "b:\n" << b_sol.transpose() << "\n";
-    std::cout << "w.*z:\n" << (w_sol.array() * z_sol.array()).transpose() << "\n";
-    std::cout << "w.min: " << w_sol.minCoeff() << "\nz.min: " << z_sol.minCoeff() << "\n";
+    std::cout << "number of solutions: "
+              << milp_lcp.prog().multiple_solutions_.size() << "\n";
+    std::vector<std::tuple<Eigen::VectorXd, Eigen::VectorXd, Eigen::VectorXd>> polished_solution;
+    for (int i = 0;
+         i < static_cast<int>(milp_lcp.prog().multiple_solutions_.size());
+         ++i) {
+      const Eigen::VectorXd w_sol = milp_lcp.prog().multiple_solutions_[i].head(q.rows());
+      const Eigen::VectorXd z_sol = milp_lcp.prog().multiple_solutions_[i].segment(q.rows(), q.rows());
+      const Eigen::VectorXd b_sol = milp_lcp.prog().multiple_solutions_[i].tail(q.rows());
+      //std::cout << "w:\n" << w_sol.transpose() << "\n";
+      //std::cout << "z:\n" << z_sol.transpose() << "\n";
+      //std::cout << "b:\n" << b_sol.transpose() << "\n";
+      //std::cout << "w.*z:\n"
+      //          << (w_sol.array() * z_sol.array()).transpose() << "\n";
+      std::cout << "w.min: " << w_sol.minCoeff()
+                << "\nz.min: " << z_sol.minCoeff() << "\n";
 
-    Eigen::VectorXd w_polish, z_polish;
-    milp_lcp.PolishSolution(b_sol, &w_polish, &z_polish);
-    std::cout << "w:\n" << w_polish.transpose() << "\n";
-    std::cout << "z:\n" << z_polish.transpose() << "\n";
-    std::cout << "w.min: " << w_polish.minCoeff() << "\nz.min: " << z_polish.minCoeff() << "\n";
-    std::cout << "w.*z:\n" << (w_polish.array() * z_polish.array()).transpose() << "\n";
+      Eigen::VectorXd w_polish, z_polish;
+      const bool polished = milp_lcp.PolishSolution(b_sol, &w_polish, &z_polish);
+      //std::cout << "w:\n" << w_polish.transpose() << "\n";
+      //std::cout << "z:\n" << z_polish.transpose() << "\n";
+      //std::cout << "w.*z:\n"
+      //          << (w_polish.array() * z_polish.array()).transpose() << "\n";
+      std::cout << "w.min: " << w_polish.minCoeff()
+                << "\nz.min: " << z_polish.minCoeff() << "\n";
+      if (polished) {
+        polished_solution.push_back(std::make_tuple(w_polish, z_polish, b_sol));
+      }
+    }
+
+    std::cout << "\nNumber of polished solution: " << polished_solution.size() << "\n";
+    for (const auto& wzb_polished : polished_solution) {
+      std::cout << "w_polish: " << std::get<0>(wzb_polished).transpose() << "\n";
+      std::cout << "z_polish: " << std::get<1>(wzb_polished).transpose() << "\n";
+      std::cout << "b_polish: " << std::get<2>(wzb_polished).transpose() << "\n";
+    }
   }
+
   return 0;
 }
 }

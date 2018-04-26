@@ -31,7 +31,7 @@ MixedIntegerLinearProgramLCP::MixedIntegerLinearProgramLCP(
                              z_max_ * (Eigen::ArrayXd::Ones(n_) - b_.array()));
 }
 
-void MixedIntegerLinearProgramLCP::PolishSolution(const Eigen::Ref<const Eigen::VectorXd>& b_val, Eigen::VectorXd* w_sol, Eigen::VectorXd* z_sol) const {
+bool MixedIntegerLinearProgramLCP::PolishSolution(const Eigen::Ref<const Eigen::VectorXd>& b_val, Eigen::VectorXd* w_sol, Eigen::VectorXd* z_sol) const {
   //Eigen::MatrixXd A(2 * n_, 2 * n_);
   //Eigen::VectorXd b(2 * n_);
   //A.setZero();
@@ -70,6 +70,8 @@ void MixedIntegerLinearProgramLCP::PolishSolution(const Eigen::Ref<const Eigen::
   }
   *w_sol = prog.GetSolution(w);
   *z_sol = prog.GetSolution(z);
+
+  return result == SolutionResult::kSolutionFound;
 }
 }  // namespace solvers
 }  // namespace drake
