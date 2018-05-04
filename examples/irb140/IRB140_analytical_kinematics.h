@@ -22,14 +22,17 @@ class IRB140AnalyticalKinematics {
 
   IRB140AnalyticalKinematics();
 
-  RigidBodyTreed* robot() const {return robot_.get();}
+  RigidBodyTreed* robot() const { return robot_.get(); }
 
-  std::vector<Eigen::Matrix<double, 6, 1>> inverse_kinematics(const Eigen::Isometry3d& link6_pose) const;
+  std::vector<Eigen::Matrix<double, 6, 1>> inverse_kinematics(
+      const Eigen::Isometry3d& link6_pose) const;
 
   std::vector<double> q1(const Eigen::Isometry3d& link6_pose) const;
   std::vector<double> q2(const Eigen::Isometry3d& link6_pose, double q1) const;
-  std::vector<double> q3(const Eigen::Isometry3d& link6_pose, double q1, double q2) const;
-  std::vector<Eigen::Vector3d> q456(const Eigen::Isometry3d& link6_pose, double q1, double q2, double q3) const;
+  std::vector<double> q3(const Eigen::Isometry3d& link6_pose, double q1,
+                         double q2) const;
+  std::vector<Eigen::Vector3d> q456(const Eigen::Isometry3d& link6_pose,
+                                    double q1, double q2, double q3) const;
 
   Eigen::Matrix<symbolic::Expression, 4, 4> X_01() const;
   Eigen::Matrix<symbolic::Expression, 4, 4> X_12() const;
@@ -50,15 +53,17 @@ class IRB140AnalyticalKinematics {
 
  private:
   std::unique_ptr<RigidBodyTreed> robot_;
-  const double l0_;  // offset of joint 1 in base link in the z direction.
+  const double l0_;    // offset of joint 1 in base link in the z direction.
   const double l1_x_;  // offset of joint 2 in link 1 in the x direction.
   const double l1_y_;  // offset of joint 2 in link 1 in the -y direction.
-  const double l2_;  // offset of joint 3 in link 2 in the -y direction.
-  const double l3_;  // offset of joint 4 in link 3 in the x direction.
-  const double l4_;  // offset of joint 5 in link 4 in the x direction.
+  const double l2_;    // offset of joint 3 in link 2 in the -y direction.
+  const double l3_;    // offset of joint 4 in link 3 in the x direction.
+  const double l4_;    // offset of joint 5 in link 4 in the x direction.
 
-  Eigen::Matrix<symbolic::Variable, 6, 1> c_;  // c_[i] is the cos of i'th joint angle.
-  Eigen::Matrix<symbolic::Variable, 6, 1> s_;  // s_[i] is the sin of i'th joint angle.
+  Eigen::Matrix<symbolic::Variable, 6, 1>
+      c_;  // c_[i] is the cos of i'th joint angle.
+  Eigen::Matrix<symbolic::Variable, 6, 1>
+      s_;  // s_[i] is the sin of i'th joint angle.
   symbolic::Variable l0_var_;
   symbolic::Variable l1_x_var_;
   symbolic::Variable l1_y_var_;

@@ -1,9 +1,9 @@
-#include "drake/examples/IRB140/IRB140_analytical_kinematics.h"
+#include "drake/examples/irb140/IRB140_analytical_kinematics.h"
 
 #include <gtest/gtest.h>
 
-#include "drake/examples/IRB140/test/irb140_common.h"
-#include "drake/common/eigen_matrix_compare.h"
+#include "drake/examples/irb140/test/irb140_common.h"
+#include "drake/common/test_utilities/eigen_matrix_compare.h"
 
 using Eigen::Isometry3d;
 
