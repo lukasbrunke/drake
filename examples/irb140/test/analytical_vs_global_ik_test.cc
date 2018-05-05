@@ -87,8 +87,8 @@ class IKresult {
       (*output_file) << "orientation (quaternion):\n"
                      << ee_orient.w() << " " << ee_orient.x() << " "
                      << ee_orient.y() << " " << ee_orient.z() << std::endl;
-      (*output_file) << "analytical_ik_status: " << analytical_ik_status_
-                     << std::endl;
+      (*output_file) << "analytical_ik_status: "
+                     << static_cast<int>(analytical_ik_status_) << std::endl;
       (*output_file) << "q_analytical:\n";
       for (const auto& qi_analytical : q_analytical_ik_) {
         (*output_file) << qi_analytical.transpose() << std::endl;
@@ -98,7 +98,8 @@ class IKresult {
       (*output_file) << "q_nonlinear_ik:\n"
                      << q_nl_ik_.transpose() << std::endl;
 
-      (*output_file) << "global_ik_status: " << global_ik_status_ << std::endl;
+      (*output_file) << "global_ik_status: "
+                     << static_cast<int>(global_ik_status_) << std::endl;
       (*output_file) << "q_global:\n" << q_global_ik_.transpose() << std::endl;
       (*output_file) << "global_ik_time: " << global_ik_time_ << std::endl;
 
@@ -798,8 +799,8 @@ void AnalyzeOutputFile(int argc, char* argv[]) {
 }  // namespace drake
 
 int main(int argc, char* argv[]) {
-   drake::examples::IRB140::DoMain(argc, argv);
+  drake::examples::IRB140::DoMain(argc, argv);
   // drake::examples::IRB140::DebugOutputFile(argc, argv);
-  //drake::examples::IRB140::AnalyzeOutputFile(argc, argv);
+  // drake::examples::IRB140::AnalyzeOutputFile(argc, argv);
   return 0;
 }
