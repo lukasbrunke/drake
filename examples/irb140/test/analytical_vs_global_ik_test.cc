@@ -20,6 +20,14 @@ using Eigen::Isometry3d;
 namespace drake {
 namespace examples {
 namespace IRB140 {
+multibody::GlobalInverseKinematics::Options global_ik_options() {
+  multibody::GlobalInverseKinematics::Options options;
+  options.approach_ = solvers::MixedIntegerRotationConstraintGenerator::Approach::kBilinearMcCormick;
+  options.interval_binning_ = solvers::IntervalBinning::kLinear;
+  options.num_intervals_per_half_axis_ = 2;
+  return options;
+}
+
 class IKresult {
  public:
   IKresult() {}
@@ -129,10 +137,10 @@ class DUT {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(DUT)
 
-  DUT(const Eigen::Quaterniond& ee_orient)
+  DUT(const Eigen::Quaterniond& ee_orient,
+      const multibody::GlobalInverseKinematics::Options& global_ik_options)
       : analytical_ik_(),
-        global_ik_(*(analytical_ik_.robot()),
-                   multibody::GlobalInverseKinematics::Options()),
+        global_ik_(*(analytical_ik_.robot()), global_ik_options),
         ee_idx_(analytical_ik_.robot()->FindBodyIndex("link_6")),
         global_ik_pos_cnstr_(global_ik_.AddWorldPositionConstraint(
             ee_idx_, Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero(),
@@ -349,7 +357,8 @@ void DoMain(int argc, char* argv[]) {
   output_file.open(file_name, std::ios::app | std::ios::out);
 
   Eigen::Quaterniond link6_quat(link6_angleaxis);
-  DUT dut(link6_quat);
+
+  DUT dut(link6_quat, global_ik_options());
   int sample_count = 0;
   for (int i = 0; i < kNumPtsPerAxis; ++i) {
     for (int j = 0; j < kNumPtsPerAxis; ++j) {
@@ -523,7 +532,7 @@ void DebugOutputFile(int argc, char* argv[]) {
   output_file2.open(out_file_name2, std::ios::app | std::ios::out);
 
   Eigen::Quaterniond link6_quat(ik_results[0].ee_pose().linear());
-  DUT dut(link6_quat);
+  DUT dut(link6_quat, global_ik_options());
   // Only find the case that analytical ik is feasible, but global IK is
   // infeasible
   RigidBodyTreed* robot = dut.robot();
@@ -725,7 +734,7 @@ void AnalyzeOutputFile(int argc, char* argv[]) {
   WriteRuntimeToFile(both_infeasible_time, out_file_name3);
 
   Eigen::Quaterniond link6_quat(ik_results[0].ee_pose().linear());
-  DUT dut(link6_quat);
+  DUT dut(link6_quat, global_ik_options());
   Eigen::Matrix2Xd global_ik_ee_error(2, both_feasible.size());
   KinematicsCache<double> cache = dut.robot()->CreateKinematicsCache();
   std::vector<bool> q_global_ik_at_joint_limits(both_feasible.size());
