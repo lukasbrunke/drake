@@ -252,7 +252,7 @@ class ObjectContactPlanning {
   const Eigen::Matrix<double, 5, 1>& phi_R_WB() const { return phi_R_WB_; }
 
   const std::vector<
-      std::array<std::array<solvers::VectorDecisionVariable<2>, 3>, 3>>&
+      std::array<std::array<solvers::VectorXDecisionVariable, 3>, 3>>&
   b_R_WB() const {
     return b_R_WB_;
   }
@@ -287,7 +287,7 @@ class ObjectContactPlanning {
   // entry R_WB_[i](m, n), we will have binary variables b_R_WB_[i](m, n), that
   // determines the interval that R_wb_[i](m, n) is in. We use logarithmic
   // binning for sos2 constraint.
-  std::vector<std::array<std::array<solvers::VectorDecisionVariable<2>, 3>, 3>>
+  std::vector<std::array<std::array<solvers::VectorXDecisionVariable, 3>, 3>>
       b_R_WB_;
   // The intervals in the sos2 constraint for the rotation matrix R_WB_
   Eigen::Matrix<double, 5, 1> phi_R_WB_;

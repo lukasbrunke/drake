@@ -3,6 +3,7 @@
 #include "drake/manipulation/planner/friction_cone.h"
 #include "drake/solvers/integer_optimization_util.h"
 #include "drake/solvers/mixed_integer_optimization_util.h"
+#include "drake/solvers/mixed_integer_rotation_constraint.h"
 #include "drake/solvers/rotation_constraint.h"
 
 using drake::solvers::MathematicalProgram;
@@ -37,6 +38,11 @@ ObjectContactPlanning::ObjectContactPlanning(
       Q_to_index_map_{static_cast<size_t>(nT_)},
       b_Q_contact_{static_cast<size_t>(nT_)},
       f_BQ_{static_cast<size_t>(nT_)} {
+  solvers::MixedIntegerRotationConstraintGenerator rotation_generator(
+      solvers::MixedIntegerRotationConstraintGenerator::Approach::
+          kBilinearMcCormick,
+      2, solvers::IntervalBinning::kLogarithmic);
+  phi_R_WB_ = rotation_generator.phi();
   for (int i = 0; i < nT_; ++i) {
     p_WB_[i] =
         prog_->NewContinuousVariables<3>("p_WB[" + std::to_string(i) + "]");
@@ -45,9 +51,8 @@ ObjectContactPlanning::ObjectContactPlanning(
 
     // Add the mixed-integer constraint as an approximation to the SO(3)
     // constraint.
-    std::tie(b_R_WB_[i], phi_R_WB_) =
-        solvers::AddRotationMatrixBilinearMcCormickMilpConstraints<2>(
-            prog_.get(), R_WB_[i]);
+    const auto ret = rotation_generator.AddToProgram(R_WB_[i], prog_.get());
+    b_R_WB_[i] = ret.B_;
 
     if (add_second_order_cone_for_R) {
       // Adds the SOCP constraint to approximate SO(3) constraint, such as
@@ -185,18 +190,18 @@ ObjectContactPlanning::CalcContactForceInWorldFrame(
         Eigen::VectorXd::Zero(f_B.rows()));
   }
 
-  // Now impose the constraint that lambda_R_times_f[i][j].colwise().sum() 
+  // Now impose the constraint that lambda_R_times_f[i][j].colwise().sum()
   // is lambda_f[j], where lambda_f[j]ᵀ * phi_f = f(j).
   for (int j = 0; j < 3; ++j) {
     const VectorX<symbolic::Expression> lambda_f =
         lambda_R_times_f[0][j].cast<Expression>().colwise().sum().transpose();
     for (int i = 1; i < 3; ++i) {
       prog_->AddLinearEqualityConstraint(
-          lambda_R_times_f[i][j]
-                  .cast<Expression>()
-                  .colwise()
-                  .sum()
-                  .transpose() -
+          lambda_R_times_f[i]
+                          [j].cast<Expression>()
+                              .colwise()
+                              .sum()
+                              .transpose() -
               lambda_f,
           Eigen::VectorXd::Zero(lambda_R_times_f[0][j].cols()));
     }
