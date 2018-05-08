@@ -22,8 +22,8 @@ namespace examples {
 namespace IRB140 {
 multibody::GlobalInverseKinematics::Options global_ik_options() {
   multibody::GlobalInverseKinematics::Options options;
-  options.approach_ = solvers::MixedIntegerRotationConstraintGenerator::Approach::kBilinearMcCormick;
-  options.interval_binning_ = solvers::IntervalBinning::kLinear;
+  options.approach_ = solvers::MixedIntegerRotationConstraintGenerator::Approach::kBoxSphereIntersection;
+  options.interval_binning_ = solvers::IntervalBinning::kLogarithmic;
   options.num_intervals_per_half_axis_ = 2;
   return options;
 }
