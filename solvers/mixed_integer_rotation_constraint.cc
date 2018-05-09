@@ -300,18 +300,21 @@ void AddCrossProductImpliedOrthantConstraint(
  * (B[i][j](0), B[i][j](1)) = (0, 1) => -0.5 <= R(i, j) <= 0
  * (B[i][j](0), B[i][j](1)) = (1, 1) =>  0   <= R(i, j) <= 0.5
  * (B[i][j](0), B[i][j](1)) = (1, 0) =>  0.5 <= R(i, j) <= 1 
- * Namely we cut each axis at [-1, -0.5, 0, 0.5, 1]. These planes segment the
+ * Namely we cut each axis at [-1, -0.5, 0, 0.5, 1]. These planes partition the
  * unit sphere surface in each orthant to 7 small regions, as shown in Fig.2 of
  * Globally Optimal Object Pose Estimation in Point Clouds with Mixed-Integer
  * Programming by Gregory Izatt, Hongkai Dai and Russ Tedrake, ISRR, 2017.
  * Based on the orthogonality constraint on rows (columns) of a rotation matrix,
  * we know there are only limited number of combinations, on which region the
  * row (column) vector could be in.
- * For example, along each border of the orthant, there are three regions. For
- * any vector u in the middle region among these three, the unit length vector
- * v that is perpendicular to v, cannot be on any of the three regions, across
- * the border in the neighbouring orthant, and also along the border.
- * Mathematically, if 0.5 ≤ uˣ ≤ 1, 0.5 ≤ uʸ ≤ 1, 0 ≤ uᶻ ≤ 0.5, namely u is in
+ * Case 1
+ * Along each border of the orthant (a border is the intersection of the unit
+ * length sphere surface, and the plane x = 0 or y= 0 or z = 0), there are three
+ * regions. For any vector u in the middle region among these three, the unit
+ * length vector v that is perpendicular to v, cannot be on any of the three
+ * regions, across the border in the neighbouring orthant, and also along the
+ * border.
+ * For example, if 0.5 ≤ uˣ ≤ 1, 0.5 ≤ uʸ ≤ 1, 0 ≤ uᶻ ≤ 0.5, namely u is in
  * the bottom middle region in the first orthant in Fig 2, then we know that
  * if v is in the orthant (++-), then vᶻ ≤ -0.5
  * If u = R.col(j) and v = R.col(k)
@@ -323,6 +326,9 @@ void AddCrossProductImpliedOrthantConstraint(
  * implies
  * B[i][k](1) + B[i][j](1) <= 1, i = 0, 1, 2
  * (1) means R.col(j) is in the middle region on the orthant boundary.
+ * (2), (3) and (4) together means R.col(k) is in the neighbouring orthant of
+ * R.col(j), across the border.
+ * Case 2
  * if v is in the orthant (-++), then 
  */
 void AddCuttingPlanesOnOrthantBorders(
