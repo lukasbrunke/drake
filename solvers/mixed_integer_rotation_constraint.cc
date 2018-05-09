@@ -291,6 +291,85 @@ void AddCrossProductImpliedOrthantConstraint(
   }
 }
 
+/**
+ * Add cutting planes on binary variables.
+ * When the number of intervals per half axis is a power of 2, and we use
+ * logarithmic binning to encode the binary variables, then we have the
+ * following implication
+ * (B[i][j](0), B[i][j](1)) = (0, 0) => -1   <= R(i, j) <= -0.5
+ * (B[i][j](0), B[i][j](1)) = (0, 1) => -0.5 <= R(i, j) <= 0
+ * (B[i][j](0), B[i][j](1)) = (1, 1) =>  0   <= R(i, j) <= 0.5
+ * (B[i][j](0), B[i][j](1)) = (1, 0) =>  0.5 <= R(i, j) <= 1 
+ * Namely we cut each axis at [-1, -0.5, 0, 0.5, 1]. These planes segment the
+ * unit sphere surface in each orthant to 7 small regions, as shown in Fig.2 of
+ * Globally Optimal Object Pose Estimation in Point Clouds with Mixed-Integer
+ * Programming by Gregory Izatt, Hongkai Dai and Russ Tedrake, ISRR, 2017.
+ * Based on the orthogonality constraint on rows (columns) of a rotation matrix,
+ * we know there are only limited number of combinations, on which region the
+ * row (column) vector could be in.
+ * For example, along each border of the orthant, there are three regions. For
+ * any vector u in the middle region among these three, the unit length vector
+ * v that is perpendicular to v, cannot be on any of the three regions, across
+ * the border in the neighbouring orthant, and also along the border.
+ * Mathematically, if 0.5 ≤ uˣ ≤ 1, 0.5 ≤ uʸ ≤ 1, 0 ≤ uᶻ ≤ 0.5, namely u is in
+ * the bottom middle region in the first orthant in Fig 2, then we know that
+ * if v is in the orthant (++-), then vᶻ ≤ -0.5
+ * If u = R.col(j) and v = R.col(k)
+ * Namely the following implication holds
+ * B[0][j](1) + B[1][j](1) + B[2][j](1) = 1  (1)
+ * B[0][j](0) xor B[0][k](0) = B[0][j](1)    (2)
+ * B[1][j](0) xor B[1][k](0) = B[1][j](1)    (3)
+ * B[2][j](0) xor B[2][k](0) = B[2][j](1)    (4)
+ * implies
+ * B[i][k](1) + B[i][j](1) <= 1, i = 0, 1, 2
+ * (1) means R.col(j) is in the middle region on the orthant boundary.
+ * if v is in the orthant (-++), then 
+ */
+void AddCuttingPlanesOnOrthantBorders(
+    const std::array<std::array<VectorXDecisionVariable, 3>, 3>& B,
+    MathematicalProgram* prog) {
+  // If (1) ∨ (2) v (3) v (4) implies B[i][k](1) + B[i][j](1) <= 1, where "v"
+  // means "logical and", then we have the constraint
+  // B[i][k](1) + B[i][j](1) <= 5 - b1 - b2 - b3 - b4
+  // where b1 = 1 if (1) holds, b1 = 0 or 1 if (1) does not hold. Similarly for
+  // b2, b3, b4.
+  for (int j = 0; j < 3; ++j) {
+    for (int k = 0; k < 3; ++k) {
+      if (k == j) {
+        continue;
+      }
+      const auto b = prog->NewContinuousVariables<4>();
+      prog->AddBoundingBoxConstraint(0, 1, b);
+      // b(0) = 1 if B[0][j](1) + B[1][j](1) + B[2][j](1) = 1
+      // Due to the unit length constraint, we have B[0][j](1) + B[1][j](1)
+      // + B[2][j](1) <= 2, thus we know that
+      // b(0) >=  B[0][j](1) - B[1][j](1) - B[2][j](1)
+      // b(0) >= -B[0][j](1) + B[1][j](1) - B[2][j](1)
+      // b(0) >= -B[0][j](1) - B[1][j](1) + B[2][j](1)
+      prog->AddLinearConstraint(b(0) >= B[0][j](1) - B[1][j](1) - B[2][j](1));
+      prog->AddLinearConstraint(b(0) >= -B[0][j](1) + B[1][j](1) - B[2][j](1));
+      prog->AddLinearConstraint(b(0) >= -B[0][j](1) - B[1][j](1) + B[2][j](1));
+      // B[i][j](0) xor B[i][k](0) = B[i][j](1) => b(i) = 1
+      // b(i) >= B[i][j](0) - B[i][k](0) - (1 - B[i][j](1))
+      // b(i) >= -B[i][j](0) + B[i][k](0) - (1 - B[i][j](1))
+      // b(i) >= -B[i][j](0) - B[i][k](0) + (1 - B[i][j](1))
+      for (int i = 0; i < 3; ++i) {
+        prog->AddLinearConstraint(b(i) >=
+                                  B[i][j](0) - B[i][k](0) - (1 - B[i][j](1)));
+        prog->AddLinearConstraint(b(i) >=
+                                  -B[i][j](0) + B[i][k](0) - (1 - B[i][j](1)));
+        prog->AddLinearConstraint(b(i) >=
+                                  -B[i][j](0) - B[i][k](0) + (1 - B[i][j](1)));
+      }
+      for (int i = 0; i < 3; ++i) {
+        // B[i][k](1) + B[i][j](1) <= 5 - b1 - b2 - b3 - b4
+        prog->AddLinearConstraint(B[i][k](1) + B[i][j](1) <=
+                                  5 - b.cast<Expression>().sum());
+      }
+    }
+  }
+}
+
 void AddConstraintInferredFromTheSign(
     MathematicalProgram* prog,
     const std::array<std::array<VectorXDecisionVariable, 3>, 3>& B,
@@ -950,6 +1029,12 @@ MixedIntegerRotationConstraintGenerator::AddToProgram(
         R, CRpos, CRneg, num_intervals_per_half_axis_,
         box_sphere_intersection_vertices_, box_sphere_intersection_halfspace_,
         prog);
+  }
+
+  if (interval_binning_ == IntervalBinning::kLogarithmic &&
+      IsPowerOfTwo(num_intervals_per_half_axis_) &&
+      num_intervals_per_half_axis_ >= 2) {
+    AddCuttingPlanesOnOrthantBorders(ret.B_, prog);
   }
   return ret;
 }
