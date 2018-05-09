@@ -1035,6 +1035,13 @@ MixedIntegerRotationConstraintGenerator::AddToProgram(
       IsPowerOfTwo(num_intervals_per_half_axis_) &&
       num_intervals_per_half_axis_ >= 2) {
     AddCuttingPlanesOnOrthantBorders(ret.B_, prog);
+    std::array<std::array<VectorXDecisionVariable, 3>, 3> B_transpose;
+    for (int i = 0; i < 3; ++i) {
+      for (int j = 0; j < 3; ++j) {
+        B_transpose[i][j] = ret.B_[j][i];
+      }
+    }
+    AddCuttingPlanesOnOrthantBorders(B_transpose, prog);
   }
   return ret;
 }
