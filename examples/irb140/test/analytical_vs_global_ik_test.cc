@@ -22,9 +22,11 @@ namespace examples {
 namespace IRB140 {
 multibody::GlobalInverseKinematics::Options global_ik_options() {
   multibody::GlobalInverseKinematics::Options options;
-  options.approach_ = solvers::MixedIntegerRotationConstraintGenerator::Approach::kBoxSphereIntersection;
-  options.interval_binning_ = solvers::IntervalBinning::kLogarithmic;
-  options.num_intervals_per_half_axis_ = 2;
+  options.approach = solvers::MixedIntegerRotationConstraintGenerator::
+      Approach::kBilinearMcCormick;
+  options.interval_binning = solvers::IntervalBinning::kLogarithmic;
+  options.num_intervals_per_half_axis = 2;
+  options.linear_constraint_only = true;
   return options;
 }
 
@@ -154,27 +156,29 @@ class DUT {
           ee_rotmat_des.col(i), ee_rotmat_des.col(i), ee_rotmat.col(i));
     }
 
-    for (int i = 1; i < robot()->get_num_bodies(); ++i) {
-      const auto& body_R = global_ik_.body_rotation_matrix(i);
-      Eigen::Matrix<symbolic::Expression, 5, 1> cone_expr;
-      cone_expr(0) = 1.0;
-      cone_expr(1) = 3.0;
-      cone_expr.tail<3>() = body_R.col(0) + body_R.col(1) + body_R.col(2);
-      global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
-      cone_expr.tail<3>() = body_R.col(0) + body_R.col(1) - body_R.col(2);
-      global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
-      cone_expr.tail<3>() = body_R.col(0) - body_R.col(1) + body_R.col(2);
-      global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
-      cone_expr.tail<3>() = body_R.col(0) - body_R.col(1) - body_R.col(2);
-      global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
-      cone_expr.tail<3>() = body_R.row(0) + body_R.row(1) + body_R.row(2);
-      global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
-      cone_expr.tail<3>() = body_R.row(0) + body_R.row(1) - body_R.row(2);
-      global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
-      cone_expr.tail<3>() = body_R.row(0) - body_R.row(1) + body_R.row(2);
-      global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
-      cone_expr.tail<3>() = body_R.row(0) - body_R.row(1) - body_R.row(2);
-      global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
+    if (!global_ik_options.linear_constraint_only) {
+      for (int i = 1; i < robot()->get_num_bodies(); ++i) {
+        const auto& body_R = global_ik_.body_rotation_matrix(i);
+        Eigen::Matrix<symbolic::Expression, 5, 1> cone_expr;
+        cone_expr(0) = 1.0;
+        cone_expr(1) = 3.0;
+        cone_expr.tail<3>() = body_R.col(0) + body_R.col(1) + body_R.col(2);
+        global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
+        cone_expr.tail<3>() = body_R.col(0) + body_R.col(1) - body_R.col(2);
+        global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
+        cone_expr.tail<3>() = body_R.col(0) - body_R.col(1) + body_R.col(2);
+        global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
+        cone_expr.tail<3>() = body_R.col(0) - body_R.col(1) - body_R.col(2);
+        global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
+        cone_expr.tail<3>() = body_R.row(0) + body_R.row(1) + body_R.row(2);
+        global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
+        cone_expr.tail<3>() = body_R.row(0) + body_R.row(1) - body_R.row(2);
+        global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
+        cone_expr.tail<3>() = body_R.row(0) - body_R.row(1) + body_R.row(2);
+        global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
+        cone_expr.tail<3>() = body_R.row(0) - body_R.row(1) - body_R.row(2);
+        global_ik_.AddRotatedLorentzConeConstraint(cone_expr);
+      }
     }
 
     const auto R_02 = global_ik_.body_rotation_matrix(2);
