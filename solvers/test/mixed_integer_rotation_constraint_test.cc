@@ -90,6 +90,24 @@ class TestMixedIntegerRotationConstraint {
         -0.54132589862048197, 0.68892119955432829, 0.48203096610835455;
     EXPECT_TRUE(IsFeasible(R_test));
 
+    // This one is useful for testing the cutting planes.
+    // R_test.col(0) satisfies R_test(0, 0) ∈ [0.5, 1], R_test(1, 0) ∈ [0.5, 1],
+    // R_test(2, 0) ∈ [0 0.5], namely its binary variables has assignment
+    // B[0][0] = (1, 0), B[1][0] = (1, 0), B[2][0] = (1, 1). We added some
+    // cutting planes on the binary variables for R_test.col(1), R_test.col(2),
+    // on where these two vectors can be.
+    const double z_test = (18 * std::sqrt(15) / 5 + 14 * std::sqrt(55)) / 128;
+    R_test.col(0) << 0.6, 0.7, std::sqrt(15) / 10;
+    // R_test.col(1) in the orthant (--+)
+    R_test.col(1) << -0.3, 9.0 / 35 - std::sqrt(15) / 7 * z_test, z_test;
+    R_test.col(2) = R_test.col(0).cross(R_test.col(1));
+    EXPECT_TRUE(IsFeasible(R_test));
+
+    // R_test.col(1) in the orthant (++-)
+    R_test.col(1) = -R_test.col(1);
+    R_test.col(2) = R_test.col(0).cross(R_test.col(1));
+    EXPECT_TRUE(IsFeasible(R_test));
+
     std::mt19937 generator(41);
     for (int i = 0; i < 100; i++) {
       R_test = math::UniformlyRandomRotationMatrix(&generator).matrix();

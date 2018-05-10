@@ -331,7 +331,7 @@ void AddCrossProductImpliedOrthantConstraint(
  * Case 2
  * if v is in the orthant (--+), then vᶻ ≥ 0.5
  * Namely the following implication holds
- * B[0][j](1) + B[1][j](1) + B[2][j](1) = 1  (5)
+ * B[0][j](1) + B[1][j](1) + B[2][j](1) = 1    (5)
  * B[0][j](0) xor B[0][k](0) = 1 - B[0][j](1)  (6)
  * B[1][j](0) xor B[1][k](0) = 1 - B[1][j](1)  (7)
  * B[2][j](0) xor B[2][k](0) = 1 - B[2][j](1)  (8)
@@ -371,17 +371,42 @@ void AddCuttingPlanesOnOrthantBorders(
       prog->AddLinearConstraint(b(0) >= B[0][j](1) - B[1][j](1) - B[2][j](1));
       prog->AddLinearConstraint(b(0) >= -B[0][j](1) + B[1][j](1) - B[2][j](1));
       prog->AddLinearConstraint(b(0) >= -B[0][j](1) - B[1][j](1) + B[2][j](1));
-      // B[i][j](0) xor B[i][k](0) = B[i][j](1) => b(i) = 1
-      // b(i) >= B[i][j](0) - B[i][k](0) - (1 - B[i][j](1))
-      // b(i) >= -B[i][j](0) + B[i][k](0) - (1 - B[i][j](1))
-      // b(i) >= -B[i][j](0) - B[i][k](0) + (1 - B[i][j](1))
+      // B[i][j](0) xor B[i][k](0) = B[i][j](1) <=> b(i + 1) = 1
+      // can be formulated as
+      // A * [B[i][j](0) B[i][k](0) B[i][j](1) b(i + 1)] <= c
+      // where A, c is obtained from MATLAB Multi-parametric toolbox, with the
+      // command
+      // V =...
+      // [0 0 0 1;...
+      // 0 0 1 0;...
+      // 0 1 0 0;...
+      // 0 1 1 1;...
+      // 1 0 0 0;...
+      // 1 0 1 1;...
+      // 1 1 1 0;...
+      // 1 1 0 1];
+      // P = Polyhedron(V);
+      // P.computeHRep();
+      // A = P.A;
+      // c = P.b;
+      
+      Eigen::Matrix<double, 8, 4> A;
+      Eigen::Matrix<double, 8, 1> c;
+      Eigen::Matrix<double, 8, 1> lb = Eigen::Matrix<double, 8, 1>::Constant(
+          -std::numeric_limits<double>::infinity());
+      A << 1, -1, -1, 1,
+        -1, 1, -1, 1,
+        -1, -1, -1, -1,
+        -1, -1, 1, 1,
+        -1, 1, 1, -1,
+        1, -1, 1, -1,
+        1, 1, -1, -1,
+        1, 1, 1, 1;
+      c << 1, 1, -1, 1, 1, 1, 1, 3; 
       for (int i = 0; i < 3; ++i) {
-        prog->AddLinearConstraint(b(i) >=
-                                  B[i][j](0) - B[i][k](0) - (1 - B[i][j](1)));
-        prog->AddLinearConstraint(b(i) >=
-                                  -B[i][j](0) + B[i][k](0) - (1 - B[i][j](1)));
-        prog->AddLinearConstraint(b(i) >=
-                                  -B[i][j](0) - B[i][k](0) + (1 - B[i][j](1)));
+        prog->AddLinearConstraint(
+            A, lb, c, VectorDecisionVariable<4>(B[i][j](0), B[i][k](0),
+                                                B[i][j](1), b(i + 1)));
       }
       for (int i = 0; i < 3; ++i) {
         // B[i][k](1) + B[i][j](1) <= 5 - b1 - b2 - b3 - b4
