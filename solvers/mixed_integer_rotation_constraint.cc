@@ -329,7 +329,18 @@ void AddCrossProductImpliedOrthantConstraint(
  * (2), (3) and (4) together means R.col(k) is in the neighbouring orthant of
  * R.col(j), across the border.
  * Case 2
- * if v is in the orthant (-++), then 
+ * if v is in the orthant (--+), then vᶻ ≥ 0.5
+ * Namely the following implication holds
+ * B[0][j](1) + B[1][j](1) + B[2][j](1) = 1  (5)
+ * B[0][j](0) xor B[0][k](0) = 1 - B[0][j](1)  (6)
+ * B[1][j](0) xor B[1][k](0) = 1 - B[1][j](1)  (7)
+ * B[2][j](0) xor B[2][k](0) = 1 - B[2][j](1)  (8)
+ * implies B[i][k](1) + B[i][j](1) <= 1, i = 0, 1, 2
+ * (5) is the same as (1), meaning R.col(j) is in the middle region on the
+ * orthant boundary. (2), (3) and (4) together means that R.col(k) is in an
+ * orthant that intersects the orthant of R.col(j) at just one vertex; that
+ * vertex is opposite to the orthant boundary, on which the region of R.col(j)
+ * is.
  */
 void AddCuttingPlanesOnOrthantBorders(
     const std::array<std::array<VectorXDecisionVariable, 3>, 3>& B,
@@ -339,6 +350,11 @@ void AddCuttingPlanesOnOrthantBorders(
   // B[i][k](1) + B[i][j](1) <= 5 - b1 - b2 - b3 - b4
   // where b1 = 1 if (1) holds, b1 = 0 or 1 if (1) does not hold. Similarly for
   // b2, b3, b4.
+  // If (5) v (6) v (7) v (8) implies B[i][k](1) + B[i][j](1) <= 1, then we have
+  // the constraint
+  // B[i][k](1) + B[i][j](1) <= 5 - b5 - b6 - b7 - b8 = 5 - b1 - (1-b2) - (1-b3)
+  //        -(1-b4) = 2 - b1 + b2 + b3 + b4
+  // Here we use the fact that b5 = b1, b6 = 1 - b2, b7 = 1 - b3, b8 = 1 - b4
   for (int j = 0; j < 3; ++j) {
     for (int k = 0; k < 3; ++k) {
       if (k == j) {
@@ -371,6 +387,9 @@ void AddCuttingPlanesOnOrthantBorders(
         // B[i][k](1) + B[i][j](1) <= 5 - b1 - b2 - b3 - b4
         prog->AddLinearConstraint(B[i][k](1) + B[i][j](1) <=
                                   5 - b.cast<Expression>().sum());
+        // B[i][k](1) + B[i][j](1) <= 2 - b1 + b2 + b3 + b4
+        prog->AddLinearConstraint(B[i][k](1) + B[i][j](1) <=
+                                  2 - b(0) + b(1) + b(2) + b(3));
       }
     }
   }
