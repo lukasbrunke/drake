@@ -1302,6 +1302,13 @@ drake_cc_googletest(
     ],
 )
 
+drake_cc_googletest(
+    name = "mixed_integer_rotation_constraint_region_test",
+    deps = [
+        ":mathematical_program",
+    ],
+)
+
 # The extra_srcs are required here because add_lint_tests() doesn't understand
 # how to extract labels from select() functions yet.
 add_lint_tests(cpplint_extra_srcs = [
