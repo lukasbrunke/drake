@@ -313,10 +313,12 @@ void AddCrossProductImpliedOrthantConstraint(
  * regions. For any vector u in the middle region among these three, the unit
  * length vector v that is perpendicular to v, cannot be on any of the three
  * regions, across the border in the neighbouring orthant, and also along the
- * border.
+ * border. Moreover, v cannot be in the center region of that neighbouring
+ * orthant.
  * For example, if 0.5 ≤ uˣ ≤ 1, 0.5 ≤ uʸ ≤ 1, 0 ≤ uᶻ ≤ 0.5, namely u is in
  * the bottom middle region in the first orthant in Fig 2, then we know that
- * if v is in the orthant (++-), then vᶻ ≤ -0.5
+ * if v is in the orthant (++-), then vᶻ ≤ -0.5, also the region 0.5 ≤ vˣ ≤ 1, 
+ * 0.5 ≤ vʸ ≤ 1, -1 ≤ vᶻ ≤ -0.5 is not allowed.
  * If u = R.col(j) and v = R.col(k)
  * Namely the following implication holds
  * B[0][j](1) + B[1][j](1) + B[2][j](1) = 1  (1)
@@ -325,17 +327,20 @@ void AddCrossProductImpliedOrthantConstraint(
  * B[2][j](0) xor B[2][k](0) = B[2][j](1)    (4)
  * implies
  * B[i][k](1) + B[i][j](1) <= 1, i = 0, 1, 2
+ * B[0][k](1) + B[1][k](1) + B[2][k](1) >= 1
  * (1) means R.col(j) is in the middle region on the orthant boundary.
  * (2), (3) and (4) together means R.col(k) is in the neighbouring orthant of
  * R.col(j), across the border.
  * Case 2
- * if v is in the orthant (--+), then vᶻ ≥ 0.5
+ * if v is in the orthant (--+), then vᶻ ≥ 0.5, also the region -1 ≤ vˣ ≤ -0.5,
+ * -1 ≤ vʸ ≤ -0.5, 0.5 ≤ vᶻ ≤ 1 is not allowed
  * Namely the following implication holds
  * B[0][j](1) + B[1][j](1) + B[2][j](1) = 1    (5)
  * B[0][j](0) xor B[0][k](0) = 1 - B[0][j](1)  (6)
  * B[1][j](0) xor B[1][k](0) = 1 - B[1][j](1)  (7)
  * B[2][j](0) xor B[2][k](0) = 1 - B[2][j](1)  (8)
  * implies B[i][k](1) + B[i][j](1) <= 1, i = 0, 1, 2
+ * B[0][k](1) + B[1][k](1) + B[2][k](1) >= 1
  * (5) is the same as (1), meaning R.col(j) is in the middle region on the
  * orthant boundary. (2), (3) and (4) together means that R.col(k) is in an
  * orthant that intersects the orthant of R.col(j) at just one vertex; that
@@ -348,13 +353,16 @@ void AddCuttingPlanesOnOrthantBorders(
   // If (1) ∨ (2) v (3) v (4) implies B[i][k](1) + B[i][j](1) <= 1, where "v"
   // means "logical and", then we have the constraint
   // B[i][k](1) + B[i][j](1) <= 5 - b1 - b2 - b3 - b4
-  // where b1 = 1 if (1) holds, b1 = 0 or 1 if (1) does not hold. Similarly for
-  // b2, b3, b4.
+  // B[0][k](1) + B[1][k](1) + B[2][k](1) >= b1 + b2 + b3 + b4 - 3
+  // where b1 = 1 if (1) holds, b1 = 0 or 1 if (1) does not hold. 
+  // b2 = 1 <=> (2) holds. Same for b3 and b4.
   // If (5) v (6) v (7) v (8) implies B[i][k](1) + B[i][j](1) <= 1, then we have
   // the constraint
   // B[i][k](1) + B[i][j](1) <= 5 - b5 - b6 - b7 - b8 = 5 - b1 - (1-b2) - (1-b3)
   //        -(1-b4) = 2 - b1 + b2 + b3 + b4
   // Here we use the fact that b5 = b1, b6 = 1 - b2, b7 = 1 - b3, b8 = 1 - b4
+  // Also we know that (5) v (6) v (7) v (8) implies B[0][k](1) + B[1][k](1) +
+  // B[2][k](1) >= b5 + b6 + b7 + b8 - 3 = b1 - b2 - b3 - b4
   for (int j = 0; j < 3; ++j) {
     for (int k = 0; k < 3; ++k) {
       if (k == j) {
@@ -416,6 +424,12 @@ void AddCuttingPlanesOnOrthantBorders(
         prog->AddLinearConstraint(B[i][k](1) + B[i][j](1) <=
                                   2 - b(0) + b(1) + b(2) + b(3));
       }
+      // B[0][k](1) + B[1][k](1) + B[2][k](1) >= b1 + b2 + b3 + b4 - 3
+      prog->AddLinearConstraint(B[0][k](1) + B[1][k](1) + B[2][k](1) >=
+                                b.cast<Expression>().sum() - 3);
+      // B[0][k](1) + B[1][k](1) + B[2][k](1) >= b1 - b2 - b3 - b4
+      prog->AddLinearConstraint(B[0][k](1) + B[1][k](1) + B[2][k](1) >=
+                                b(0) - b(1) - b(2) - b(3));
     }
   }
 }
