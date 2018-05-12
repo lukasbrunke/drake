@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
-#include "drake/examples/IRB140/IRB140_analytical_kinematics.h"
-#include "drake/examples/IRB140/test/irb140_common.h"
+#include "drake/examples/irb140/IRB140_analytical_kinematics.h"
+#include "drake/examples/irb140/test/irb140_common.h"
 #include "drake/multibody/global_inverse_kinematics.h"
 #include "drake/solvers/gurobi_solver.h"
 #include "drake/solvers/mosek_solver.h"
@@ -34,7 +34,7 @@ class GlobalIKTest : public ::testing::Test {
     q_analytical_ik_ = analytical_ik_.inverse_kinematics(ee_pose);
     SetEndEffectorPose(ee_pose);
     solvers::GurobiSolver gurobi_solver;
-    global_ik_.SetSolverOption(solvers::SolverType::kGurobi, "FeasibilityTol", 7E-6);
+    global_ik_.SetSolverOption(solvers::GurobiSolver::id(), "FeasibilityTol", 7E-6);
     for (int i = 1; i < robot_->get_num_bodies(); ++i) {
       const auto& body_R = global_ik_.body_rotation_matrix(i);
       Eigen::Matrix<symbolic::Expression, 5, 1> cone_expr;
