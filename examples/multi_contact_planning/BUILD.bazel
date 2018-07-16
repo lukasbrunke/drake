@@ -17,4 +17,34 @@ drake_cc_library(
     srcs = ["friction_cone.cc"],
     hdrs = ["friction_cone.h"],
     deps = [
-        "//common:
+        "//common:essential"
+    ]
+)
+
+drake_cc_library(
+    name = "contact_force_planning",
+    srcs = ["contact_force_planning.cc"],
+    hdrs = ["contact_force_planning.h"],
+    deps = [
+        ":friction_cone",
+        "//solvers:mathematical_program",
+    ],
+)
+
+drake_cc_googletest (
+    name = "friction_cone_test",
+    deps = [
+        ":friction_cone",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "contact_force_planning_test",
+    tags = gurobi_test_tags(),
+    deps = [
+        ":contact_force_planning",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//solvers:gurobi_solver",
+    ],
+)
