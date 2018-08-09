@@ -234,6 +234,17 @@ drake_cc_library(
     ],
 )
 
+drake_cc_library(
+    name = "robust_verification",
+    srcs = ["robust_verification.cc"],
+    hdrs = ["robust_verification.h"],
+    deps = [
+        "//common:essential",
+        "//solvers:mathematical_program",
+        "//systems/framework",
+    ],
+)
+
 # === test/ ===
 
 drake_cc_googletest(
@@ -357,6 +368,14 @@ drake_cc_googletest(
         "//common:autodiff",
         "//common:essential",
         "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+drake_cc_googletest(
+    name = "robust_verification_test",
+    deps = [
+        ":robust_verification",
+        "//common:essential",
     ],
 )
 
