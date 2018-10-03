@@ -33,6 +33,14 @@ drake_cc_library(
 )
 
 drake_cc_googletest(
+    name = "global_inverse_kinematics_internal_test",
+    srcs = ["test/global_inverse_kinematics_internal_test.cc"],
+    deps = [
+        "//multibody:global_inverse_kinematics",
+    ],
+)
+
+drake_cc_googletest(
     name = "global_inverse_kinematics_test",
     timeout = "moderate",
     srcs = ["test/global_inverse_kinematics_test.cc"],

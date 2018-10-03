@@ -339,6 +339,39 @@ class GlobalInverseKinematics : public solvers::MathematicalProgram {
       int body_idx, int solution_number, Eigen::Ref<Eigen::VectorXd> q,
       std::vector<Eigen::Matrix3d>* reconstruct_R_WB) const;
 
+  // Build the topology of the robot, by recording the children of each body.
+  // @param body_children body_children[i] contains the indices of all the child
+  // bodies of link i.
+  void BuildTreeTopology(std::vector<std::vector<int>>* body_children) const;
+
+  // Reconstruct the revolute joint angle, from the solution of the
+  // mixed-integer optimization.
+  // We find the angle θ as the minimizer of the following problem.
+  // min |R_WP * R(a_B, θ) - R_WB|_F² + β*|p_WB + R_WP * R(a_B,θ)*p_BC - p_WC|₂²
+  // s.t angle_lower <= θ <= angle_upper.
+  // where |X|_F is the Frobenius norm of X, |X|_F² = trace(XᵀX)
+  // Namely we penalize the weighted sum between the orientation error of body
+  // B, and the position error of the child link C.
+  // @param R_WP The rotation matrix of the parent link P, measured in world
+  // frame W.
+  // @param R_WB The rotation matrix of the child link B of this joint, measured
+  // in the world frame W.
+  // @param a_B The rotation axis of this joint, measured in the link B.
+  // @param p_WB The position of link B's origin, measured in world frame W.
+  // @param p_WC The position of all child links of link B, measured in the
+  // world frame W.
+  // @param p_BC The position of all child links of link B, measured in the link
+  // B.
+  // @param beta The weight on the child links position error.
+  // @param angle_lower The lower bound of the angle.
+  // @param angle_upper The upper bound of the angle.
+  static double ReconstructJointAngleForRevoluteJoint(
+      const Eigen::Matrix3d& R_WP, const Eigen::Matrix3d& R_WB,
+      const Eigen::Vector3d& a_B, const Eigen::Vector3d& p_WB,
+      const Eigen::Matrix3Xd& p_WC,
+      const Eigen::Matrix3Xd& p_BC, double beta, double angle_lower,
+      double angle_upper);
+
   const RigidBodyTree<double>* robot_;
 
   // joint_lower_bounds_ and joint_upper_bounds_ are column vectors of size
@@ -357,6 +390,9 @@ class GlobalInverseKinematics : public solvers::MathematicalProgram {
   // p_WBo_[i] is the position of the origin Bo of body frame B for the i'th
   // body, measured and expressed in the world frame.
   std::vector<solvers::VectorDecisionVariable<3>> p_WBo_;
+
+  // Friend class used to test the private function of GlobalInverseKinematics
+  friend class GlobalInverseKinematicsTester;
 };
 }  // namespace multibody
 }  // namespace drake
