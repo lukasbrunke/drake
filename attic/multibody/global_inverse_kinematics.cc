@@ -242,6 +242,16 @@ void GlobalInverseKinematics::ReconstructGeneralizedPositionSolutionForBody(
   }
 }
 
+void GlobalInverseKinematics::BuildTreeTopology(
+    std::vector<std::vector<int>>* body_children) const {
+  DRAKE_DEMAND(body_children);
+  body_children->resize(robot_->get_num_bodies());
+  for (int i = 0; i < robot_->get_num_bodies(); ++i) {
+    const int parent_idx = robot_->get_body(i).get_parent()->get_body_index();
+    (*body_children)[parent_idx].push_back(i);
+  }
+}
+
 Eigen::VectorXd
 GlobalInverseKinematics::ReconstructGeneralizedPositionSolution() const {
   Eigen::VectorXd q(robot_->get_num_positions());
@@ -655,6 +665,51 @@ void GlobalInverseKinematics::AddJointLimitConstraint(
   } else {
     throw std::runtime_error("The body " + body.get_name() +
                              " does not have a joint.");
+  }
+}
+
+double GlobalInverseKinematics::ReconstructJointAngleForRevoluteJoint(
+    const Eigen::Matrix3d& R_WP, const Eigen::Matrix3d& R_WB,
+    const Eigen::Vector3d& a_B, const Eigen::Vector3d& p_WB,
+    const Eigen::Matrix3Xd& p_WC, const Eigen::Matrix3Xd& p_BC, double beta,
+    double angle_lower, double angle_upper) {
+  DRAKE_DEMAND(beta >= 0);
+  DRAKE_DEMAND(p_WC.cols() == p_BC.cols());
+  Eigen::Matrix3d A;
+  // clang-format off
+  A << 0, -a_B(2), a_B(1),
+       a_B(2), 0, -a_B(0),
+       -a_B(1), a_B(0), 0;
+  // clang-format on
+  const Eigen::Matrix3d A_square = A * A;
+  const Eigen::Matrix3d M = R_WB.transpose() * R_WP;
+  const Eigen::Array3Xd p_CB_W =
+      (p_WB * Eigen::RowVectorXd::Ones(p_WC.cols()) - p_WC).array();
+  const double position_error_y =
+      p_WC.cols() == 0
+          ? 0
+          : -(p_CB_W * (R_WP * A * p_BC).array()).colwise().sum().sum();
+  const double position_error_x =
+      p_WC.cols() == 0
+          ? 0
+          : (p_CB_W * (R_WP * A_square * p_BC).array()).colwise().sum().sum();
+  const double theta_y = (M * A).trace() + beta * position_error_y;
+  const double theta_x = -(M * A_square).trace() + beta * position_error_x;
+  const double theta_zero_gradient = std::atan2(theta_y, theta_x);
+  for (int i = -1; i <= 1; ++i) {
+    const double theta_zero_gradient_shift = theta_zero_gradient + 2 * M_PI * i;
+    if (theta_zero_gradient_shift <= angle_upper &&
+        theta_zero_gradient_shift >= angle_lower) {
+      return theta_zero_gradient_shift;
+    }
+  }
+  // The cost gradient doesn't vanish within [angle_lower, angle_upper], the
+  // minimal occurs at the boundary.
+  if (-theta_y * std::sin(angle_lower) - theta_x * std::cos(angle_lower) <=
+      -theta_y * std::sin(angle_upper) - theta_x * std::cos(angle_upper)) {
+    return angle_lower;
+  } else {
+    return angle_upper;
   }
 }
 }  // namespace multibody
