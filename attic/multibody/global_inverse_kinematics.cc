@@ -706,29 +706,30 @@ void GlobalInverseKinematics::AddJointLimitConstraint(
 
 double GlobalInverseKinematics::ReconstructJointAngleForRevoluteJoint(
     const Eigen::Matrix3d& R_WP, const Eigen::Matrix3d& R_WB,
-    const Eigen::Vector3d& a_B, const Eigen::Vector3d& p_WB,
+    const Eigen::Matrix3d& R_PF,
+    const Eigen::Vector3d& a_F, const Eigen::Vector3d& p_WB,
     const Eigen::Matrix3Xd& p_WC, const Eigen::Matrix3Xd& p_BC, double beta,
     double angle_lower, double angle_upper) {
   DRAKE_DEMAND(beta >= 0);
   DRAKE_DEMAND(p_WC.cols() == p_BC.cols());
   Eigen::Matrix3d A;
   // clang-format off
-  A << 0, -a_B(2), a_B(1),
-       a_B(2), 0, -a_B(0),
-       -a_B(1), a_B(0), 0;
+  A << 0, -a_F(2), a_F(1),
+       a_F(2), 0, -a_F(0),
+       -a_F(1), a_F(0), 0;
   // clang-format on
   const Eigen::Matrix3d A_square = A * A;
-  const Eigen::Matrix3d M = R_WB.transpose() * R_WP;
+  const Eigen::Matrix3d M = R_WB.transpose() * R_WP * R_PF;
   const Eigen::Array3Xd p_CB_W =
       (p_WB * Eigen::RowVectorXd::Ones(p_WC.cols()) - p_WC).array();
   const double position_error_y =
       p_WC.cols() == 0
           ? 0
-          : -(p_CB_W * (R_WP * A * p_BC).array()).colwise().sum().sum();
+          : -(p_CB_W * (R_WP * R_PF * A * p_BC).array()).colwise().sum().sum();
   const double position_error_x =
       p_WC.cols() == 0
           ? 0
-          : (p_CB_W * (R_WP * A_square * p_BC).array()).colwise().sum().sum();
+          : (p_CB_W * (R_WP * R_PF * A_square * p_BC).array()).colwise().sum().sum();
   const double theta_y = (M * A).trace() + beta * position_error_y;
   const double theta_x = -(M * A_square).trace() + beta * position_error_x;
   const double theta_zero_gradient = std::atan2(theta_y, theta_x);
