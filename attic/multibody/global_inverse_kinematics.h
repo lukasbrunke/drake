@@ -301,7 +301,10 @@ class GlobalInverseKinematics : public solvers::MathematicalProgram {
   // frame W.
   // @param R_WB The rotation matrix of the child link B of this joint, measured
   // in the world frame W.
-  // @param a_B The rotation axis of this joint, measured in the link B.
+  // @param R_PF The orientation of the joint inboard frame F, measured in the
+  // parent frame P.
+  // @param a_F The rotation axis of this joint, measured in the joint inboard
+  // frame F.
   // @param p_WB The position of link B's origin, measured in world frame W.
   // @param p_WC The position of all child links of link B, measured in the
   // world frame W.
@@ -312,8 +315,8 @@ class GlobalInverseKinematics : public solvers::MathematicalProgram {
   // @param angle_upper The upper bound of the angle.
   static double ReconstructJointAngleForRevoluteJoint(
       const Eigen::Matrix3d& R_WP, const Eigen::Matrix3d& R_WB,
-      const Eigen::Vector3d& a_B, const Eigen::Vector3d& p_WB,
-      const Eigen::Matrix3Xd& p_WC,
+      const Eigen::Matrix3d& R_PF, const Eigen::Vector3d& a_F,
+      const Eigen::Vector3d& p_WB, const Eigen::Matrix3Xd& p_WC,
       const Eigen::Matrix3Xd& p_BC, double beta, double angle_lower,
       double angle_upper);
 
