@@ -91,12 +91,15 @@ class GlobalInverseKinematics : public solvers::MathematicalProgram {
    * @warning Do not call this method if the problem is not solved successfully!
    * The returned value can be NaN or meaningless number if the problem is
    * not solved.
+   * @param position_error_weight The weight on the position error. The
+   * reconstructed posture minimizes the sum of the orientation error and the
+   * weighted position error to the mixed integer program solution.
    * @retval q The reconstructed posture of the robot of the generalized
    * coordinates, corresponding to the RigidBodyTree on which the inverse
    * kinematics problem is solved.
    */
   Eigen::VectorXd ReconstructGeneralizedPositionSolution(
-      int solution_number = 0) const;
+      double position_error_weight = 0, int solution_number = 0) const;
 
   /**
    * Adds the constraint that the position of a point `Q` on a body `B`
@@ -336,7 +339,8 @@ class GlobalInverseKinematics : public solvers::MathematicalProgram {
   // index body_idx. Note that the orientation of the parent link of the body
   // body_idx should have been reconstructed, in reconstruct_R_WB.
   void ReconstructGeneralizedPositionSolutionForBody(
-      int body_idx, int solution_number, Eigen::Ref<Eigen::VectorXd> q,
+      int body_idx, int solution_number, const std::vector<int>& body_children,
+      double position_error_weight, Eigen::Ref<Eigen::VectorXd> q,
       std::vector<Eigen::Matrix3d>* reconstruct_R_WB) const;
 
   // Build the topology of the robot, by recording the children of each body.
