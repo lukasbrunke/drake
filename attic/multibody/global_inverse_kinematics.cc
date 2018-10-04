@@ -170,7 +170,8 @@ GlobalInverseKinematics::body_position(int body_index) const {
 }
 
 void GlobalInverseKinematics::ReconstructGeneralizedPositionSolutionForBody(
-    int body_idx, int solution_number, Eigen::Ref<Eigen::VectorXd> q,
+    int body_idx, int solution_number,  const std::vector<int>& body_children,
+    double position_error_weight, Eigen::Ref<Eigen::VectorXd> q,
     std::vector<Eigen::Matrix3d>* reconstruct_R_WB) const {
   const RigidBody<double>& body = robot_->get_body(body_idx);
   const RigidBody<double>* parent = body.get_parent();
@@ -215,18 +216,28 @@ void GlobalInverseKinematics::ReconstructGeneralizedPositionSolutionForBody(
       // Should NOT do this evil dynamic cast here, but currently we do
       // not have a method to tell if a joint is revolute or not.
       if (dynamic_cast<const RevoluteJoint*>(joint) != nullptr) {
+        Eigen::Matrix3Xd p_BC(3, body_children.size());
+        Eigen::Matrix3Xd p_WC(3, body_children.size());
+        for (int i = 0; i < static_cast<int>(body_children.size()); ++i) {
+          p_BC.col(i) = robot_->get_body(body_children[i])
+                            .getJoint()
+                            .get_transform_to_parent_body()
+                            .translation();
+          p_WC.col(i) = GetSolution(p_WBo_[body_children[i]]);
+        }
         const RevoluteJoint* revolute_joint =
             dynamic_cast<const RevoluteJoint*>(joint);
-        const Matrix3d joint_rotmat =
-            X_PF.linear().transpose() * R_WP.transpose() * R_WC;
         // The joint_rotmat is very likely not on SO(3). The reason is
         // that we use a relaxation of the rotation matrix, and thus
         // R_WC might not lie on SO(3) exactly. Here we need to project
         // joint_rotmat to SO(3), with joint axis as the rotation axis, and
         // joint limits as the lower and upper bound on the rotation angle.
+        const Eigen::Vector3d p_WB = GetSolution(p_WBo_[body_idx]);
         const Vector3d rotate_axis = revolute_joint->joint_axis().head<3>();
-        const double revolute_joint_angle = math::ProjectMatToRotMatWithAxis(
-            joint_rotmat, rotate_axis, joint_lb, joint_ub);
+        const double revolute_joint_angle =
+            ReconstructJointAngleForRevoluteJoint(
+                R_WP, R_WC, X_PF.linear(), rotate_axis, p_WB, p_WC, p_BC,
+                position_error_weight, joint_lb, joint_ub);
         q(body.get_position_start_index()) = revolute_joint_angle;
         reconstruct_R_WB->at(body_idx) =
             R_WP * X_PF.linear() *
@@ -252,51 +263,43 @@ void GlobalInverseKinematics::BuildTreeTopology(
     std::vector<std::vector<int>>* body_children) const {
   DRAKE_DEMAND(body_children);
   body_children->resize(robot_->get_num_bodies());
-  for (int i = 0; i < robot_->get_num_bodies(); ++i) {
+  for (int i = 1; i < robot_->get_num_bodies(); ++i) {
     const int parent_idx = robot_->get_body(i).get_parent()->get_body_index();
     (*body_children)[parent_idx].push_back(i);
   }
 }
 
 Eigen::VectorXd GlobalInverseKinematics::ReconstructGeneralizedPositionSolution(
-    int solution_number) const {
+    double position_error_weight, int solution_number) const {
+  std::vector<std::vector<int>> body_children;
+  BuildTreeTopology(&body_children);
+  // Is the robot a single kinematic chain?
+  /*bool is_kinematic_chain = true;
+  for (const auto& children : body_children) {
+    if (children.size() > 1) {
+      is_kinematic_chain = false;
+      break;
+    }
+  }*/
   Eigen::VectorXd q(robot_->get_num_positions());
   // reconstruct_R_WB[i] is the orientation of body i'th body frame expressed in
   // the world frame, computed from the reconstructed posture.
   std::vector<Eigen::Matrix3d> reconstruct_R_WB(robot_->get_num_bodies());
   // is_link_visited[i] is set to true, if the angle of the joint on link i has
   // been reconstructed.
-  std::vector<bool> is_link_visited(robot_->get_num_bodies(), false);
   // The first one is the world frame, thus the orientation is identity.
   reconstruct_R_WB[0].setIdentity();
-  is_link_visited[0] = true;
-  int num_link_visited = 1;
-  int body_idx = 1;
-  while (num_link_visited < robot_->get_num_bodies()) {
-    if (!is_link_visited[body_idx]) {
-      // unvisited_links records all the unvisited links, along the kinematic
-      // path from the root to the body with index body_idx (including
-      // body_idx).
-      std::stack<int> unvisited_links;
-      unvisited_links.push(body_idx);
-      int parent_idx =
-          robot_->get_body(body_idx).get_parent()->get_body_index();
-      while (!is_link_visited[parent_idx]) {
-        unvisited_links.push(parent_idx);
-        parent_idx =
-            robot_->get_body(parent_idx).get_parent()->get_body_index();
-      }
-      // Now the link parent_idx has been visited.
-      while (!unvisited_links.empty()) {
-        int unvisited_link_idx = unvisited_links.top();
-        unvisited_links.pop();
-        ReconstructGeneralizedPositionSolutionForBody(
-            unvisited_link_idx, solution_number, q, &reconstruct_R_WB);
-        is_link_visited[unvisited_link_idx] = true;
-        ++num_link_visited;
-      }
+  std::stack<int> unvisited_links;
+  unvisited_links.push(body_children[0][0]);
+  while (!unvisited_links.empty()) {
+    const int body_index = unvisited_links.top();
+    unvisited_links.pop();
+    ReconstructGeneralizedPositionSolutionForBody(
+        body_index, solution_number, body_children[body_index],
+        position_error_weight, q, &reconstruct_R_WB);
+    for (int children : body_children[body_index]) {
+      unvisited_links.push(children);
     }
-    ++body_idx;
   }
   return q;
 }
@@ -706,10 +709,10 @@ void GlobalInverseKinematics::AddJointLimitConstraint(
 
 double GlobalInverseKinematics::ReconstructJointAngleForRevoluteJoint(
     const Eigen::Matrix3d& R_WP, const Eigen::Matrix3d& R_WB,
-    const Eigen::Matrix3d& R_PF,
-    const Eigen::Vector3d& a_F, const Eigen::Vector3d& p_WB,
-    const Eigen::Matrix3Xd& p_WC, const Eigen::Matrix3Xd& p_BC, double beta,
-    double angle_lower, double angle_upper) {
+    const Eigen::Matrix3d& R_PF, const Eigen::Vector3d& a_F,
+    const Eigen::Vector3d& p_WB, const Eigen::Matrix3Xd& p_WC,
+    const Eigen::Matrix3Xd& p_BC, double beta, double angle_lower,
+    double angle_upper) {
   DRAKE_DEMAND(beta >= 0);
   DRAKE_DEMAND(p_WC.cols() == p_BC.cols());
   Eigen::Matrix3d A;
@@ -727,9 +730,10 @@ double GlobalInverseKinematics::ReconstructJointAngleForRevoluteJoint(
           ? 0
           : -(p_CB_W * (R_WP * R_PF * A * p_BC).array()).colwise().sum().sum();
   const double position_error_x =
-      p_WC.cols() == 0
-          ? 0
-          : (p_CB_W * (R_WP * R_PF * A_square * p_BC).array()).colwise().sum().sum();
+      p_WC.cols() == 0 ? 0 : (p_CB_W * (R_WP * R_PF * A_square * p_BC).array())
+                                 .colwise()
+                                 .sum()
+                                 .sum();
   const double theta_y = (M * A).trace() + beta * position_error_y;
   const double theta_x = -(M * A_square).trace() + beta * position_error_x;
   const double theta_zero_gradient = std::atan2(theta_y, theta_x);
