@@ -171,12 +171,13 @@ GlobalInverseKinematics::body_position(int body_index) const {
 
 void GlobalInverseKinematics::ReconstructGeneralizedPositionSolutionForBody(
     int body_idx, const std::vector<int>& body_children,
-    double position_error_weight, Eigen::Ref<Eigen::VectorXd> q,
+    double position_error_weight, const std::vector<Eigen::Vector3d>& p_WBo,
+    const std::vector<Eigen::Matrix3d>& R_WB, Eigen::Ref<Eigen::VectorXd> q,
     std::vector<Eigen::Matrix3d>* reconstruct_R_WB) const {
   const RigidBody<double>& body = robot_->get_body(body_idx);
   const RigidBody<double>* parent = body.get_parent();
   if (!body.IsRigidlyFixedToWorld()) {
-    const Matrix3d R_WC = GetSolution(R_WB_[body_idx]);
+    const Matrix3d R_WC = R_WB[body_idx];
     // R_WP is the rotation matrix of parent frame to the world frame.
     const Matrix3d& R_WP = reconstruct_R_WB->at(parent->get_body_index());
     const DrakeJoint* joint = &(body.getJoint());
@@ -187,7 +188,7 @@ void GlobalInverseKinematics::ReconstructGeneralizedPositionSolutionForBody(
     // the posture for that joint.
     if (joint->is_floating()) {
       // p_WBi is the position of the body frame in the world frame.
-      const Vector3d p_WBi = GetSolution(p_WBo_[body_idx]);
+      const Vector3d p_WBi = p_WBo[body_idx];
       const math::RotationMatrix<double> normalized_rotmat =
           math::RotationMatrix<double>::ProjectToRotationMatrix(R_WC);
 
@@ -217,7 +218,7 @@ void GlobalInverseKinematics::ReconstructGeneralizedPositionSolutionForBody(
                             .getJoint()
                             .get_transform_to_parent_body()
                             .translation();
-          p_WC.col(i) = GetSolution(p_WBo_[body_children[i]]);
+          p_WC.col(i) = p_WBo[body_children[i]];
         }
         const RevoluteJoint* revolute_joint =
             dynamic_cast<const RevoluteJoint*>(joint);
@@ -226,7 +227,7 @@ void GlobalInverseKinematics::ReconstructGeneralizedPositionSolutionForBody(
         // R_WC might not lie on SO(3) exactly. Here we need to project
         // joint_rotmat to SO(3), with joint axis as the rotation axis, and
         // joint limits as the lower and upper bound on the rotation angle.
-        const Eigen::Vector3d p_WB = GetSolution(p_WBo_[body_idx]);
+        const Eigen::Vector3d p_WB = p_WBo[body_idx];
         const Vector3d rotate_axis = revolute_joint->joint_axis().head<3>();
         const double revolute_joint_angle =
             ReconstructJointAngleForRevoluteJoint(
@@ -268,13 +269,27 @@ Eigen::VectorXd GlobalInverseKinematics::ReconstructGeneralizedPositionSolution(
   std::vector<std::vector<int>> body_children;
   BuildTreeTopology(&body_children);
   // Is the robot a single kinematic chain?
-  /*bool is_kinematic_chain = true;
-  for (const auto& children : body_children) {
+  bool is_kinematic_chain = true;
+  int chain_leaf_node = 0;
+  for (int i = 0; i < static_cast<int>(body_children.size()); ++i) {
+    const auto& children = body_children[i];
     if (children.size() > 1) {
-      is_kinematic_chain = false;
-      break;
+      // Check if the children are welded to this body.
+      int num_non_welded_children = 0;
+      for (int child : children) {
+        if (robot_->get_body(child).getJoint().get_num_velocities() > 0) {
+          num_non_welded_children++;
+        }
+        if (num_non_welded_children > 1) {
+          is_kinematic_chain = false;
+          break;
+        }
+      }
     }
-  }*/
+    if (children.size() == 0) {
+      chain_leaf_node = i;
+    }
+  }
   Eigen::VectorXd q(robot_->get_num_positions());
   // reconstruct_R_WB[i] is the orientation of body i'th body frame expressed in
   // the world frame, computed from the reconstructed posture.
@@ -283,16 +298,52 @@ Eigen::VectorXd GlobalInverseKinematics::ReconstructGeneralizedPositionSolution(
   // been reconstructed.
   // The first one is the world frame, thus the orientation is identity.
   reconstruct_R_WB[0].setIdentity();
-  std::stack<int> unvisited_links;
-  unvisited_links.push(body_children[0][0]);
-  while (!unvisited_links.empty()) {
-    const int body_index = unvisited_links.top();
-    unvisited_links.pop();
-    ReconstructGeneralizedPositionSolutionForBody(
-        body_index, body_children[body_index], position_error_weight, q,
-        &reconstruct_R_WB);
-    for (int children : body_children[body_index]) {
-      unvisited_links.push(children);
+  std::vector<Eigen::Vector3d> p_WBo(robot_->get_num_bodies());
+  std::vector<Eigen::Matrix3d> R_WB(robot_->get_num_bodies());
+  p_WBo[0] = Eigen::Vector3d::Zero();
+  R_WB[0] = Eigen::Matrix3d::Identity();
+  for (int i = 1; i < robot_->get_num_bodies(); ++i) {
+    p_WBo[i] = GetSolution(p_WBo_[i]);
+    R_WB[i] = GetSolution(R_WB_[i]);
+  }
+  // Only do multiple sweep if the robot is a chain.
+  const int max_sweep_iterations = is_kinematic_chain ? 3 : 1;
+  for (int sweep_count = 0; sweep_count < max_sweep_iterations; ++sweep_count) {
+    std::stack<int> unvisited_links;
+    unvisited_links.push(body_children[0][0]);
+    while (!unvisited_links.empty()) {
+      const int body_index = unvisited_links.top();
+      unvisited_links.pop();
+      ReconstructGeneralizedPositionSolutionForBody(
+          body_index, body_children[body_index], position_error_weight, p_WBo,
+          R_WB, q, &reconstruct_R_WB);
+      for (int children : body_children[body_index]) {
+        unvisited_links.push(children);
+      }
+    }
+    if (is_kinematic_chain) {
+      // Now update the link position and orientation from the leaf node to the
+      // root. We compute the parent link pose using the reconstructed joint
+      // positions and the child link pose.
+      int node = chain_leaf_node;
+      int parent = robot_->get_body(node).get_parent()->get_body_index();
+      while (parent != 0) {
+        const auto& body = robot_->get_body(node);
+        const DrakeJoint& joint = body.getJoint();
+        const Eigen::VectorXd q_joint = q.segment(
+            body.get_position_start_index(), joint.get_num_positions());
+        const Eigen::Isometry3d X_FB = joint.jointTransform(q_joint);
+        const Eigen::Isometry3d& X_PF = joint.get_transform_to_parent_body();
+        const Eigen::Isometry3d X_PB = X_PF * X_FB;
+        Eigen::Isometry3d X_WB;
+        X_WB.linear() = R_WB[node];
+        X_WB.translation() = p_WBo[node];
+        const Eigen::Isometry3d X_WP = X_WB * X_PB.inverse();
+        R_WB[parent] = X_WP.linear();
+        p_WBo[parent] = X_WP.translation();
+        node = parent;
+        parent = robot_->get_body(node).get_parent()->get_body_index();
+      }
     }
   }
   return q;

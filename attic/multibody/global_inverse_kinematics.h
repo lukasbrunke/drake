@@ -286,7 +286,8 @@ class GlobalInverseKinematics : public solvers::MathematicalProgram {
   // body_idx should have been reconstructed, in reconstruct_R_WB.
   void ReconstructGeneralizedPositionSolutionForBody(
       int body_idx, const std::vector<int>& body_children,
-      double position_error_weight, Eigen::Ref<Eigen::VectorXd> q,
+      double position_error_weight, const std::vector<Eigen::Vector3d>& p_WBo,
+      const std::vector<Eigen::Matrix3d>& R_WB, Eigen::Ref<Eigen::VectorXd> q,
       std::vector<Eigen::Matrix3d>* reconstruct_R_WB) const;
 
   // Build the topology of the robot, by recording the children of each body.
