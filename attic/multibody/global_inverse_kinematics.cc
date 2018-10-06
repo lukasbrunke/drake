@@ -612,13 +612,17 @@ void GlobalInverseKinematics::AddJointLimitConstraint(
                   {v_C, axis_F.cross(v_C)}};
               v_basis[1] /= v_basis[1].norm();
 
-              std::array<Eigen::Vector3d, 4> v_samples;
+              std::array<Eigen::Vector3d, 8> v_samples;
               v_samples[0] = v_basis[0];
               v_samples[1] = v_basis[1];
               v_samples[2] = v_basis[0] + v_basis[1];
               v_samples[2] /= v_samples[2].norm();
               v_samples[3] = v_basis[0] - v_basis[1];
               v_samples[3] /= v_samples[3].norm();
+              v_samples[4] = (v_basis[0] + 3 * v_basis[1]).normalized();
+              v_samples[5] = (3 * v_basis[0] + v_basis[1]).normalized();
+              v_samples[6] = (v_basis[0] - 3 * v_basis[1]).normalized();
+              v_samples[7] = (3 * v_basis[0] - v_basis[1]).normalized();
 
               // rotmat_joint_offset is R(k, (a+b)/2) explained above.
               const Matrix3d rotmat_joint_offset =
