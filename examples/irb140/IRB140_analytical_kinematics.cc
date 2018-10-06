@@ -208,7 +208,7 @@ Eigen::Isometry3d IRB140AnalyticalKinematics::X_06(const Eigen::Matrix<double, 6
 // If the abs value of x is small than 1 + tol, then set x to std::max(std::min(1, x), -1)
 // else, leave x what it is
 double clapToPlusMinusOneRange(double x, double tol = 1E-6) {
-  if (std::abs(x) < 1 + 1E-6) {
+  if (std::abs(x) < 1 + tol) {
     return std::max(std::min(x, 1.0), -1.0);
   } else {
     return x;

@@ -26,7 +26,7 @@ multibody::GlobalInverseKinematics::Options global_ik_options() {
       Approach::kBilinearMcCormick;
   options.interval_binning = solvers::IntervalBinning::kLogarithmic;
   options.num_intervals_per_half_axis = 2;
-  options.linear_constraint_only = true;
+  options.linear_constraint_only = false;
   return options;
 }
 
@@ -232,7 +232,9 @@ class DUT {
     Eigen::Matrix<double, 6, 1> q_global;
     q_global.setZero();
     if (global_ik_status == solvers::SolutionResult::kSolutionFound) {
-      q_global = global_ik_.ReconstructGeneralizedPositionSolution();
+      const double position_error_weight = 1;
+      q_global = global_ik_.ReconstructGeneralizedPositionSolution(
+          position_error_weight);
     }
     ik_result->global_ik_status() = global_ik_status;
     ik_result->q_global_ik() = q_global;
@@ -624,13 +626,13 @@ void DebugOutputFile(int argc, char* argv[]) {
   output_file2.close();
 }
 
-void WriteRuntimeToFile(const Eigen::VectorXd& runtime,
+void WriteVectorToFile(const Eigen::VectorXd& value,
                         const std::string& out_file_name) {
   RemoveFileIfExist(out_file_name);
   std::fstream output_file;
   output_file.open(out_file_name, std::ios::app | std::ios::out);
   if (output_file.is_open()) {
-    output_file << runtime;
+    output_file << value;
   }
   output_file.close();
 }
@@ -676,15 +678,18 @@ void AnalyzeNonlinearIKresult(const std::vector<IKresult>& ik_results) {
 
 void AnalyzeOutputFile(int argc, char* argv[]) {
   using common::CallMatlab;
-  if (argc != 6) {
+  if (argc != 8) {
     throw std::runtime_error(
-        "Usage is <infile> num_pts_per_axis <outfile1> <outfile2> <outfile3>");
+        "Usage is <infile> num_pts_per_axis <outfile1> <outfile2> <outfile3> "
+        "<ee_position_error_file> <ee_orientation_error_file>");
   }
   std::string in_file_name(argv[1]);
   int num_pts_per_axis = atoi(argv[2]);
   std::string out_file_name1(argv[3]);
   std::string out_file_name2(argv[4]);
   std::string out_file_name3(argv[5]);
+  std::string ee_position_error_file(argv[6]);
+  std::string ee_orientation_error_file(argv[7]);
 
   std::vector<IKresult> ik_results;
   ik_results.reserve(num_pts_per_axis * num_pts_per_axis * num_pts_per_axis);
@@ -723,19 +728,19 @@ void AnalyzeOutputFile(int argc, char* argv[]) {
     // Draw the histogram of the computation time.
     both_feasible_time(i) = both_feasible[i].global_ik_time();
   }
-  WriteRuntimeToFile(both_feasible_time, out_file_name1);
+  WriteVectorToFile(both_feasible_time, out_file_name1);
 
   Eigen::VectorXd relaxation_time(relaxation.size());
   for (int i = 0; i < static_cast<int>(relaxation.size()); ++i) {
     relaxation_time(i) = relaxation[i].global_ik_time();
   }
-  WriteRuntimeToFile(relaxation_time, out_file_name2);
+  WriteVectorToFile(relaxation_time, out_file_name2);
 
   Eigen::VectorXd both_infeasible_time(both_infeasible.size());
   for (int i = 0; i < static_cast<int>(both_infeasible.size()); ++i) {
     both_infeasible_time(i) = both_infeasible[i].global_ik_time();
   }
-  WriteRuntimeToFile(both_infeasible_time, out_file_name3);
+  WriteVectorToFile(both_infeasible_time, out_file_name3);
 
   Eigen::Quaterniond link6_quat(ik_results[0].ee_pose().linear());
   DUT dut(link6_quat, global_ik_options());
@@ -778,6 +783,10 @@ void AnalyzeOutputFile(int argc, char* argv[]) {
           global_ik_ee_error.col(i);
     }
   }
+  WriteVectorToFile(global_ik_ee_error.row(0).transpose(),
+                    ee_position_error_file);
+  WriteVectorToFile(global_ik_ee_error.row(1).transpose(),
+                    ee_orientation_error_file);
 
   auto h_fig = CallMatlab(1, "figure", 1);
   CallMatlab("hold", "on");
@@ -812,8 +821,8 @@ void AnalyzeOutputFile(int argc, char* argv[]) {
 }  // namespace drake
 
 int main(int argc, char* argv[]) {
-  drake::examples::IRB140::DoMain(argc, argv);
+  //drake::examples::IRB140::DoMain(argc, argv);
   // drake::examples::IRB140::DebugOutputFile(argc, argv);
-  // drake::examples::IRB140::AnalyzeOutputFile(argc, argv);
+   drake::examples::IRB140::AnalyzeOutputFile(argc, argv);
   return 0;
 }

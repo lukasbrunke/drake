@@ -19,9 +19,9 @@ drake_cc_library(
         "//common",
         "//common:find_resource",
         "//common:symbolic",
-        "//multibody:rigid_body_tree",
-        "//multibody:rigid_body_tree_construction",
-        "//multibody/parsers:parsers",
+        "//attic/multibody:rigid_body_tree",
+        "//attic/multibody:rigid_body_tree_construction",
+        "//attic/multibody/parsers:parsers",
     ],
 )
 
@@ -35,8 +35,8 @@ drake_cc_library(
         "//common/test_utilities:eigen_matrix_compare",
         "//lcm",
         "//manipulation/util:simple_tree_visualizer",
-        "//multibody:rigid_body_tree",
-        "//multibody/parsers:parsers",
+        "//attic/multibody:rigid_body_tree",
+        "//attic/multibody/parsers:parsers",
         "@gtest//:without_main",
     ],
 )
@@ -58,7 +58,7 @@ drake_cc_googletest(
         ":IRB140_analytical_kinematics",
         ":IRB140_common",
         "//common/test_utilities:eigen_matrix_compare",
-        "//multibody:global_inverse_kinematics",
+        "//attic/multibody:global_inverse_kinematics",
     ],
 )
 
@@ -70,8 +70,8 @@ drake_cc_binary(
         ":IRB140_analytical_kinematics",
         ":IRB140_common",
         "//common/proto:call_matlab",
-        "//multibody:global_inverse_kinematics",
-        "//multibody:inverse_kinematics",
+        "//attic/multibody:global_inverse_kinematics",
+        "//attic/multibody:inverse_kinematics",
     ],
 )
 
