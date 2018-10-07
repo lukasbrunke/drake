@@ -4,6 +4,7 @@ load(
     "@drake//attic:build_macros.bzl",
     drake_cc_googletest = "attic_drake_cc_googletest",
     drake_cc_library = "attic_drake_cc_library",
+    drake_cc_binary = "attic_drake_cc_binary",
 )
 load("//tools/skylark:test_tags.bzl", "gurobi_test_tags")
 load("//tools/lint:lint.bzl", "add_lint_tests")
@@ -105,6 +106,17 @@ drake_cc_googletest(
     ],
     deps = [
         ":global_inverse_kinematics_test_util",
+    ],
+)
+
+drake_cc_binary(
+    name = "stewart_platform_test",
+    srcs = ["test/stewart_platform_test.cc"],
+    deps = [
+        "//solvers:mathematical_program",
+        "//solvers:rotation_constraint",
+        "//solvers:mixed_integer_rotation_constraint",
+        "//math:geometric_transform",
     ],
 )
 
