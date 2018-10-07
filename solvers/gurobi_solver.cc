@@ -624,10 +624,12 @@ class GurobiSolver::License {
       grb_load_env_error = GRBloadenv(&env_, nullptr);
     }
     if (grb_load_env_error) {
-      const char *grb_msg = GRBgeterrormsg(env_);
-      throw std::runtime_error("Could not create Gurobi environment because "
-          "Gurobi returned code " + std::to_string(grb_load_env_error) +
-          " with message \"" + grb_msg + "\".");
+      const char* grb_msg = GRBgeterrormsg(env_);
+      throw std::runtime_error(
+          "Could not create Gurobi environment because "
+          "Gurobi returned code " +
+          std::to_string(grb_load_env_error) + " with message \"" + grb_msg +
+          "\".");
     }
     DRAKE_DEMAND(env_ != nullptr);
   }
@@ -637,9 +639,7 @@ class GurobiSolver::License {
     env_ = nullptr;
   }
 
-  GRBenv* GurobiEnv() {
-    return env_;
-  }
+  GRBenv* GurobiEnv() { return env_; }
 
  private:
   GRBenv* env_ = nullptr;
@@ -875,6 +875,26 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
       solver_result.set_optimal_cost(optimal_cost + constant_cost);
 
       if (is_mip) {
+        // The program wants to retrieve sub-optimal solutions
+        int sol_count{0};
+        GRBgetintattr(model, "SolCount", &sol_count);
+        std::vector<std::pair<double, Eigen::VectorXd>> suboptimal_sol{};
+        suboptimal_sol.reserve(sol_count);
+        for (int solution_number = 0; solution_number < sol_count;
+             ++solution_number) {
+          error = GRBsetintparam(model_env, "SolutionNumber", solution_number);
+          DRAKE_DEMAND(!error);
+          double suboptimal_obj{1.0};
+          error = GRBgetdblattrarray(model, "Xn", 0, num_total_variables,
+                                     solver_sol_vector.data());
+          DRAKE_DEMAND(!error);
+          error = GRBgetdblattr(model, "PoolObjVal", &suboptimal_obj);
+          DRAKE_DEMAND(!error);
+          SetProgramSolutionVector(is_new_variable, solver_sol_vector,
+                                   &prog_sol_vector);
+          suboptimal_sol.emplace_back(suboptimal_obj, prog_sol_vector);
+        }
+        prog.SetSuboptimalSolution(suboptimal_sol);
         // If the problem is a mixed-integer optimization program, provide
         // Gurobi's lower bound.
         double lower_bound;

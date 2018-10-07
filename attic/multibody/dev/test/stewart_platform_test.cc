@@ -1,3 +1,9 @@
+#include <fstream>
+#include <iostream>
+#include <iterator>
+#include <sstream>
+#include <string>
+
 #include "drake/math/rotation_matrix.h"
 #include "drake/solvers/gurobi_solver.h"
 #include "drake/solvers/mixed_integer_optimization_util.h"
@@ -7,6 +13,26 @@
 
 namespace drake {
 namespace multibody {
+void RemoveFileIfExist(const std::string& file_name) {
+  std::ifstream file(file_name);
+  if (file) {
+    if (remove(file_name.c_str()) != 0) {
+      throw std::runtime_error("Error deleting file " + file_name);
+    }
+  }
+  file.close();
+}
+
+void WriteRowVector3dToFile(const Eigen::RowVector3d& value,
+                        const std::string& out_file_name) {
+  std::fstream output_file;
+  output_file.open(out_file_name, std::ios::app | std::ios::out);
+  if (output_file.is_open()) {
+    output_file << value(0) << " " << value(1) << " " << value(2) << "\n";
+  }
+  output_file.close();
+}
+
 void AddLeg(const Eigen::Vector3d& p_PBi, const Eigen::Vector3d& p_BAi,
             double leg_length, const Matrix3<symbolic::Variable>& R_BP,
             const Vector3<symbolic::Variable>& p_BPo,
@@ -62,11 +88,11 @@ int DoMain() {
   // product p_BPo(i) * p_BPo(i)
   std::array<Eigen::VectorXd, 3> phi_p_BPo;
   phi_p_BPo[0].resize(9);
-  phi_p_BPo[0] << -1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1;
+  phi_p_BPo[0] << 0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1;
   phi_p_BPo[1].resize(9);
   phi_p_BPo[1] << -1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1;
   phi_p_BPo[2].resize(9);
-  phi_p_BPo[2] << -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1, 1.25, 1.5;
+  phi_p_BPo[2] << 0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1;
 
   std::array<VectorX<symbolic::Variable>, 3> lambda_p_BPo;
   std::array<VectorX<symbolic::Variable>, 3> b_p_BPo;
@@ -121,20 +147,32 @@ int DoMain() {
            lambda_p_BPo, p_BPo_times_R_BP, &prog);
   }
 
-  solvers::MosekSolver solver;
-  solver.set_stream_logging(true, "");
+  solvers::GurobiSolver solver;
+  prog.SetSolverOption(solvers::GurobiSolver::id(), "OutputFlag", 1);
+  prog.SetSolverOption(solvers::GurobiSolver::id(), "PoolSearchMode", 2);
+  const int multiple_sol_count = 40;
+  prog.SetSolverOption(solvers::GurobiSolver::id(), "PoolSolutions",
+                       multiple_sol_count);
   const auto result = solver.Solve(prog);
   std::cout << result << "\n";
 
-  const Eigen::Matrix3d R_BP_sol = prog.GetSolution(R_BP);
-  const Eigen::Matrix3d R_BP_proj =
-      math::RotationMatrix<double>::ProjectToRotationMatrix(R_BP_sol).matrix();
-  const Eigen::Vector3d p_BPo_sol = prog.GetSolution(p_BPo);
-  for (int i = 0; i < 6; ++i) {
-    const Eigen::Vector3d p_BBi = p_BPo_sol + R_BP_proj * p_PBi[i];
-    const double leg_length_sol = (p_BBi - p_BAi[i]).norm();
-    std::cout << "leg " << i << " length_sol: " << leg_length_sol << " length "
-              << leg_length[i] << "\n";
+  const std::string file_name("stewart_platform_position.txt");
+  RemoveFileIfExist(file_name);
+
+  for (int count = 0; count < multiple_sol_count; ++count) {
+    const Eigen::Matrix3d R_BP_sol = prog.GetSuboptimalSolution(R_BP, count);
+    const Eigen::Matrix3d R_BP_proj =
+        math::RotationMatrix<double>::ProjectToRotationMatrix(R_BP_sol)
+            .matrix();
+    const Eigen::Vector3d p_BPo_sol = prog.GetSuboptimalSolution(p_BPo, count);
+    std::cout << "\np_BPo_sol : " << p_BPo_sol.transpose() << "\n";
+    WriteRowVector3dToFile(p_BPo_sol.transpose(), file_name);
+    for (int i = 0; i < 6; ++i) {
+      const Eigen::Vector3d p_BBi = p_BPo_sol + R_BP_proj * p_PBi[i];
+      const double leg_length_sol = (p_BBi - p_BAi[i]).norm();
+      std::cout << "leg " << i << " length_sol: " << leg_length_sol
+                << " length " << leg_length[i] << "\n";
+    }
   }
 
   return 0;
