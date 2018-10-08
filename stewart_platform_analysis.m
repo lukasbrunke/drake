@@ -1,4 +1,4 @@
-result = load('stewart_platform_result.txt');
+result = load('stewart_platform_36_binary/stewart_platform_result.txt');
 analytical_result = load('stewart_platform_analytical_result.txt');
 match = ones(40, 1);
 match_error = zeros(40, 1);

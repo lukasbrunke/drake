@@ -121,7 +121,7 @@ int DoMain() {
   solvers::MixedIntegerRotationConstraintGenerator rotation_generator(
       solvers::MixedIntegerRotationConstraintGenerator::Approach::
           kBilinearMcCormick,
-      2, solvers::IntervalBinning::kLogarithmic);
+      4, solvers::IntervalBinning::kLogarithmic);
   const auto R_BP_return = rotation_generator.AddToProgram(R_BP, &prog);
   auto p_BPo = prog.NewContinuousVariables<3>("p");
 
@@ -193,7 +193,7 @@ int DoMain() {
   solvers::GurobiSolver solver;
   prog.SetSolverOption(solvers::GurobiSolver::id(), "OutputFlag", 1);
   prog.SetSolverOption(solvers::GurobiSolver::id(), "PoolSearchMode", 2);
-  const int multiple_sol_count = 2273;
+  const int multiple_sol_count = 3735;
   prog.SetSolverOption(solvers::GurobiSolver::id(), "PoolSolutions",
                        multiple_sol_count);
   const auto result = solver.Solve(prog);
