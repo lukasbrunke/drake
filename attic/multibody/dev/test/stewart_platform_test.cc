@@ -121,16 +121,16 @@ int DoMain() {
   solvers::MixedIntegerRotationConstraintGenerator rotation_generator(
       solvers::MixedIntegerRotationConstraintGenerator::Approach::
           kBilinearMcCormick,
-      8, solvers::IntervalBinning::kLogarithmic);
+      4, solvers::IntervalBinning::kLogarithmic);
   const auto R_BP_return = rotation_generator.AddToProgram(R_BP, &prog);
   auto p_BPo = prog.NewContinuousVariables<3>("p");
 
   // We will have bilinear product p_BPo(i) * R_BP.col(j)(i) and the quadratic
   // product p_BPo(i) * p_BPo(i)
   std::array<Eigen::VectorXd, 3> phi_p_BPo;
-  phi_p_BPo[0] = Eigen::VectorXd::LinSpaced(17, -0.5, 1.5);
-  phi_p_BPo[1] = Eigen::VectorXd::LinSpaced(17, -1, 1);
-  phi_p_BPo[2] = Eigen::VectorXd::LinSpaced(17, -0.5, 1);
+  phi_p_BPo[0] = Eigen::VectorXd::LinSpaced(9, 0.44, 1);
+  phi_p_BPo[1] = Eigen::VectorXd::LinSpaced(9, -0.88, 0.82);
+  phi_p_BPo[2] = Eigen::VectorXd::LinSpaced(9, -0.86, 0.52);
 
   std::array<VectorX<symbolic::Variable>, 3> lambda_p_BPo;
   std::array<VectorX<symbolic::Variable>, 3> b_p_BPo;
@@ -193,7 +193,7 @@ int DoMain() {
   solvers::GurobiSolver solver;
   prog.SetSolverOption(solvers::GurobiSolver::id(), "OutputFlag", 1);
   prog.SetSolverOption(solvers::GurobiSolver::id(), "PoolSearchMode", 2);
-  const int multiple_sol_count = 150;
+  const int multiple_sol_count = 1696;
   prog.SetSolverOption(solvers::GurobiSolver::id(), "PoolSolutions",
                        multiple_sol_count);
   const auto result = solver.Solve(prog);
@@ -205,6 +205,9 @@ int DoMain() {
   RemoveFileIfExist(orientation_file_name);
   const std::string result_file_name("stewart_platform_result.txt");
   RemoveFileIfExist(result_file_name);
+  const std::string constraint_error_file_name(
+      "stewart_platform_constraint_error.txt");
+  RemoveFileIfExist(constraint_error_file_name);
 
   for (int count = 0; count < multiple_sol_count; ++count) {
     const Eigen::Matrix3d R_BP_sol = prog.GetSuboptimalSolution(R_BP, count);
@@ -212,7 +215,6 @@ int DoMain() {
         math::RotationMatrix<double>::ProjectToRotationMatrix(R_BP_sol)
             .matrix();
     const Eigen::Vector3d p_BPo_sol = prog.GetSuboptimalSolution(p_BPo, count);
-    std::cout << "\np_BPo_sol : " << p_BPo_sol.transpose() << "\n";
     WriteRowVectorToFile(p_BPo_sol.transpose(), position_file_name);
     for (int i = 0; i < 3; ++i) {
       WriteRowVectorToFile(R_BP_proj.row(i), orientation_file_name);
@@ -220,8 +222,8 @@ int DoMain() {
     for (int i = 0; i < 6; ++i) {
       const Eigen::Vector3d p_BBi = p_BPo_sol + R_BP_proj * p_PBi[i];
       const double leg_length_sol = (p_BBi - p_BAi[i]).norm();
-      std::cout << "leg " << i << " length_sol: " << leg_length_sol
-                << " length " << leg_length[i] << "\n";
+      WriteRowVectorToFile(Vector1d(leg_length_sol - leg_length[i]),
+                           constraint_error_file_name);
     }
     const Eigen::Vector3d p_A1B1_B =
         p_BPo_sol + R_BP_proj * p_PBi[0] - p_BAi[0];
