@@ -307,7 +307,7 @@ Eigen::VectorXd GlobalInverseKinematics::ReconstructGeneralizedPositionSolution(
     R_WB[i] = GetSolution(R_WB_[i]);
   }
   // Only do multiple sweep if the robot is a chain.
-  const int max_sweep_iterations = is_kinematic_chain ? 3 : 1;
+  const int max_sweep_iterations = is_kinematic_chain ? 10 : 1;
   for (int sweep_count = 0; sweep_count < max_sweep_iterations; ++sweep_count) {
     std::stack<int> unvisited_links;
     unvisited_links.push(body_children[0][0]);

@@ -216,7 +216,8 @@ class DUT {
     }
   }
 
-  void SolveGlobalIK(const Eigen::Vector3d& link6_pos, IKresult* ik_result) {
+  void SolveGlobalIK(const Eigen::Vector3d& link6_pos, IKresult* ik_result,
+                     std::fstream* mip_sol_file) {
     global_ik_pos_cnstr_.evaluator()->UpdateLowerBound(link6_pos);
     global_ik_pos_cnstr_.evaluator()->UpdateUpperBound(link6_pos);
     solvers::GurobiSolver gurobi_solver;
@@ -235,6 +236,21 @@ class DUT {
       const double position_error_weight = 1;
       q_global = global_ik_.ReconstructGeneralizedPositionSolution(
           position_error_weight);
+
+      if (mip_sol_file->is_open()) {
+        (*mip_sol_file) << "Desired position:\n" << link6_pos.transpose() << "\n";
+        for (int i = 1; i < robot()->get_num_bodies(); ++i) {
+          (*mip_sol_file) << "body " << i << "\n";
+          (*mip_sol_file)
+              << "position:\n"
+              << global_ik_.GetSolution(global_ik_.body_position(i)).transpose()
+              << "\n";
+          (*mip_sol_file) << "orientation:\n"
+                          << global_ik_.GetSolution(
+                                 global_ik_.body_rotation_matrix(i))
+                          << "\n";
+        }
+      }
     }
     ik_result->global_ik_status() = global_ik_status;
     ik_result->q_global_ik() = q_global;
@@ -271,7 +287,9 @@ class DUT {
       ik_result->q_nl_ik() = q_nl_ik;
     }
   }
-  void SolveIK(const Eigen::Vector3d& link6_pos, std::fstream* output_file) {
+
+  void SolveIK(const Eigen::Vector3d& link6_pos, std::fstream* output_file,
+               std::fstream* mip_sol_file) {
     IKresult ik_result;
     // Solve IK using analytical IK
     SolveAnalyticalIK(link6_pos, &ik_result);
@@ -280,7 +298,7 @@ class DUT {
     SolveNonlinearIK(link6_pos, &ik_result, Eigen::VectorXd::Zero(6), false);
 
     // Solve IK using global IK
-    SolveGlobalIK(link6_pos, &ik_result);
+    SolveGlobalIK(link6_pos, &ik_result, mip_sol_file);
     if (ik_result.global_ik_status() ==
         solvers::SolutionResult::kSolutionFound) {
       SolveNonlinearIK(link6_pos, &ik_result, ik_result.q_global_ik(), true);
@@ -322,12 +340,13 @@ void RemoveFileIfExist(const std::string& file_name) {
 }
 
 void DoMain(int argc, char* argv[]) {
-  if (argc != 3) {
-    throw std::runtime_error("Usage is <infile> rotation_enum.\n");
+  if (argc != 4) {
+    throw std::runtime_error("Usage is <infile> rotation_enum <mip_sol_file>\n");
   }
 
   std::string file_name(argv[1]);
   int rotation_enum = atoi(argv[2]);
+  const std::string mip_sol_file_name(argv[3]);
   Eigen::AngleAxisd link6_angleaxis;
   switch (rotation_enum) {
     case 0: {
@@ -347,6 +366,7 @@ void DoMain(int argc, char* argv[]) {
 
   // Remove the file if it exists
   RemoveFileIfExist(file_name);
+  RemoveFileIfExist(mip_sol_file_name);
 
   Eigen::Vector3d box_size(1, 1, 1);
   Eigen::Vector3d box_center(0.5, 0, 0.4);
@@ -362,6 +382,9 @@ void DoMain(int argc, char* argv[]) {
   std::fstream output_file;
   output_file.open(file_name, std::ios::app | std::ios::out);
 
+  std::fstream mip_sol_file;
+  mip_sol_file.open(mip_sol_file_name, std::ios::app | std::ios::out);
+
   Eigen::Quaterniond link6_quat(link6_angleaxis);
 
   DUT dut(link6_quat, global_ik_options());
@@ -374,13 +397,14 @@ void DoMain(int argc, char* argv[]) {
         Eigen::Isometry3d link6_pose;
         link6_pose.linear() = link6_angleaxis.toRotationMatrix();
         link6_pose.translation() = link6_pos;
-        dut.SolveIK(link6_pos, &output_file);
+        dut.SolveIK(link6_pos, &output_file, &mip_sol_file);
         std::cout << "sample count: " << sample_count << std::endl;
         ++sample_count;
       }
     }
   }
   output_file.close();
+  mip_sol_file.close();
 }
 
 std::vector<std::string> BreakLineBySpaces(const std::string& line) {
@@ -514,14 +538,15 @@ void ReadOutputFile(std::ifstream& file, std::vector<IKresult>* ik_results) {
   }
 }
 void DebugOutputFile(int argc, char* argv[]) {
-  if (argc != 5) {
+  if (argc != 6) {
     throw std::runtime_error(
-        "Usage is <infile>. num_pts_per_axis <outfile1> <outfile2>");
+        "Usage is <infile>. num_pts_per_axis <outfile1> <outfile2> <mip_sol_file>");
   }
   std::string in_file_name(argv[1]);
   int num_pts_per_axis = atoi(argv[2]);
   std::string out_file_name1(argv[3]);
   std::string out_file_name2(argv[4]);
+  std::string mip_sol_file_name(argv[5]);
   std::vector<IKresult> ik_results;
   ik_results.reserve(num_pts_per_axis * num_pts_per_axis * num_pts_per_axis);
 
@@ -536,6 +561,10 @@ void DebugOutputFile(int argc, char* argv[]) {
   RemoveFileIfExist(out_file_name2);
   std::fstream output_file2;
   output_file2.open(out_file_name2, std::ios::app | std::ios::out);
+
+  RemoveFileIfExist(mip_sol_file_name);
+  std::fstream mip_sol_file;
+  mip_sol_file.open(mip_sol_file_name, std::ios::app | std::ios::out);
 
   Eigen::Quaterniond link6_quat(ik_results[0].ee_pose().linear());
   DUT dut(link6_quat, global_ik_options());
@@ -572,7 +601,7 @@ void DebugOutputFile(int argc, char* argv[]) {
             solvers::SolutionResult::kInfeasibleConstraints &&
         ik_result.global_ik_status() ==
             solvers::SolutionResult::kSolutionFound) {
-      dut.SolveGlobalIK(ik_result.ee_pose().translation(), &ik_result);
+      dut.SolveGlobalIK(ik_result.ee_pose().translation(), &ik_result, &mip_sol_file);
       ik_result.printToFile(&output_file1);
     }
     /*if (ik_result.global_ik_status() ==
@@ -624,6 +653,7 @@ void DebugOutputFile(int argc, char* argv[]) {
   }
   output_file1.close();
   output_file2.close();
+  mip_sol_file.close();
 }
 
 void WriteVectorToFile(const Eigen::VectorXd& value,
@@ -823,6 +853,6 @@ void AnalyzeOutputFile(int argc, char* argv[]) {
 int main(int argc, char* argv[]) {
   //drake::examples::IRB140::DoMain(argc, argv);
   // drake::examples::IRB140::DebugOutputFile(argc, argv);
-   drake::examples::IRB140::AnalyzeOutputFile(argc, argv);
+  drake::examples::IRB140::AnalyzeOutputFile(argc, argv);
   return 0;
 }
