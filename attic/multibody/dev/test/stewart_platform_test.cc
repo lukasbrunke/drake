@@ -72,7 +72,7 @@ void AddLeg(const Eigen::Vector3d& p_PBi, const Eigen::Vector3d& p_BAi,
     }
 
     const Eigen::Matrix3Xd unit_vectors =
-        math::UniformPtsOnSphereFibonacci(200);
+        math::UniformPtsOnSphereFibonacci(500);
     for (int i = 0; i < unit_vectors.cols(); ++i) {
       prog->AddLinearConstraint(unit_vectors.col(i).dot(p_AiBi_B) <=
                                 leg_length);
@@ -114,23 +114,34 @@ void AddLeg(const Eigen::Vector3d& p_PBi, const Eigen::Vector3d& p_BAi,
 int DoMain() {
   solvers::MathematicalProgram prog;
   auto R_BP = solvers::NewRotationMatrixVars(&prog, "R");
-  bool use_linear_constraint = true;
+  bool use_linear_constraint = false;
   if (!use_linear_constraint) {
     solvers::AddRotationMatrixOrthonormalSocpConstraint(&prog, R_BP);
+  } else {
+    const Eigen::Matrix3Xd unit_vectors =
+        math::UniformPtsOnSphereFibonacci(100);
+    for (int i = 0; i < unit_vectors.cols(); ++i) {
+      prog.AddLinearConstraint(
+          unit_vectors.col(i).dot(R_BP.col(0) + R_BP.col(1)) <= std::sqrt(2));
+      prog.AddLinearConstraint(
+          unit_vectors.col(i).dot(R_BP.col(0) + R_BP.col(2)) <= std::sqrt(2));
+      prog.AddLinearConstraint(
+          unit_vectors.col(i).dot(R_BP.col(1) + R_BP.col(2)) <= std::sqrt(2));
+    }
   }
   solvers::MixedIntegerRotationConstraintGenerator rotation_generator(
       solvers::MixedIntegerRotationConstraintGenerator::Approach::
           kBilinearMcCormick,
-      4, solvers::IntervalBinning::kLogarithmic);
+      8, solvers::IntervalBinning::kLogarithmic);
   const auto R_BP_return = rotation_generator.AddToProgram(R_BP, &prog);
   auto p_BPo = prog.NewContinuousVariables<3>("p");
 
   // We will have bilinear product p_BPo(i) * R_BP.col(j)(i) and the quadratic
   // product p_BPo(i) * p_BPo(i)
   std::array<Eigen::VectorXd, 3> phi_p_BPo;
-  phi_p_BPo[0] = Eigen::VectorXd::LinSpaced(5, 0.44, 1);
-  phi_p_BPo[1] = Eigen::VectorXd::LinSpaced(5, -0.88, 0.82);
-  phi_p_BPo[2] = Eigen::VectorXd::LinSpaced(5, -0.86, 0.52);
+  phi_p_BPo[0] = Eigen::VectorXd::LinSpaced(9, 0.44, 1);
+  phi_p_BPo[1] = Eigen::VectorXd::LinSpaced(9, -0.88, 0.82);
+  phi_p_BPo[2] = Eigen::VectorXd::LinSpaced(9, -0.86, 0.52);
 
   std::array<VectorX<symbolic::Variable>, 3> lambda_p_BPo;
   std::array<VectorX<symbolic::Variable>, 3> b_p_BPo;
@@ -193,7 +204,7 @@ int DoMain() {
   solvers::GurobiSolver solver;
   prog.SetSolverOption(solvers::GurobiSolver::id(), "OutputFlag", 1);
   prog.SetSolverOption(solvers::GurobiSolver::id(), "PoolSearchMode", 2);
-  const int multiple_sol_count = 3735;
+  const int multiple_sol_count = 50;
   prog.SetSolverOption(solvers::GurobiSolver::id(), "PoolSolutions",
                        multiple_sol_count);
   const auto result = solver.Solve(prog);
