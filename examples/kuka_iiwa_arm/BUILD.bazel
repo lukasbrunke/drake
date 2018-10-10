@@ -178,7 +178,6 @@ drake_cc_binary(
         "//manipulation/util:simple_tree_visualizer",
         "//math:autodiff",
         "//multibody:global_inverse_kinematics",
-        "//util:lcm_util",
     ],
 )
 
@@ -271,24 +270,24 @@ drake_cc_binary(
 )
 
 
-drake_cc_binary(
-    name = "kuka_ik_demo",
-    srcs = ["kuka_ik_demo.cc"],
-    data = [
-        ":models",
-        "//drake/manipulation/models/iiwa_description:models",
-    ],
-    deps = [
-        ":iiwa_common",
-        "//lcm",
-        "//multibody:inverse_kinematics",
-        "//multibody:rigid_body_tree",
-        "//multibody/parsers",
-        "//solvers:mathematical_program",
-        "@lcmtypes_bot2_core",
-        "@lcmtypes_robotlocomotion",
-    ],
-)
+#drake_cc_binary(
+#    name = "kuka_ik_demo",
+#    srcs = ["kuka_ik_demo.cc"],
+#    data = [
+#        ":models",
+#        "//manipulation/models/iiwa_description:models",
+#    ],
+#    deps = [
+#        ":iiwa_common",
+#        "//lcm",
+#        "//multibody:inverse_kinematics",
+#        "//multibody:rigid_body_tree",
+#	"//attic/multibody/parsers",
+#        "//solvers:mathematical_program",
+#        "@lcmtypes_bot2_core",
+#        "@lcmtypes_robotlocomotion",
+#    ],
+#)
 
 alias(
     name = "models",

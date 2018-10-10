@@ -23,7 +23,7 @@ Eigen::Matrix<double, 3, 8> AddBoxToTree(RigidBodyTreed* tree, const Eigen::Ref<
   auto joint = std::make_unique<FixedJoint>(name + "joint", box_pose);
   body->add_joint(&tree->world(), std::move(joint));
 
-  tree->bodies.push_back(std::move(body));
+  tree->add_rigid_body(std::move(body));
   Eigen::Matrix<double, 3, 8> box_vertices;
   box_vertices.row(0) << 1, 1, 1, 1, -1, -1, -1, -1;
   box_vertices.row(1) << 1, 1, -1, -1, 1, 1, -1, -1;
@@ -58,7 +58,7 @@ void AddSphereToBody(RigidBodyTreed* tree, int link_idx, const Eigen::Vector3d& 
   auto joint = std::make_unique<FixedJoint>(name + "_joint", joint_transform);
   auto link = tree->get_mutable_body(link_idx);
   sphere_body->add_joint(link, std::move(joint));
-  tree->bodies.push_back(std::move(sphere_body));
+  tree->add_rigid_body(std::move(sphere_body));
 }
 
 std::unique_ptr<RigidBodyTreed> ConstructKuka() {
