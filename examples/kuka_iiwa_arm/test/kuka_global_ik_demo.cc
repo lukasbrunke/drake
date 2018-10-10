@@ -14,6 +14,7 @@
 #include "drake/multibody/rigid_body_plant/drake_visualizer.h"
 #include "drake/multibody/rigid_body_tree_construction.h"
 #include "drake/solvers/gurobi_solver.h"
+#include "drake/solvers/mosek_solver.h"
 #include "drake/systems/lcm/lcm_publisher_system.h"
 #include "drake/systems/lcm/lcm_subscriber_system.h"
 #include "drake/util/drakeGeometryUtil.h"
@@ -126,7 +127,9 @@ std::vector<Eigen::Matrix3Xd> SetFreeSpace(RigidBodyTreed* tree) {
 std::vector<Eigen::Matrix<double, 7, 1>> SolveGlobalIK(
     RigidBodyTreed* tree, const Eigen::Ref<Eigen::Vector3d>& mug_center,
     const std::vector<Eigen::Matrix3Xd>& free_space_vertices) {
-  multibody::GlobalInverseKinematics global_ik(*tree);
+  multibody::GlobalInverseKinematics::Options global_ik_options;
+  global_ik_options.linear_constraint_only = true;
+  multibody::GlobalInverseKinematics global_ik(*tree, global_ik_options);
   int link7_idx = tree->FindBodyIndex("iiwa_link_7");
   auto link7_rotmat = global_ik.body_rotation_matrix(link7_idx);
   auto link7_pos = global_ik.body_position(link7_idx);
@@ -187,8 +190,10 @@ std::vector<Eigen::Matrix<double, 7, 1>> SolveGlobalIK(
                                       free_space_vertices);
   }
   solvers::GurobiSolver gurobi_solver;
+  //solvers::MosekSolver mosek_solver;
+  //mosek_solver.set_stream_logging(true, "");
   global_ik.SetSolverOption(solvers::GurobiSolver::id(), "OutputFlag", true);
-  // int num_solutions = 2;
+  const int num_solutions = 1;
   // global_ik.SetSolverOption(solvers::SolverType::kGurobi, "PoolSearchMode",
   // 1);
   // global_ik.SetSolverOption(solvers::SolverType::kGurobi, "PoolSolutions",
@@ -198,7 +203,7 @@ std::vector<Eigen::Matrix<double, 7, 1>> SolveGlobalIK(
     throw std::runtime_error("global ik fails.");
   }
   std::vector<Eigen::Matrix<double, 7, 1>> q;
-  for (int i = 0; i < 1; ++i) {
+  for (int i = 0; i < num_solutions; ++i) {
     q.push_back(global_ik.ReconstructGeneralizedPositionSolution());
   }
   return q;
