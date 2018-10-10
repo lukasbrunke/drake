@@ -310,7 +310,9 @@ Eigen::VectorXd GlobalInverseKinematics::ReconstructGeneralizedPositionSolution(
   const int max_sweep_iterations = is_kinematic_chain ? 3 : 1;
   for (int sweep_count = 0; sweep_count < max_sweep_iterations; ++sweep_count) {
     std::stack<int> unvisited_links;
-    unvisited_links.push(body_children[0][0]);
+    for (int world_child : body_children[0]) {
+      unvisited_links.push(world_child);
+    }
     while (!unvisited_links.empty()) {
       const int body_index = unvisited_links.top();
       unvisited_links.pop();
