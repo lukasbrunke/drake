@@ -984,5 +984,20 @@ void MathematicalProgram::AppendNanToEnd(int new_var_size, Eigen::VectorXd* v) {
   v->conservativeResize(v->rows() + new_var_size);
   v->tail(new_var_size).fill(std::numeric_limits<double>::quiet_NaN());
 }
+
+void MathematicalProgram::SetSuboptimalSolution(
+    const std::vector<std::pair<double, Eigen::VectorXd>>& suboptimal_sol) {
+    suboptimal_sol_ = suboptimal_sol;
+}
+
+double MathematicalProgram::GetSuboptimalSolution(const symbolic::Variable& var,
+                                                  int solution_number) const {
+  if (solution_number < 0 ||
+      solution_number >= static_cast<int>(suboptimal_sol_.size())) {
+    throw std::runtime_error("solution number is not valid.");
+  }
+  return suboptimal_sol_[solution_number].second(
+      FindDecisionVariableIndex(var));
+}
 }  // namespace solvers
 }  // namespace drake

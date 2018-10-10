@@ -2537,6 +2537,39 @@ class MathematicalProgram {
   double GetSolution(const symbolic::Variable& var) const;
 
   /**
+   * Gets the suboptimal solution of an Eigen matrix of decision variables.
+   * @tparam Derived An Eigen matrix containing Variable.
+   * @param var The decision variables.
+   * @param int solution_number The i'th sub-optimal solution.
+   * @pre 0 <= solution_number < suboptimal_sol_.size(). Throw a runtime_error
+   * if the precondition is not satisfied.
+   * @return The value of the decision variable after solving the problem.
+   */
+  template <typename Derived>
+  typename std::enable_if<
+      std::is_same<typename Derived::Scalar, symbolic::Variable>::value,
+      Eigen::Matrix<double, Derived::RowsAtCompileTime,
+                    Derived::ColsAtCompileTime>>::type
+  GetSuboptimalSolution(const Eigen::MatrixBase<Derived>& var,
+                        int solution_number) const {
+    Eigen::Matrix<double, Derived::RowsAtCompileTime,
+                  Derived::ColsAtCompileTime>
+        value(var.rows(), var.cols());
+    for (int i = 0; i < var.rows(); ++i) {
+      for (int j = 0; j < var.cols(); ++j) {
+        value(i, j) = GetSuboptimalSolution(var(i, j), solution_number);
+      }
+    }
+    return value;
+  }
+
+  double GetSuboptimalSolution(const symbolic::Variable& var,
+                               int solution_number) const;
+
+  void SetSuboptimalSolution(
+      const std::vector<std::pair<double, Eigen::VectorXd>>& suboptimal_sol);
+
+  /**
    * Replaces the variables in an expression with the solutions to the
    * variables, returns the expression after substitution.
    * @throws std::runtime_error if some variables in the expression @p e are NOT
@@ -2721,6 +2754,14 @@ class MathematicalProgram {
   // The lower bound of the objective found by the solver, during the
   // optimization process.
   double lower_bound_cost_{};
+
+  // suboptimal_sol_ records the sub-optimal solution to the problem.
+  // suboptimal_sol_[i].first is the i'th suboptimal objective value,
+  // suboptimal_sol_[i].second is the i'th suboptimal value for the decision
+  // variables.
+  // This feature is currently only supported in Gurobi solver, for (mixed)
+  // integer optimiazation.
+  std::vector<std::pair<double, Eigen::VectorXd>> suboptimal_sol_{};
 
   // The actual per-solver customization options.
   std::map<SolverId, std::map<std::string, double>> solver_options_double_;
