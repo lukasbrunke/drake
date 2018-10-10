@@ -304,10 +304,10 @@ Eigen::VectorXd GlobalInverseKinematics::ReconstructGeneralizedPositionSolution(
   R_WB[0] = Eigen::Matrix3d::Identity();
   for (int i = 1; i < robot_->get_num_bodies(); ++i) {
     p_WBo[i] = solution_number > 0
-                   ? GetSuboptimalSolution(p_WBo[i], solution_number)
+                   ? GetSuboptimalSolution(p_WBo_[i], solution_number)
                    : GetSolution(p_WBo_[i]);
     R_WB[i] = solution_number > 0
-                  ? GetSuboptimalSolution(R_WB_[i], SOLUTION_NUMBER)
+                  ? GetSuboptimalSolution(R_WB_[i], solution_number)
                   : GetSolution(R_WB_[i]);
   }
   // Only do multiple sweep if the robot is a chain.
