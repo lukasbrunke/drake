@@ -190,21 +190,21 @@ std::vector<Eigen::Matrix<double, 7, 1>> SolveGlobalIK(
                                       free_space_vertices);
   }
   solvers::GurobiSolver gurobi_solver;
-  //solvers::MosekSolver mosek_solver;
-  //mosek_solver.set_stream_logging(true, "");
+  // solvers::MosekSolver mosek_solver;
+  // mosek_solver.set_stream_logging(true, "");
   global_ik.SetSolverOption(solvers::GurobiSolver::id(), "OutputFlag", true);
-  const int num_solutions = 1;
-  // global_ik.SetSolverOption(solvers::SolverType::kGurobi, "PoolSearchMode",
-  // 1);
-  // global_ik.SetSolverOption(solvers::SolverType::kGurobi, "PoolSolutions",
-  // num_solutions);
+  const int num_solutions = 2;
+  global_ik.SetSolverOption(solvers::GurobiSolver::id(), "PoolSearchMode", 1);
+  global_ik.SetSolverOption(solvers::GurobiSolver::id(), "PoolSolutions",
+                            num_solutions);
   solvers::SolutionResult sol_result = gurobi_solver.Solve(global_ik);
   if (sol_result != solvers::SolutionResult::kSolutionFound) {
     throw std::runtime_error("global ik fails.");
   }
   std::vector<Eigen::Matrix<double, 7, 1>> q;
+
   for (int i = 0; i < num_solutions; ++i) {
-    q.push_back(global_ik.ReconstructGeneralizedPositionSolution());
+    q.push_back(global_ik.ReconstructGeneralizedPositionSolution(0, i));
   }
   return q;
 }
@@ -341,6 +341,7 @@ int DoMain() {
     tree->doKinematics(cache);
     auto link_7_pose = tree->CalcBodyPoseInWorldFrame(cache, *link_7);
     std::cout << "link7 pos:\n" << link_7_pose.matrix() << std::endl;
+    getchar();
   }
 
   // Eigen::Matrix<double, 7, 1> q_nl = SolveNonlinearIK(tree.get(),
