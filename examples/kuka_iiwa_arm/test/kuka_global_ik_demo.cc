@@ -76,7 +76,47 @@ void AddObjects(RigidBodyTreed* rigid_body_tree) {
   rigid_body_tree->addFrame(bottle_frame);
 }
 
-std::vector<Eigen::Matrix3Xd> SetFreeSpace(RigidBodyTreed* tree) {
+struct Box {
+  Box(const Eigen::Ref<const Eigen::Vector3d>& m_size,
+      const Eigen::Isometry3d& m_pose, const std::string& m_name)
+      : size{m_size}, pose{m_pose}, name{m_name} {}
+  Eigen::Vector3d size;
+  Eigen::Isometry3d pose;
+  std::string name;
+};
+
+std::vector<Box> FreeSpaceBoxes() {
+  std::vector<Box> boxes;
+  Eigen::Isometry3d box_pose;
+  box_pose.linear().setIdentity();
+  box_pose.translation() << 0.32, -0.85, 1.02;
+  boxes.push_back(Box(Eigen::Vector3d(0.25, 0.25, 0.5), box_pose, "box1"));
+
+  box_pose.translation() << 0.42, -0.64, 1.02;
+  boxes.push_back(Box(Eigen::Vector3d(0.15, 0.23, 0.5), box_pose, "box2"));
+
+  box_pose.translation() << 0.57, -0.73, 0.83;
+  boxes.push_back(Box(Eigen::Vector3d(0.2, 0.1, 0.12), box_pose, "box3"));
+
+  box_pose.translation() << 0.55, -0.6, 1.08;
+  boxes.push_back(Box(Eigen::Vector3d(0.3, 0.7, 0.4), box_pose, "box4"));
+
+  box_pose.translation() << 0.6, -0.4, 1.02;
+  boxes.push_back(Box(Eigen::Vector3d(0.2, 0.35, 0.5), box_pose, "box5"));
+
+  box_pose.translation() << 0.32, -0.32, 1.02;
+  boxes.push_back(Box(Eigen::Vector3d(0.4, 0.2, 0.5), box_pose, "box6"));
+
+  box_pose.translation() << 0.25, -0.52, 1.02;
+  boxes.push_back(Box(Eigen::Vector3d(0.3, 0.23, 0.5), box_pose, "box7"));
+
+  box_pose.translation() << 0.25, -0.68, 1.23;
+  boxes.push_back(Box(Eigen::Vector3d(0.25, 0.14, 0.2), box_pose, "box8"));
+  return boxes;
+}
+
+std::vector<Eigen::Matrix3Xd> SetFreeSpace(
+    const std::vector<Box>& free_space_boxes) {
   // const Eigen::Vector3d kBottlePos =
   // tree->findFrame("bottle")->get_transform_to_body().translation();
   // const Eigen::Vector3d kMugPos =
@@ -87,40 +127,9 @@ std::vector<Eigen::Matrix3Xd> SetFreeSpace(RigidBodyTreed* tree) {
   // tree->findFrame("bowl")->get_transform_to_body().translation();
 
   std::vector<Eigen::Matrix3Xd> box_vertices;
-
-  Eigen::Isometry3d box_pose;
-  box_pose.linear().setIdentity();
-  box_pose.translation() << 0.32, -0.85, 1.02;
-  box_vertices.push_back(
-      AddBoxToTree(tree, Eigen::Vector3d(0.25, 0.25, 0.5), box_pose, "box1"));
-
-  box_pose.translation() << 0.42, -0.64, 1.02;
-  box_vertices.push_back(
-      AddBoxToTree(tree, Eigen::Vector3d(0.15, 0.23, 0.5), box_pose, "box2"));
-
-  box_pose.translation() << 0.57, -0.73, 0.83;
-  box_vertices.push_back(
-      AddBoxToTree(tree, Eigen::Vector3d(0.2, 0.1, 0.12), box_pose, "box3"));
-
-  box_pose.translation() << 0.55, -0.6, 1.08;
-  box_vertices.push_back(
-      AddBoxToTree(tree, Eigen::Vector3d(0.3, 0.7, 0.4), box_pose, "box4"));
-
-  box_pose.translation() << 0.6, -0.4, 1.02;
-  box_vertices.push_back(
-      AddBoxToTree(tree, Eigen::Vector3d(0.2, 0.35, 0.5), box_pose, "box5"));
-
-  box_pose.translation() << 0.32, -0.32, 1.02;
-  box_vertices.push_back(
-      AddBoxToTree(tree, Eigen::Vector3d(0.4, 0.2, 0.5), box_pose, "box6"));
-
-  box_pose.translation() << 0.25, -0.52, 1.02;
-  box_vertices.push_back(
-      AddBoxToTree(tree, Eigen::Vector3d(0.3, 0.23, 0.5), box_pose, "box7"));
-
-  box_pose.translation() << 0.25, -0.68, 1.23;
-  box_vertices.push_back(
-      AddBoxToTree(tree, Eigen::Vector3d(0.25, 0.14, 0.2), box_pose, "box8"));
+  for (const auto& box : free_space_boxes) {
+    box_vertices.push_back(BoxVertices(box.size, box.pose));
+  }
   return box_vertices;
 }
 
@@ -299,9 +308,9 @@ int DoMain() {
   drake::lcm::DrakeLcm lcm;
   auto tree = ConstructKuka();
   AddObjects(tree.get());
+  const std::vector<Box> free_space_boxes = FreeSpaceBoxes();
   const std::vector<Eigen::Matrix3Xd> free_space_vertices =
-      SetFreeSpace(tree.get());
-  manipulation::SimpleTreeVisualizer simple_tree_visualizer(*tree.get(), &lcm);
+      SetFreeSpace(free_space_boxes);
   // Palm faces +y axis of ee_frame. The face of the palm is at about (0, 0.1,
   // 0)
   // of the ee_frame.
@@ -332,6 +341,12 @@ int DoMain() {
   mug_center(2) += 0.05;
 
   auto q_global = SolveGlobalIK(tree.get(), mug_center, free_space_vertices);
+
+  // Add free space boxes to visualization
+  for (const auto& box : free_space_boxes) {
+    AddBoxToTree(tree.get(), box.size, box.pose, box.name);
+  }
+  manipulation::SimpleTreeVisualizer simple_tree_visualizer(*tree.get(), &lcm);
   auto cache = tree->CreateKinematicsCache();
   auto link_7 = tree->FindBody("iiwa_link_7");
   for (int i = 0; i < static_cast<int>(q_global.size()); ++i) {
