@@ -24,6 +24,64 @@ namespace examples {
 namespace kuka_iiwa_arm {
 using systems::DrakeVisualizer;
 
+struct BodyContactPoint {
+  BodyContactPoint(int m_link_idx,
+                   const Eigen::Ref<const Eigen::Vector3d>& m_p_BQ,
+                   const std::string m_name, double m_radius)
+      : link_idx{m_link_idx}, p_BQ{m_p_BQ}, name{m_name}, radius{m_radius} {}
+  int link_idx;
+  Eigen::Vector3d p_BQ;
+  std::string name;
+  double radius;
+};
+
+std::vector<BodyContactPoint> GetBodyContactPoints(const RigidBodyTreed& tree) {
+  std::vector<BodyContactPoint> points;
+  const int link7_idx = tree.FindBodyIndex("iiwa_link_7");
+  points.push_back(
+      BodyContactPoint(link7_idx, Eigen::Vector3d(0, 0.07, 0.1), "pt1", 0.01));
+  points.push_back(
+      BodyContactPoint(link7_idx, Eigen::Vector3d(0, -0.07, 0.1), "pt2", 0.01));
+  points.push_back(
+      BodyContactPoint(link7_idx, Eigen::Vector3d(0, -0.05, 0), "pt3", 0.01));
+  points.push_back(BodyContactPoint(link7_idx, Eigen::Vector3d(0, -0.07, 0.05),
+                                    "pt4", 0.01));
+  points.push_back(
+      BodyContactPoint(link7_idx, Eigen::Vector3d(0, 0.05, 0), "pt5", 0.01));
+  points.push_back(
+      BodyContactPoint(link7_idx, Eigen::Vector3d(0, 0.07, 0.05), "pt6", 0.01));
+
+  const int link5_idx = tree.FindBodyIndex("iiwa_link_5");
+  points.push_back(
+      BodyContactPoint(link5_idx, Eigen::Vector3d(0.06, 0, 0), "pt7", 0.01));
+  points.push_back(
+      BodyContactPoint(link5_idx, Eigen::Vector3d(-0.06, 0, 0), "pt8", 0.01));
+  points.push_back(
+      BodyContactPoint(link5_idx, Eigen::Vector3d(0, 0.06, 0), "pt9", 0.01));
+  points.push_back(
+      BodyContactPoint(link5_idx, Eigen::Vector3d(0, -0.06, 0), "pt10", 0.01));
+  points.push_back(BodyContactPoint(link5_idx, Eigen::Vector3d(0.05, 0.06, 0.1),
+                                    "pt11", 0.01));
+  points.push_back(BodyContactPoint(
+      link5_idx, Eigen::Vector3d(-0.05, 0.06, 0.1), "pt12", 0.01));
+
+  const int link6_idx = tree.FindBodyIndex("iiwa_link_6");
+  points.push_back(BodyContactPoint(
+      link6_idx, Eigen::Vector3d(0.05, -0.06, 0.055), "pt13", 0.01));
+  points.push_back(BodyContactPoint(
+      link6_idx, Eigen::Vector3d(-0.05, -0.06, 0.055), "pt14", 0.01));
+  points.push_back(
+      BodyContactPoint(link6_idx, Eigen::Vector3d(0, 0, -0.1), "pt15", 0.01));
+  points.push_back(
+      BodyContactPoint(link6_idx, Eigen::Vector3d(0, -0.08, 0), "pt16", 0.01));
+  points.push_back(BodyContactPoint(link6_idx, Eigen::Vector3d(0.05, 0, -0.08),
+                                    "pt17", 0.01));
+  points.push_back(BodyContactPoint(link6_idx, Eigen::Vector3d(-0.05, 0, -0.08),
+                                    "pt18", 0.01));
+
+  return points;
+}
+
 void AddObjects(RigidBodyTreed* rigid_body_tree) {
   const Eigen::Vector3d kRobotBasePos = rigid_body_tree->findFrame("iiwa_base")
                                             ->get_transform_to_body()
@@ -104,14 +162,11 @@ std::vector<Box> FreeSpaceBoxes() {
   box_pose.translation() << 0.6, -0.4, 1.02;
   boxes.push_back(Box(Eigen::Vector3d(0.2, 0.35, 0.5), box_pose, "box5"));
 
-  box_pose.translation() << 0.32, -0.32, 1.02;
-  boxes.push_back(Box(Eigen::Vector3d(0.4, 0.2, 0.5), box_pose, "box6"));
-
-  box_pose.translation() << 0.25, -0.52, 1.02;
-  boxes.push_back(Box(Eigen::Vector3d(0.3, 0.23, 0.5), box_pose, "box7"));
+  box_pose.translation() << 0.25, -0.42, 1.02;
+  boxes.push_back(Box(Eigen::Vector3d(0.3, 0.42, 0.5), box_pose, "box6"));
 
   box_pose.translation() << 0.25, -0.68, 1.23;
-  boxes.push_back(Box(Eigen::Vector3d(0.25, 0.14, 0.2), box_pose, "box8"));
+  boxes.push_back(Box(Eigen::Vector3d(0.25, 0.14, 0.2), box_pose, "box7"));
   return boxes;
 }
 
@@ -135,9 +190,11 @@ std::vector<Eigen::Matrix3Xd> SetFreeSpace(
 
 std::vector<Eigen::Matrix<double, 7, 1>> SolveGlobalIK(
     RigidBodyTreed* tree, const Eigen::Ref<Eigen::Vector3d>& mug_center,
-    const std::vector<Eigen::Matrix3Xd>& free_space_vertices) {
+    const std::vector<Eigen::Matrix3Xd>& free_space_vertices,
+    const std::vector<BodyContactPoint>& body_contact_points) {
   multibody::GlobalInverseKinematics::Options global_ik_options;
-  global_ik_options.linear_constraint_only = true;
+  global_ik_options.num_intervals_per_half_axis = 4;
+  global_ik_options.linear_constraint_only = false;
   multibody::GlobalInverseKinematics global_ik(*tree, global_ik_options);
   int link7_idx = tree->FindBodyIndex("iiwa_link_7");
   auto link7_rotmat = global_ik.body_rotation_matrix(link7_idx);
@@ -176,36 +233,22 @@ std::vector<Eigen::Matrix<double, 7, 1>> SolveGlobalIK(
 
   // Collision avoidance constraint
   if (true) {
-    global_ik.BodyPointInOneOfRegions(link7_idx, Eigen::Vector3d::Zero(),
-                                      free_space_vertices);
-    global_ik.BodyPointInOneOfRegions(link7_idx, Eigen::Vector3d(0, 0.05, 0.1),
-                                      free_space_vertices);
-    global_ik.BodyPointInOneOfRegions(link7_idx, Eigen::Vector3d(0, -0.05, 0.1),
-                                      free_space_vertices);
-    global_ik.BodyPointInOneOfRegions(link7_idx, Eigen::Vector3d(0, -0.05, 0),
-                                      free_space_vertices);
-    global_ik.BodyPointInOneOfRegions(link7_idx, Eigen::Vector3d(0, 0.05, 0),
-                                      free_space_vertices);
-    int link5_idx = tree->FindBodyIndex("iiwa_link_5");
-    global_ik.BodyPointInOneOfRegions(link5_idx, Eigen::Vector3d(0, 0, 0),
-                                      free_space_vertices);
-    global_ik.BodyPointInOneOfRegions(link5_idx, Eigen::Vector3d(0.04, 0, 0),
-                                      free_space_vertices);
-    global_ik.BodyPointInOneOfRegions(link5_idx, Eigen::Vector3d(-0.04, 0, 0),
-                                      free_space_vertices);
-    global_ik.BodyPointInOneOfRegions(link5_idx, Eigen::Vector3d(0, 0.04, 0),
-                                      free_space_vertices);
-    global_ik.BodyPointInOneOfRegions(link5_idx, Eigen::Vector3d(0, -0.04, 0),
-                                      free_space_vertices);
+    for (const auto& body_contact_point : body_contact_points) {
+      global_ik.BodyPointInOneOfRegions(body_contact_point.link_idx,
+                                        body_contact_point.p_BQ,
+                                        free_space_vertices);
+    }
   }
   solvers::GurobiSolver gurobi_solver;
   // solvers::MosekSolver mosek_solver;
   // mosek_solver.set_stream_logging(true, "");
   global_ik.SetSolverOption(solvers::GurobiSolver::id(), "OutputFlag", true);
-  const int num_solutions = 2;
-  global_ik.SetSolverOption(solvers::GurobiSolver::id(), "PoolSearchMode", 1);
-  global_ik.SetSolverOption(solvers::GurobiSolver::id(), "PoolSolutions",
-                            num_solutions);
+  const int num_solutions = 1;
+  if (num_solutions > 1) {
+    global_ik.SetSolverOption(solvers::GurobiSolver::id(), "PoolSearchMode", 1);
+    global_ik.SetSolverOption(solvers::GurobiSolver::id(), "PoolSolutions",
+                              num_solutions);
+  }
   solvers::SolutionResult sol_result = gurobi_solver.Solve(global_ik);
   if (sol_result != solvers::SolutionResult::kSolutionFound) {
     throw std::runtime_error("global ik fails.");
@@ -311,6 +354,8 @@ int DoMain() {
   const std::vector<Box> free_space_boxes = FreeSpaceBoxes();
   const std::vector<Eigen::Matrix3Xd> free_space_vertices =
       SetFreeSpace(free_space_boxes);
+  const std::vector<BodyContactPoint> body_contact_points =
+      GetBodyContactPoints(*tree);
   // Palm faces +y axis of ee_frame. The face of the palm is at about (0, 0.1,
   // 0)
   // of the ee_frame.
@@ -340,11 +385,16 @@ int DoMain() {
   Eigen::Vector3d mug_center = mug_pos;
   mug_center(2) += 0.05;
 
-  auto q_global = SolveGlobalIK(tree.get(), mug_center, free_space_vertices);
+  auto q_global = SolveGlobalIK(tree.get(), mug_center, free_space_vertices,
+                                body_contact_points);
 
   // Add free space boxes to visualization
   for (const auto& box : free_space_boxes) {
     AddBoxToTree(tree.get(), box.size, box.pose, box.name);
+  }
+  // Add body contact points to visualization
+  for (const auto& pt : body_contact_points) {
+    AddSphereToBody(tree.get(), pt.link_idx, pt.p_BQ, pt.name, pt.radius);
   }
   manipulation::SimpleTreeVisualizer simple_tree_visualizer(*tree.get(), &lcm);
   auto cache = tree->CreateKinematicsCache();
