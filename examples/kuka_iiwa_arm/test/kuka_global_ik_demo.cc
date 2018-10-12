@@ -52,7 +52,7 @@ std::vector<BodyContactSphere> GetBodyContactSpheres(
 
   const int link5_idx = tree.FindBodyIndex("iiwa_link_5");
   points.push_back(BodyContactSphere(link5_idx, Eigen::Vector3d(0, 0, 0),
-                                     "link5_sphere", 0.065));
+                                     "link5_sphere", 0.07));
   points.push_back(BodyContactSphere(
       link5_idx, Eigen::Vector3d(0.05, 0.06, 0.1), "pt11", 0));
   points.push_back(BodyContactSphere(
@@ -63,9 +63,9 @@ std::vector<BodyContactSphere> GetBodyContactSpheres(
       link6_idx, Eigen::Vector3d(0.05, -0.06, 0.055), "pt13", 0));
   points.push_back(BodyContactSphere(
       link6_idx, Eigen::Vector3d(-0.05, -0.06, 0.055), "pt14", 0));
-  points.push_back(BodyContactSphere(link6_idx, Eigen::Vector3d(0, 0, -0.03),
+  points.push_back(BodyContactSphere(link6_idx, Eigen::Vector3d(0, 0, -0.035),
                                      "link6_sphere1", 0.06));
-  points.push_back(BodyContactSphere(link6_idx, Eigen::Vector3d(0, 0.02, 0.01),
+  points.push_back(BodyContactSphere(link6_idx, Eigen::Vector3d(0, 0.03, 0.01),
                                      "link6_sphere2", 0.04));
   points.push_back(
       BodyContactSphere(link6_idx, Eigen::Vector3d(0, -0.08, 0), "pt16", 0));
@@ -83,7 +83,7 @@ void AddObjects(RigidBodyTreed* rigid_body_tree) {
                                 kRobotBasePos(2));
   auto mug_frame = std::make_shared<RigidBodyFrame<double>>(
       "mug", rigid_body_tree->get_mutable_body(0), kMugPos,
-      Eigen::Vector3d(0, 0, M_PI));
+      Eigen::Vector3d(0, 0, 1.1 * M_PI));
   parsers::urdf::AddModelInstanceFromUrdfFile(
       mug_path, drake::multibody::joints::kFixed, mug_frame, rigid_body_tree);
   rigid_body_tree->addFrame(mug_frame);
@@ -103,7 +103,7 @@ void AddObjects(RigidBodyTreed* rigid_body_tree) {
 
   const std::string bowl_path = FindResourceOrThrow(
       "drake/manipulation/models/objects/bowl/urdf/bowl.urdf");
-  const Eigen::Vector3d kBowlPos(kMugPos(0), kMugPos(1) - 0.25, kMugPos(2));
+  const Eigen::Vector3d kBowlPos(kMugPos(0) + 0.04, kMugPos(1) - 0.25, kMugPos(2));
   auto bowl_frame = std::make_shared<RigidBodyFrame<double>>(
       "bowl", rigid_body_tree->get_mutable_body(0), kBowlPos,
       Eigen::Vector3d::Zero());
@@ -138,26 +138,24 @@ std::vector<Box> FreeSpaceBoxes() {
   std::vector<Box> boxes;
   Eigen::Isometry3d box_pose;
   box_pose.linear().setIdentity();
-  box_pose.translation() << 0.32, -0.85, 1.02;
-  boxes.push_back(Box(Eigen::Vector3d(0.25, 0.25, 0.5), box_pose, "box1"));
+  box_pose.translation() << 0.29, -0.85, 1.07;
+  boxes.push_back(Box(Eigen::Vector3d(0.45, 0.25, 0.6), box_pose, "box1"));
 
-  box_pose.translation() << 0.42, -0.64, 1.02;
-  boxes.push_back(Box(Eigen::Vector3d(0.15, 0.23, 0.5), box_pose, "box2"));
+  box_pose.translation() << 0.42, -0.67, 1.02;
+  boxes.push_back(Box(Eigen::Vector3d(0.15, 0.29, 0.5), box_pose, "box2"));
 
-  box_pose.translation() << 0.57, -0.73, 0.83;
-  boxes.push_back(Box(Eigen::Vector3d(0.2, 0.1, 0.12), box_pose, "box3"));
+  box_pose.translation() << 0.5, -0.73, 1.02;
+  boxes.push_back(Box(Eigen::Vector3d(0.31, 0.1, 0.5), box_pose, "box3"));
 
-  box_pose.translation() << 0.55, -0.6, 1.08;
-  boxes.push_back(Box(Eigen::Vector3d(0.3, 0.7, 0.4), box_pose, "box4"));
+  box_pose.translation() << 0.5, -0.6, 1.08;
+  boxes.push_back(Box(Eigen::Vector3d(0.31, 0.7, 0.4), box_pose, "box4"));
 
-  box_pose.translation() << 0.6, -0.4, 1.02;
-  boxes.push_back(Box(Eigen::Vector3d(0.2, 0.35, 0.5), box_pose, "box5"));
+  box_pose.translation() << 0.42, -0.75, 1.02;
+  boxes.push_back(Box(Eigen::Vector3d(0.17, 0.45, 0.5), box_pose, "box5"));
 
   box_pose.translation() << 0.2, -0.42, 1.02;
   boxes.push_back(Box(Eigen::Vector3d(0.4, 0.42, 0.5), box_pose, "box6"));
 
-  box_pose.translation() << 0.25, -0.68, 1.23;
-  boxes.push_back(Box(Eigen::Vector3d(0.25, 0.14, 0.2), box_pose, "box7"));
   return boxes;
 }
 
@@ -205,7 +203,7 @@ std::vector<Eigen::Matrix<double, 7, 1>> SolveGlobalIK(
                                        mug_center, mug_center);
   // height constraint
   global_ik.AddLinearConstraint(link7_pos(2), mug_center(2) - 0.02,
-                                mug_center(2) + 0.05);
+                                mug_center(2) + 0.15);
 
   // link 7 above the table
   const double kTableHeight = mug_center(2) - 0.05;
@@ -237,11 +235,12 @@ std::vector<Eigen::Matrix<double, 7, 1>> SolveGlobalIK(
           body_contact_sphere.radius, free_space_polytopes);
     }
   }
+  global_ik.AddBoundingBoxConstraint(-1, -0.55, global_ik.body_position(5)(1));
   solvers::GurobiSolver gurobi_solver;
   // solvers::MosekSolver mosek_solver;
   // mosek_solver.set_stream_logging(true, "");
   global_ik.SetSolverOption(solvers::GurobiSolver::id(), "OutputFlag", true);
-  const int num_solutions = 1;
+  const int num_solutions = 10;
   if (num_solutions > 1) {
     global_ik.SetSolverOption(solvers::GurobiSolver::id(), "PoolSearchMode", 1);
     global_ik.SetSolverOption(solvers::GurobiSolver::id(), "PoolSolutions",
@@ -381,6 +380,7 @@ int DoMain() {
   Eigen::Vector3d mug_pos = mug_frame->get_transform_to_body().translation();
   Eigen::Vector3d mug_center = mug_pos;
   mug_center(2) += 0.05;
+
 
   auto q_global = SolveGlobalIK(tree.get(), mug_center, free_space_polytopes,
                                 body_contact_spheres);
