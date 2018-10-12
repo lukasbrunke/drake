@@ -65,6 +65,8 @@ std::vector<BodyContactSphere> GetBodyContactSpheres(
       link6_idx, Eigen::Vector3d(-0.05, -0.06, 0.055), "pt14", 0));
   points.push_back(BodyContactSphere(link6_idx, Eigen::Vector3d(0, 0, -0.03),
                                      "link6_sphere1", 0.06));
+  points.push_back(BodyContactSphere(link6_idx, Eigen::Vector3d(0, 0.02, 0.01),
+                                     "link6_sphere2", 0.04));
   points.push_back(
       BodyContactSphere(link6_idx, Eigen::Vector3d(0, -0.08, 0), "pt16", 0));
 
