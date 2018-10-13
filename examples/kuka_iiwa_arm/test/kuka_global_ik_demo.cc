@@ -103,7 +103,8 @@ void AddObjects(RigidBodyTreed* rigid_body_tree) {
 
   const std::string bowl_path = FindResourceOrThrow(
       "drake/manipulation/models/objects/bowl/urdf/bowl.urdf");
-  const Eigen::Vector3d kBowlPos(kMugPos(0) + 0.04, kMugPos(1) - 0.25, kMugPos(2));
+  const Eigen::Vector3d kBowlPos(kMugPos(0) + 0.04, kMugPos(1) - 0.25,
+                                 kMugPos(2));
   auto bowl_frame = std::make_shared<RigidBodyFrame<double>>(
       "bowl", rigid_body_tree->get_mutable_body(0), kBowlPos,
       Eigen::Vector3d::Zero());
@@ -159,10 +160,8 @@ std::vector<Box> FreeSpaceBoxes() {
   return boxes;
 }
 
-using Polytope =
-    std::pair<Eigen::Matrix<double, Eigen::Dynamic, 3>, Eigen::VectorXd>;
-
-std::vector<Polytope> SetFreeSpace(const std::vector<Box>& free_space_boxes) {
+std::vector<multibody::GlobalInverseKinematics::Polytope3D> SetFreeSpace(
+    const std::vector<Box>& free_space_boxes) {
   // const Eigen::Vector3d kBottlePos =
   // tree->findFrame("bottle")->get_transform_to_body().translation();
   // const Eigen::Vector3d kMugPos =
@@ -172,21 +171,22 @@ std::vector<Polytope> SetFreeSpace(const std::vector<Box>& free_space_boxes) {
   // const Eigen::Vector3d kBowlPos =
   // tree->findFrame("bowl")->get_transform_to_body().translation();
 
-  std::vector<Polytope> polytopes;
+  std::vector<multibody::GlobalInverseKinematics::Polytope3D> polytopes;
   for (const auto& box : free_space_boxes) {
     Eigen::Matrix<double, 6, 3> A;
     A << box.pose.linear().transpose(), -box.pose.linear().transpose();
     Eigen::Matrix<double, 6, 1> b;
     b << box.pose.linear().transpose() * box.pose.translation() + box.size / 2,
         -box.pose.linear().transpose() * box.pose.translation() + box.size / 2;
-    polytopes.push_back(std::make_pair(A, b));
+    polytopes.emplace_back(A, b);
   }
   return polytopes;
 }
 
 std::vector<Eigen::Matrix<double, 7, 1>> SolveGlobalIK(
     RigidBodyTreed* tree, const Eigen::Ref<Eigen::Vector3d>& mug_center,
-    const std::vector<Polytope>& free_space_polytopes,
+    const std::vector<multibody::GlobalInverseKinematics::Polytope3D>&
+        free_space_polytopes,
     const std::vector<BodyContactSphere>& body_contact_spheres) {
   multibody::GlobalInverseKinematics::Options global_ik_options;
   global_ik_options.num_intervals_per_half_axis = 2;
@@ -380,7 +380,6 @@ int DoMain() {
   Eigen::Vector3d mug_pos = mug_frame->get_transform_to_body().translation();
   Eigen::Vector3d mug_center = mug_pos;
   mug_center(2) += 0.05;
-
 
   auto q_global = SolveGlobalIK(tree.get(), mug_center, free_space_polytopes,
                                 body_contact_spheres);
