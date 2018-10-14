@@ -25,8 +25,8 @@ multibody::GlobalInverseKinematics::Options global_ik_options() {
   options.approach = solvers::MixedIntegerRotationConstraintGenerator::
       Approach::kBilinearMcCormick;
   options.interval_binning = solvers::IntervalBinning::kLogarithmic;
-  options.num_intervals_per_half_axis = 2;
-  options.linear_constraint_only = false;
+  options.num_intervals_per_half_axis = 4;
+  options.linear_constraint_only = true;
   return options;
 }
 
@@ -223,6 +223,10 @@ class DUT {
     solvers::GurobiSolver gurobi_solver;
     solvers::MosekSolver mosek_solver;
 
+    if (global_ik_options().linear_constraint_only) {
+      assert(global_ik_.lorentz_cone_constraint().empty());
+      assert(global_ik_.rotated_lorentz_cone_constraint().empty());
+    }
     global_ik_.SetSolverOption(solvers::GurobiSolver::id(), "FeasibilityTol",
                                1E-5);
     // global_ik_.SetSolverOption(solvers::SolverType::kGurobi, "OutputFlag",
@@ -851,8 +855,8 @@ void AnalyzeOutputFile(int argc, char* argv[]) {
 }  // namespace drake
 
 int main(int argc, char* argv[]) {
-  //drake::examples::IRB140::DoMain(argc, argv);
+  drake::examples::IRB140::DoMain(argc, argv);
   // drake::examples::IRB140::DebugOutputFile(argc, argv);
-  drake::examples::IRB140::AnalyzeOutputFile(argc, argv);
+  //drake::examples::IRB140::AnalyzeOutputFile(argc, argv);
   return 0;
 }
