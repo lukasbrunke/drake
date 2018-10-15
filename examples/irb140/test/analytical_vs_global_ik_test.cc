@@ -25,8 +25,8 @@ multibody::GlobalInverseKinematics::Options global_ik_options() {
   options.approach = solvers::MixedIntegerRotationConstraintGenerator::
       Approach::kBilinearMcCormick;
   options.interval_binning = solvers::IntervalBinning::kLogarithmic;
-  options.num_intervals_per_half_axis = 4;
-  options.linear_constraint_only = true;
+  options.num_intervals_per_half_axis = 1;
+  options.linear_constraint_only = false;
   return options;
 }
 
