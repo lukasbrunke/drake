@@ -66,7 +66,7 @@ std::vector<BodyContactSphere> GetBodyContactSpheres(
   points.push_back(BodyContactSphere(link6_idx, Eigen::Vector3d(0, 0, -0.035),
                                      "link6_sphere1", 0.06));
   points.push_back(BodyContactSphere(link6_idx, Eigen::Vector3d(0, 0.03, 0.01),
-                                     "link6_sphere2", 0.04));
+                                     "link6_sphere2", 0.05));
   points.push_back(
       BodyContactSphere(link6_idx, Eigen::Vector3d(0, -0.08, 0), "pt16", 0));
 
@@ -128,11 +128,13 @@ void AddObjects(RigidBodyTreed* rigid_body_tree) {
 
 struct Box {
   Box(const Eigen::Ref<const Eigen::Vector3d>& m_size,
-      const Eigen::Isometry3d& m_pose, const std::string& m_name)
-      : size{m_size}, pose{m_pose}, name{m_name} {}
+      const Eigen::Isometry3d& m_pose, const std::string& m_name,
+      const Eigen::Vector4d& m_color)
+      : size{m_size}, pose{m_pose}, name{m_name}, color{m_color} {}
   Eigen::Vector3d size;
   Eigen::Isometry3d pose;
   std::string name;
+  Eigen::Vector4d color;
 };
 
 std::vector<Box> FreeSpaceBoxes() {
@@ -140,22 +142,28 @@ std::vector<Box> FreeSpaceBoxes() {
   Eigen::Isometry3d box_pose;
   box_pose.linear().setIdentity();
   box_pose.translation() << 0.29, -0.85, 1.07;
-  boxes.push_back(Box(Eigen::Vector3d(0.45, 0.25, 0.6), box_pose, "box1"));
+  boxes.push_back(Box(Eigen::Vector3d(0.45, 0.25, 0.6), box_pose, "box1",
+                      Eigen::Vector4d(0.1, 0.3, 0.7, 0.3)));
 
   box_pose.translation() << 0.42, -0.67, 1.02;
-  boxes.push_back(Box(Eigen::Vector3d(0.15, 0.29, 0.5), box_pose, "box2"));
+  boxes.push_back(Box(Eigen::Vector3d(0.15, 0.29, 0.5), box_pose, "box2",
+                      Eigen::Vector4d(0.4, 0.1, 0.5, 0.3)));
 
   box_pose.translation() << 0.5, -0.73, 1.02;
-  boxes.push_back(Box(Eigen::Vector3d(0.31, 0.1, 0.5), box_pose, "box3"));
+  boxes.push_back(Box(Eigen::Vector3d(0.31, 0.1, 0.5), box_pose, "box3",
+                      Eigen::Vector4d(0.8, 0.5, 0.1, 0.3)));
 
   box_pose.translation() << 0.5, -0.6, 1.08;
-  boxes.push_back(Box(Eigen::Vector3d(0.31, 0.7, 0.4), box_pose, "box4"));
+  boxes.push_back(Box(Eigen::Vector3d(0.31, 0.7, 0.4), box_pose, "box4",
+                      Eigen::Vector4d(0.3, 0.1, 0.8, 0.3)));
 
   box_pose.translation() << 0.42, -0.75, 1.02;
-  boxes.push_back(Box(Eigen::Vector3d(0.17, 0.45, 0.5), box_pose, "box5"));
+  boxes.push_back(Box(Eigen::Vector3d(0.17, 0.45, 0.5), box_pose, "box5",
+                      Eigen::Vector4d(0.2, 0.8, 0.3, 0.3)));
 
   box_pose.translation() << 0.2, -0.42, 1.02;
-  boxes.push_back(Box(Eigen::Vector3d(0.4, 0.42, 0.5), box_pose, "box6"));
+  boxes.push_back(Box(Eigen::Vector3d(0.4, 0.42, 0.5), box_pose, "box6",
+                      Eigen::Vector4d(0.1, 0.5, 0.5, 0.3)));
 
   return boxes;
 }
@@ -344,7 +352,32 @@ Eigen::Matrix<double, 7, 1> SolveNonlinearIK(
   return nl_ik.GetSolution(q);
 };
 
-int DoMain() {
+enum class Command {
+  FindPosture,
+  VisualizeBox,
+  VisualizePosture,
+};
+
+Command Int2Command(int command) {
+  switch (command) {
+    case 0:
+      return Command::FindPosture;
+    case 1:
+      return Command::VisualizeBox;
+    case 2:
+      return Command::VisualizePosture;
+    default:
+      throw std::runtime_error("Unknown command.");
+  }
+}
+
+int DoMain(int argc, char** argv) {
+  if (argc != 2) {
+    throw std::runtime_error("The command should be kuka_global_ik_demo <cmd>");
+  }
+  const int int_command = atoi(argv[1]);
+
+  const Command command = Int2Command(int_command);
   drake::lcm::DrakeLcm lcm;
   auto tree = ConstructKuka();
   AddObjects(tree.get());
@@ -381,12 +414,44 @@ int DoMain() {
   Eigen::Vector3d mug_center = mug_pos;
   mug_center(2) += 0.05;
 
-  auto q_global = SolveGlobalIK(tree.get(), mug_center, free_space_polytopes,
-                                body_contact_spheres);
-
+  std::vector<Eigen::Matrix<double, 7, 1>> q_visualize;
+  switch (command) {
+    case Command::FindPosture: {
+      auto q_global = SolveGlobalIK(tree.get(), mug_center,
+                                    free_space_polytopes, body_contact_spheres);
+      q_visualize = q_global;
+      break;
+    }
+    case Command::VisualizeBox: {
+      q_visualize.push_back(Eigen::VectorXd::Zero(7));
+      break;
+    }
+    case Command::VisualizePosture: {
+      // The posture is stored in "iiwa_collision_free_postures.txt"
+      q_visualize.push_back((Eigen::VectorXd(7) << -2.43652, -1.68951, 2.22475,
+                             -1.34332, -2.39852, 0.679638, 0.621955)
+                                .finished());
+      q_visualize.push_back((Eigen::VectorXd(7) << -2.41753, -1.5708, 2.22536,
+                             -1.5029, -2.62575, 0.646562, 0.763762)
+                                .finished());
+      q_visualize.push_back((Eigen::VectorXd(7) << 0.753897, 1.5708, 2.2089,
+                             1.53765, 0.461033, 0.630911, -2.31224)
+                                .finished());
+      q_visualize.push_back((Eigen::VectorXd(7) << 2.60512, -1.5708, 0.421987,
+                             0.927804, -1.78631, 1.04628, 0.679504)
+                                .finished());
+      q_visualize.push_back((Eigen::VectorXd(7) << 2.60117, -1.87278, 2.03608,
+                             0.611646, -1.30804, -1.32409, 1.84767)
+                                .finished());
+      q_visualize.push_back((Eigen::VectorXd(7) << -0.0835957, 1.87362,
+                             -1.22199, 0.675552, -2.82894, -1.58692, 1.63452)
+                                .finished());
+      break;
+    }
+  }
   // Add free space boxes to visualization
   for (const auto& box : free_space_boxes) {
-    AddBoxToTree(tree.get(), box.size, box.pose, box.name);
+    AddBoxToTree(tree.get(), box.size, box.pose, box.name, box.color);
   }
   // Add body contact points to visualization
   for (const auto& sphere : body_contact_spheres) {
@@ -396,10 +461,10 @@ int DoMain() {
   manipulation::SimpleTreeVisualizer simple_tree_visualizer(*tree.get(), &lcm);
   auto cache = tree->CreateKinematicsCache();
   auto link_7 = tree->FindBody("iiwa_link_7");
-  for (int i = 0; i < static_cast<int>(q_global.size()); ++i) {
-    simple_tree_visualizer.visualize(q_global[i]);
-    std::cout << "q:\n" << q_global[i].transpose() << std::endl;
-    cache.initialize(q_global[i]);
+  for (int i = 0; i < static_cast<int>(q_visualize.size()); ++i) {
+    simple_tree_visualizer.visualize(q_visualize[i]);
+    std::cout << "q:\n" << q_visualize[i].transpose() << std::endl;
+    cache.initialize(q_visualize[i]);
     tree->doKinematics(cache);
     auto link_7_pose = tree->CalcBodyPoseInWorldFrame(cache, *link_7);
     std::cout << "link7 pos:\n" << link_7_pose.matrix() << std::endl;
@@ -416,4 +481,6 @@ int DoMain() {
 }  // namespace examples
 }  // namespace drake
 
-int main() { return drake::examples::kuka_iiwa_arm::DoMain(); }
+int main(int argc, char** argv) {
+  return drake::examples::kuka_iiwa_arm::DoMain(argc, argv);
+}
