@@ -855,8 +855,8 @@ void AnalyzeOutputFile(int argc, char* argv[]) {
 }  // namespace drake
 
 int main(int argc, char* argv[]) {
-  drake::examples::IRB140::DoMain(argc, argv);
+  //drake::examples::IRB140::DoMain(argc, argv);
   // drake::examples::IRB140::DebugOutputFile(argc, argv);
-  //drake::examples::IRB140::AnalyzeOutputFile(argc, argv);
+  drake::examples::IRB140::AnalyzeOutputFile(argc, argv);
   return 0;
 }

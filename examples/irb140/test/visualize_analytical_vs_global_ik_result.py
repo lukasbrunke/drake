@@ -8,16 +8,16 @@ def receiveMessage(msg):
     drake_path = '/home/hongkai/drake-distro'
     case = 0
 
-    robotModel, jointController = roboturdf.loadRobotModel(urdfFile=drake_path+'/drake/examples/IRB140/urdf/irb_140_shift.urdf', view=view, useConfigFile=False)
-    jointController.setPose('my posture', np.zeros(len(jointController.jointNames)))
+    #robotModel, jointController = roboturdf.loadRobotModel(urdfFile=drake_path+'/drake/examples/IRB140/urdf/irb_140_shift.urdf', view=view, useConfigFile=False)
+    #jointController.setPose('my posture', np.zeros(len(jointController.jointNames)))
 
-    ee_model, ee_joint_controller = roboturdf.loadRobotModel(urdfFile=drake_path+'/drake/examples/IRB140/urdf/end_effector.urdf', view=view, useConfigFile=False)
+    #ee_model, ee_joint_controller = roboturdf.loadRobotModel(urdfFile=drake_path+'/drake/examples/IRB140/urdf/end_effector.urdf', view=view, useConfigFile=False)
     ee_pose = np.array([-0.5, -0.4, 0.5, 0, 0, 0])
     if case == 0 :
         ee_pose[5] = 0
     elif case == 2:
         ee_pose[5] = 1.57
-    ee_joint_controller.setPose('ee posture', ee_pose)
+    #ee_joint_controller.setPose('ee posture', ee_pose)
     folderName = 'my data'
 
     # remove the folder completely

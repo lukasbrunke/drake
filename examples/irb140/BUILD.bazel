@@ -84,6 +84,16 @@ drake_cc_binary(
     ],
 )
 
+drake_cc_binary(
+    name = "visualize_irb_posture",
+    testonly = 1,
+    srcs = ["test/visualize_irb_posture.cc"],
+    deps = [
+        ":IRB140_common",
+        "//common:text_logging_gflags",
+    ],
+)
+
 install_data()
 
 add_lint_tests()
