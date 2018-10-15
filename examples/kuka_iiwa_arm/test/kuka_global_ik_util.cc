@@ -11,16 +11,16 @@ namespace examples {
 namespace kuka_iiwa_arm {
 void AddBoxToTree(RigidBodyTreed* tree,
                   const Eigen::Ref<const Eigen::Vector3d>& box_size,
-                  const Eigen::Isometry3d& box_pose, const std::string& name) {
+                  const Eigen::Isometry3d& box_pose, const std::string& name,
+                  const Eigen::Vector4d& color) {
   auto body = std::make_unique<RigidBody<double>>();
   body->set_name(name);
   body->set_mass(1.0);
   body->set_spatial_inertia(Matrix6<double>::Identity());
 
   const DrakeShapes::Box shape(box_size);
-  const Eigen::Vector4d material(0.3, 0.4, 0.5, 0.5);
   const DrakeShapes::VisualElement visual_element(
-      shape, Eigen::Isometry3d::Identity(), material);
+      shape, Eigen::Isometry3d::Identity(), color);
   body->AddVisualElement(visual_element);
 
   auto joint = std::make_unique<FixedJoint>(name + "joint", box_pose);

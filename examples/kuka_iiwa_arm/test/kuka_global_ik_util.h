@@ -6,7 +6,9 @@ namespace examples {
 namespace kuka_iiwa_arm {
 void AddBoxToTree(RigidBodyTreed* tree,
                   const Eigen::Ref<const Eigen::Vector3d>& box_size,
-                  const Eigen::Isometry3d& box_pose, const std::string& name);
+                  const Eigen::Isometry3d& box_pose, const std::string& name,
+                  const Eigen::Vector4d& color = Eigen::Vector4d(0.3, 0.4, 0.5,
+                                                                 0.5));
 
 Eigen::Matrix<double, 3, 8> BoxVertices(
     const Eigen::Ref<const Eigen::Vector3d>& box_size,
