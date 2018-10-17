@@ -1,6 +1,7 @@
 #include <memory>
 
 #include "drake/common/find_resource.h"
+#include "drake/common/text_logging_gflags.h"
 #include "drake/examples/kuka_iiwa_arm/test/kuka_global_ik_util.h"
 #include "drake/lcm/drake_lcm.h"
 #include "drake/manipulation/util/simple_tree_visualizer.h"
@@ -9,30 +10,62 @@
 #include "drake/multibody/parsers/sdf_parser.h"
 #include "drake/multibody/parsers/urdf_parser.h"
 #include "drake/solvers/gurobi_solver.h"
+#include "drake/solvers/rotation_constraint.h"
+
+DEFINE_bool(small_cabinet, true, "Use small of large cabinet.");
+DEFINE_bool(find_path, false, "Find path or a single posture.");
 
 namespace drake {
 namespace examples {
 namespace kuka_iiwa_arm {
+solvers::VectorXDecisionVariable BodySphereInOneOfPolytopes(
+    solvers::MathematicalProgram* prog, const Matrix3<symbolic::Variable>& R,
+    const Vector3<symbolic::Variable>& pos,
+    const Eigen::Ref<const Eigen::Vector3d>& p_BQ, double radius,
+    const std::vector<multibody::GlobalInverseKinematics::Polytope3D>&
+        polytopes) {
+  DRAKE_DEMAND(radius >= 0);
+  const int num_polytopes = static_cast<int>(polytopes.size());
+  const auto z = prog->NewBinaryVariables(num_polytopes, "z");
+  // z1 + ... + zn = 1
+  prog->AddLinearEqualityConstraint(Eigen::RowVectorXd::Ones(num_polytopes), 1,
+                                    z);
 
-enum class CabinetType {
-  kSmall,
-  kLarge
-};
+  const auto y =
+      prog->NewContinuousVariables<3, Eigen::Dynamic>(3, num_polytopes, "y");
+  const Vector3<symbolic::Expression> p_WQ = pos + R * p_BQ;
+  // p_WQ = y.col(0) + ... + y.col(n)
+  prog->AddLinearEqualityConstraint(
+      p_WQ - y.cast<symbolic::Expression>().rowwise().sum(),
+      Eigen::Vector3d::Zero());
+
+  for (int i = 0; i < num_polytopes; ++i) {
+    DRAKE_DEMAND(polytopes[i].A.rows() == polytopes[i].b.rows());
+    prog->AddLinearConstraint(
+        polytopes[i].A * y.col(i) <=
+        (polytopes[i].b - polytopes[i].A.rowwise().norm() * radius) * z(i));
+  }
+
+  return z;
+}
+
+enum class CabinetType { kSmall, kLarge };
 
 Eigen::Vector3d CabinetSize(CabinetType type) {
- if (type == CabinetType::kSmall) {
-   return Eigen::Vector3d(0.24, 0.2, 0.12);
- } else if (type == CabinetType::kLarge) {
-   return Eigen::Vector3d(0.24, 0.22, 0.12);
- } else {
-   return Eigen::Vector3d(0.3, 0.2, 0.12);
- }
-
+  if (type == CabinetType::kSmall) {
+    return Eigen::Vector3d(0.24, 0.2, 0.12);
+  } else if (type == CabinetType::kLarge) {
+    return Eigen::Vector3d(0.24, 0.22, 0.12);
+  } else {
+    return Eigen::Vector3d(0.3, 0.2, 0.12);
+  }
 }
 double CabinetFrontWidth() { return 0.03; }
 
+double CabinetThickness() { return 0.01; }
+
 std::vector<Box> Cabinet(CabinetType type) {
-  const double thickness = 0.01;
+  const double thickness = CabinetThickness();
   const auto cabinet_size = CabinetSize(type);
   std::vector<Box> cabinet;
   Eigen::Isometry3d box_pose;
@@ -116,20 +149,28 @@ std::vector<BodyContactSphere> GetSchunkBodyContactSpheres(
   points.emplace_back(schunk_idx, Eigen::Vector3d(-0.065, -0.03, -0.02), "pt14",
                       0.008);
 
-  points.emplace_back(schunk_idx, Eigen::Vector3d(0.065, 0, 0.02), "pt15", 0.008);
-  points.emplace_back(schunk_idx, Eigen::Vector3d(-0.065, 0, 0.02), "pt16", 0.008);
-  points.emplace_back(schunk_idx, Eigen::Vector3d(0.065, 0, -0.02), "pt17", 0.008);
-  points.emplace_back(schunk_idx, Eigen::Vector3d(-0.065, 0, -0.02), "pt18", 0.008);
-  points.emplace_back(schunk_idx, Eigen::Vector3d(0.065, -0.015, 0.02), "pt19", 0.008);
-  points.emplace_back(schunk_idx, Eigen::Vector3d(-0.065, -0.015, 0.02), "pt20", 0.008);
-  points.emplace_back(schunk_idx, Eigen::Vector3d(0.065, -0.015, -0.02), "pt21", 0.008);
-  points.emplace_back(schunk_idx, Eigen::Vector3d(-0.065, -0.015, -0.02), "pt22", 0.008);
-
+  points.emplace_back(schunk_idx, Eigen::Vector3d(0.065, 0, 0.02), "pt15",
+                      0.008);
+  points.emplace_back(schunk_idx, Eigen::Vector3d(-0.065, 0, 0.02), "pt16",
+                      0.008);
+  points.emplace_back(schunk_idx, Eigen::Vector3d(0.065, 0, -0.02), "pt17",
+                      0.008);
+  points.emplace_back(schunk_idx, Eigen::Vector3d(-0.065, 0, -0.02), "pt18",
+                      0.008);
+  points.emplace_back(schunk_idx, Eigen::Vector3d(0.065, -0.015, 0.02), "pt19",
+                      0.008);
+  points.emplace_back(schunk_idx, Eigen::Vector3d(-0.065, -0.015, 0.02), "pt20",
+                      0.008);
+  points.emplace_back(schunk_idx, Eigen::Vector3d(0.065, -0.015, -0.02), "pt21",
+                      0.008);
+  points.emplace_back(schunk_idx, Eigen::Vector3d(-0.065, -0.015, -0.02),
+                      "pt22", 0.008);
 
   return points;
 }
 
-std::vector<Box> FreeSpaceBoxes(const Eigen::Vector3d& mug_pos, CabinetType type) {
+std::vector<Box> FreeSpaceBoxes(const Eigen::Vector3d& mug_pos,
+                                CabinetType type, bool find_path) {
   std::vector<Box> boxes;
 
   auto cabinet_size = CabinetSize(type);
@@ -138,7 +179,7 @@ std::vector<Box> FreeSpaceBoxes(const Eigen::Vector3d& mug_pos, CabinetType type
   const double min_mug_x = mug_pos(0) - mug_radius;
   Eigen::Isometry3d box_pose;
   box_pose.linear().setIdentity();
-  box_pose.translation() << (min_mug_x - cabinet_size[0] / 2) / 2, 0.05,
+  box_pose.translation() << (min_mug_x - cabinet_size[0] / 2) / 2, 0.1,
       cabinet_size[2] / 2;
   boxes.emplace_back(
       Eigen::Vector3d((cabinet_size[0] / 2 + min_mug_x),
@@ -155,6 +196,15 @@ std::vector<Box> FreeSpaceBoxes(const Eigen::Vector3d& mug_pos, CabinetType type
                       (cabinet_size[1] / 2 - CabinetFrontWidth() - max_mug_y),
                       cabinet_size[2]),
       box_pose, "box2", Eigen::Vector4d(0.4, 0.1, 0.5, 0.3));
+
+  const double thickness = CabinetThickness();
+  if (find_path) {
+    box_pose.translation() << -0.05, cabinet_size[1] / 2 + thickness + 0.1,
+        cabinet_size[2] / 2;
+    boxes.emplace_back(Eigen::Vector3d(cabinet_size[0] + 2 * thickness - 0.1,
+                                       0.2, cabinet_size[2]),
+                       box_pose, "box3", Eigen::Vector4d(0.1, 0.6, 0.2, 0.3));
+  }
 
   return boxes;
 }
@@ -195,11 +245,39 @@ void AddObjects(RigidBodyTreed* rigid_body_tree,
   rigid_body_tree->addFrame(mug_frame);
 }
 
+void AddAntiPodalGraspConstraint(solvers::MathematicalProgram* prog,
+                                 const Matrix3<symbolic::Variable>& R,
+                                 const Vector3<symbolic::Variable>& pos,
+                                 const Eigen::Vector3d& mug_pos,
+                                 const Eigen::Vector3d& cabinet_size) {
+  // x axis of the hand is horizontal.
+  prog->AddLinearConstraint(R(2, 0) == 0);
+
+  const Eigen::Vector3d p_BQ(0, 0.09, 0);
+  const Eigen::Vector3d mug_center(mug_pos(0), mug_pos(1), mug_pos(2) + 0.05);
+  prog->AddLinearEqualityConstraint(pos + R * p_BQ, mug_center);
+
+  // fingertip in the cabinet.
+  std::array<Eigen::Vector3d, 2> finger_tips;
+  finger_tips[0] << -0.057, 0.105, 0;
+  finger_tips[1] << 0.057, 0.105, 0;
+  for (const auto& finger_tip : finger_tips) {
+    const Vector3<symbolic::Expression> finger_tip_pos = pos + R * finger_tip;
+    for (int i = 0; i < 3; ++i) {
+      prog->AddLinearConstraint(finger_tip_pos(i) >=
+                                -cabinet_size(i) / 2 + 0.01);
+      prog->AddLinearConstraint(finger_tip_pos(i) <=
+                                cabinet_size(i) / 2 - 0.01);
+    }
+  }
+}
+
 Eigen::VectorXd SolveGlobalIK(
     RigidBodyTreed* tree, const Eigen::Vector3d& mug_pos,
     const std::vector<multibody::GlobalInverseKinematics::Polytope3D>&
         free_space_polytopes,
-    const std::vector<BodyContactSphere>& body_contact_spheres, CabinetType type) {
+    const std::vector<BodyContactSphere>& body_contact_spheres,
+    CabinetType type) {
   multibody::GlobalInverseKinematics::Options global_ik_options;
   global_ik_options.num_intervals_per_half_axis = 4;
   global_ik_options.linear_constraint_only = false;
@@ -207,30 +285,12 @@ Eigen::VectorXd SolveGlobalIK(
   const int schunk_idx = tree->FindBodyIndex("body");
   auto R = global_ik.body_rotation_matrix(schunk_idx);
   auto p = global_ik.body_position(schunk_idx);
-  // x axis of the hand is horizontal.
-  global_ik.AddLinearConstraint(R(2, 0) == 0);
 
-  const Eigen::Vector3d p_BQ(0, 0.09, 0);
-  const Eigen::Vector3d mug_center(mug_pos(0), mug_pos(1), mug_pos(2) + 0.05);
-  global_ik.AddWorldPositionConstraint(schunk_idx, p_BQ, mug_center, mug_center,
-                                       Eigen::Isometry3d::Identity());
-
+  AddAntiPodalGraspConstraint(&global_ik, R, p, mug_pos, CabinetSize(type));
   for (const auto& body_contact_sphere : body_contact_spheres) {
     global_ik.BodySphereInOneOfPolytopes(
         body_contact_sphere.link_idx, body_contact_sphere.p_BQ,
         body_contact_sphere.radius, free_space_polytopes);
-  }
-
-  std::array<Eigen::Vector3d, 2> finger_tips;
-  finger_tips[0] << -0.057, 0.105, 0;
-  finger_tips[1] << 0.057, 0.105, 0;
-  const auto cabinet_size = CabinetSize(type);
-  for (const auto& finger_tip : finger_tips) {
-    global_ik.AddWorldPositionConstraint(
-        schunk_idx, finger_tip,
-        -cabinet_size / 2 + Eigen::Vector3d::Constant(0.01),
-        cabinet_size / 2 - Eigen::Vector3d::Constant(0.01),
-        Eigen::Isometry3d::Identity());
   }
 
   solvers::GurobiSolver gurobi_solver;
@@ -238,7 +298,8 @@ Eigen::VectorXd SolveGlobalIK(
 
   const auto result = gurobi_solver.Solve(global_ik);
   if (result != solvers::SolutionResult::kSolutionFound) {
-    return (Eigen::Matrix<double, 7, 1>() << 0, 0.23, 0.05, 0, 0, 0, 1).finished();
+    return (Eigen::Matrix<double, 7, 1>() << 0, 0.23, 0.05, 0, 0, 0, 1)
+        .finished();
   } else {
     const auto R_sol = global_ik.GetSolution(R);
     const auto p_sol = global_ik.GetSolution(p);
@@ -274,26 +335,92 @@ Eigen::VectorXd SolveGlobalIK(
   }
 }
 
-int DoMain(int argc, char** argv) {
-  if (argc != 2) {
-    throw std::runtime_error(
-        "The command should be schunk_collision_avoidance_test <cmd>");
+std::vector<Eigen::VectorXd> SolvePathGlobalIK(
+    const RigidBodyTreed&, const Eigen::Vector3d& mug_pos,
+    const std::vector<multibody::GlobalInverseKinematics::Polytope3D>&
+        free_space_polytopes,
+    const std::vector<BodyContactSphere>& body_contact_spheres,
+    CabinetType type) {
+  const int nT = 5;
+  solvers::MixedIntegerRotationConstraintGenerator rotation_generator(
+      solvers::MixedIntegerRotationConstraintGenerator::Approach::
+          kBilinearMcCormick,
+      2, solvers::IntervalBinning::kLogarithmic);
+
+  solvers::MathematicalProgram prog;
+  auto pos = prog.NewContinuousVariables<3, Eigen::Dynamic>(3, nT);
+  std::vector<Matrix3<symbolic::Variable>> R(nT);
+  const bool linear_constraint_only = true;
+  for (int i = 0; i < nT; ++i) {
+    R[i] =
+        solvers::NewRotationMatrixVars(&prog, "R[" + std::to_string(i) + "]");
+    if (!linear_constraint_only) {
+      solvers::AddRotationMatrixOrthonormalSocpConstraint(&prog, R[i]);
+    }
+    rotation_generator.AddToProgram(R[i], &prog);
   }
-  const int command = std::atoi(argv[1]);
+
+  // Continuity constraint
+  const double pos_diff_tol = 0.025;
+  const double angle_diff_tol = 7.0 / 180 * M_PI;
+  for (int i = 1; i < nT; ++i) {
+    for (int j = 0; j < 3; ++j) {
+      prog.AddLinearConstraint(pos(j, i) - pos(j, i - 1) <= pos_diff_tol);
+      prog.AddLinearConstraint(pos(j, i) - pos(j, i - 1) >= -pos_diff_tol);
+    }
+    Eigen::Matrix<symbolic::Expression, 10, 1> R_diff_lorentz;
+    R_diff_lorentz << std::sqrt(4 - 4 * std::cos(angle_diff_tol)),
+        R[i].col(0) - R[i - 1].col(0), R[i].col(1) - R[i - 1].col(1),
+        R[i].col(2) - R[i - 1].col(2);
+    prog.AddLorentzConeConstraint(R_diff_lorentz);
+  }
+
+  // Antipodal grasp in the end.
+  AddAntiPodalGraspConstraint(&prog, R[nT - 1], pos.col(nT - 1), mug_pos,
+                              CabinetSize(type));
+
+  // Collision avoidance
+  for (int i = 0; i < nT; ++i) {
+    for (const auto& body_contact_sphere : body_contact_spheres) {
+      BodySphereInOneOfPolytopes(
+          &prog, R[i], pos.col(i), body_contact_sphere.p_BQ,
+          body_contact_sphere.radius, free_space_polytopes);
+    }
+  }
+
+  // initially schunk is outside the box.
+  prog.AddLinearConstraint(pos(1, 0) >= CabinetSize(type)(1) / 2 + 0.02);
+
+  prog.SetSolverOption(solvers::GurobiSolver::id(), "OutputFlag", true);
+
+  solvers::GurobiSolver solver;
+  const auto result = solver.Solve(prog);
+  if (result != solvers::SolutionResult::kSolutionFound) {
+    Eigen::VectorXd q(7);
+    q << -0.045, 0.23, 0.05, 0, 0, 0, 1;
+    return {q};
+  }
+  std::vector<Eigen::VectorXd> q(nT);
+  for (int i = 0; i < nT; ++i) {
+    q[i].head<3>() = prog.GetSolution(pos.col(i));
+    const auto R_sol = prog.GetSolution(R[i]);
+    const math::RotationMatrixd R_proj =
+        math::RotationMatrixd::ProjectToRotationMatrix(R_sol);
+    q[i].tail<4>() = R_proj.ToQuaternionAsVector4();
+  }
+  return q;
+}
+
+int DoMain(int argc, char** argv) {
+  gflags::SetUsageMessage(
+      "Simple sdformat usage example, just"
+      "make sure drake-visualizer is running!");
+  gflags::ParseCommandLineFlags(&argc, &argv, true);
   CabinetType cabinet_type;
-  switch (command) {
-    case 0: {
-      cabinet_type = CabinetType::kSmall;
-      break;
-    }
-    case 1:
-    case 2: {
-      cabinet_type = CabinetType::kLarge;
-      break;
-    }
-    default: {
-      throw std::runtime_error("Unknown command.");
-    }
+  if (FLAGS_small_cabinet) {
+    cabinet_type = CabinetType::kSmall;
+  } else {
+    cabinet_type = CabinetType::kLarge;
   }
   drake::lcm::DrakeLcm lcm;
   auto tree = ConstructSchunkGripper();
@@ -302,17 +429,25 @@ int DoMain(int argc, char** argv) {
   const std::vector<Box> cabinet = Cabinet(cabinet_type);
   const std::vector<BodyContactSphere> body_contact_spheres =
       GetSchunkBodyContactSpheres(*tree);
-  const std::vector<Box> free_space_boxes = FreeSpaceBoxes(mug_pos, cabinet_type);
+  const std::vector<Box> free_space_boxes =
+      FreeSpaceBoxes(mug_pos, cabinet_type, FLAGS_find_path);
   const auto free_space_polytopes = SetFreeSpace(free_space_boxes);
 
   Eigen::Matrix<double, 7, 1> q_visualize;
   q_visualize.head<3>() << 0, 0.2, 0;
   q_visualize.tail<4>() << 1, 0, 0, 0;
 
-  if (command == 0 || command == 1) {
+  std::vector<Eigen::VectorXd> q_path;
+  if (!FLAGS_find_path) {
     q_visualize = SolveGlobalIK(tree.get(), mug_pos, free_space_polytopes,
                                 body_contact_spheres, cabinet_type);
     q_visualize(1) += 0.05;
+  } else {
+    q_path = SolvePathGlobalIK(*tree, mug_pos, free_space_polytopes,
+                               body_contact_spheres, cabinet_type);
+    for (auto& q_path_i : q_path) {
+      q_path_i(1) += 0.05;
+    }
   }
 
   AddObjects(tree.get(), mug_pos);
@@ -329,7 +464,14 @@ int DoMain(int argc, char** argv) {
 
   manipulation::SimpleTreeVisualizer simple_tree_visualizer(*tree.get(), &lcm);
   std::cout << "q_visualize: " << q_visualize.transpose() << "\n";
-  simple_tree_visualizer.visualize(q_visualize);
+  if (!FLAGS_find_path) {
+    simple_tree_visualizer.visualize(q_visualize);
+  } else {
+    for (const auto& q : q_path) {
+      simple_tree_visualizer.visualize(q);
+      getchar();
+    }
+  }
 
   return 0;
 }
