@@ -12,7 +12,8 @@
 #include "drake/solvers/gurobi_solver.h"
 #include "drake/solvers/rotation_constraint.h"
 
-DEFINE_bool(small_cabinet, true, "Use small of large cabinet.");
+DEFINE_string(cabinet_size, "small",
+              "Cabinet size could be small, medium or large.");
 DEFINE_bool(find_path, false, "Find path or a single posture.");
 
 namespace drake {
@@ -49,15 +50,15 @@ solvers::VectorXDecisionVariable BodySphereInOneOfPolytopes(
   return z;
 }
 
-enum class CabinetType { kSmall, kLarge };
+enum class CabinetType { kSmall, kMedium, kLarge };
 
 Eigen::Vector3d CabinetSize(CabinetType type) {
   if (type == CabinetType::kSmall) {
     return Eigen::Vector3d(0.24, 0.2, 0.12);
-  } else if (type == CabinetType::kLarge) {
+  } else if (type == CabinetType::kMedium) {
     return Eigen::Vector3d(0.24, 0.22, 0.12);
   } else {
-    return Eigen::Vector3d(0.3, 0.2, 0.12);
+    return Eigen::Vector3d(0.4, 0.26, 0.12);
   }
 }
 double CabinetFrontWidth() { return 0.03; }
@@ -71,31 +72,49 @@ std::vector<Box> Cabinet(CabinetType type) {
   Eigen::Isometry3d box_pose;
 
   const Eigen::Vector4d wood_color(0.75, 0.5, 0.25, 1);
+  const Eigen::Vector4d cherry_color(0.4, 0.2, 0, 1);
+  const Eigen::Vector4d lighter_wood_color(0.6, 0.4, 0, 1);
+  Eigen::Vector4d color;
+  switch (type) {
+    case CabinetType::kSmall: {
+      color = wood_color;
+      break;
+    }
+    case CabinetType::kMedium: {
+      color = cherry_color;
+      break;
+    }
+    case CabinetType::kLarge: {
+      color = lighter_wood_color;
+      break;
+    }
+    default: { throw std::runtime_error("Unknown cabinet type."); }
+  }
 
   // bottom
   box_pose.linear().setIdentity();
   box_pose.translation() << 0, 0, -thickness / 2;
   cabinet.push_back(
       Box(Eigen::Vector3d(cabinet_size[0], cabinet_size[1], thickness),
-          box_pose, "bottom", wood_color));
+          box_pose, "bottom", color));
 
   // top
   box_pose.translation() << 0, 0, cabinet_size[2] + thickness / 2;
   cabinet.push_back(
       Box(Eigen::Vector3d(cabinet_size[0], cabinet_size[1], thickness),
-          box_pose, "top", wood_color));
+          box_pose, "top", color));
   // left
   box_pose.translation() << -cabinet_size[0] / 2 - thickness / 2, 0,
       cabinet_size[2] / 2;
   cabinet.push_back(Box(Eigen::Vector3d(thickness, cabinet_size[1],
                                         cabinet_size[2] + 2 * thickness),
-                        box_pose, "left", wood_color));
+                        box_pose, "left", color));
   // right
   box_pose.translation() << cabinet_size[0] / 2 + thickness / 2, 0,
       cabinet_size[2] / 2;
   cabinet.push_back(Box(Eigen::Vector3d(thickness, cabinet_size[1],
                                         cabinet_size[2] + 2 * thickness),
-                        box_pose, "right", wood_color));
+                        box_pose, "right", color));
 
   // back
   box_pose.translation() << 0, -cabinet_size[1] / 2 - thickness / 2,
@@ -103,7 +122,7 @@ std::vector<Box> Cabinet(CabinetType type) {
   cabinet.push_back(
       Box(Eigen::Vector3d(cabinet_size[0] + 2 * thickness, thickness,
                           cabinet_size[2] + 2 * thickness),
-          box_pose, "back", wood_color));
+          box_pose, "back", color));
 
   // front
   const double front_width = CabinetFrontWidth();
@@ -111,7 +130,7 @@ std::vector<Box> Cabinet(CabinetType type) {
       cabinet_size[1] / 2 - front_width / 2, cabinet_size[2] / 2;
   cabinet.push_back(
       Box(Eigen::Vector3d(cabinet_size[0] / 2, front_width, cabinet_size[2]),
-          box_pose, "front", wood_color));
+          box_pose, "front", color));
 
   return cabinet;
 }
@@ -341,7 +360,7 @@ std::vector<Eigen::VectorXd> SolvePathGlobalIK(
         free_space_polytopes,
     const std::vector<BodyContactSphere>& body_contact_spheres,
     CabinetType type) {
-  const int nT = 5;
+  const int nT = 6;
   solvers::MixedIntegerRotationConstraintGenerator rotation_generator(
       solvers::MixedIntegerRotationConstraintGenerator::Approach::
           kBilinearMcCormick,
@@ -402,6 +421,7 @@ std::vector<Eigen::VectorXd> SolvePathGlobalIK(
   }
   std::vector<Eigen::VectorXd> q(nT);
   for (int i = 0; i < nT; ++i) {
+    q[i].resize(7);
     q[i].head<3>() = prog.GetSolution(pos.col(i));
     const auto R_sol = prog.GetSolution(R[i]);
     const math::RotationMatrixd R_proj =
@@ -417,10 +437,14 @@ int DoMain(int argc, char** argv) {
       "make sure drake-visualizer is running!");
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   CabinetType cabinet_type;
-  if (FLAGS_small_cabinet) {
+  if (FLAGS_cabinet_size == "small") {
     cabinet_type = CabinetType::kSmall;
-  } else {
+  } else if (FLAGS_cabinet_size == "medium") {
+    cabinet_type = CabinetType::kMedium;
+  } else if (FLAGS_cabinet_size == "large") {
     cabinet_type = CabinetType::kLarge;
+  } else {
+    throw std::runtime_error("Unsupported cabinet size.");
   }
   drake::lcm::DrakeLcm lcm;
   auto tree = ConstructSchunkGripper();
