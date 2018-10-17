@@ -135,6 +135,24 @@ std::vector<Box> Cabinet(CabinetType type) {
   return cabinet;
 }
 
+std::vector<BodyContactSphere> GetSchunkFingerContactSpheres(
+    const RigidBodyTreed& tree) {
+  std::vector<BodyContactSphere> points;
+  const int schunk_idx = tree.FindBodyIndex("body");
+  /*points.emplace_back(schunk_idx, Eigen::Vector3d(-0.057, 0.105, 0),
+                      "finger_pt1", 0.008);*/
+  points.emplace_back(schunk_idx, Eigen::Vector3d(-0.057, 0.085, 0),
+                      "finger_pt2", 0.008);
+  points.emplace_back(schunk_idx, Eigen::Vector3d(-0.057, 0.065, 0),
+                      "finger_pt3", 0.008);
+  /*points.emplace_back(schunk_idx, Eigen::Vector3d(0.057, 0.105, 0),
+                      "finger_pt4", 0.008);*/
+  points.emplace_back(schunk_idx, Eigen::Vector3d(0.057, 0.085, 0),
+                      "finger_pt5", 0.008);
+  points.emplace_back(schunk_idx, Eigen::Vector3d(0.057, 0.065, 0),
+                      "finger_pt6", 0.008);
+  return points;
+}
 std::vector<BodyContactSphere> GetSchunkBodyContactSpheres(
     const RigidBodyTreed& tree) {
   std::vector<BodyContactSphere> points;
@@ -218,11 +236,22 @@ std::vector<Box> FreeSpaceBoxes(const Eigen::Vector3d& mug_pos,
 
   const double thickness = CabinetThickness();
   if (find_path) {
-    box_pose.translation() << -0.05, cabinet_size[1] / 2 + thickness + 0.1,
-        cabinet_size[2] / 2;
-    boxes.emplace_back(Eigen::Vector3d(cabinet_size[0] + 2 * thickness - 0.1,
-                                       0.2, cabinet_size[2]),
-                       box_pose, "box3", Eigen::Vector4d(0.1, 0.6, 0.2, 0.3));
+    if (type == CabinetType::kMedium) {
+      box_pose.translation() << -0.05, cabinet_size[1] / 2 + thickness + 0.1,
+          cabinet_size[2] / 2;
+      boxes.emplace_back(Eigen::Vector3d(cabinet_size[0] + 2 * thickness - 0.1,
+                                         0.2, cabinet_size[2]),
+                         box_pose, "box3", Eigen::Vector4d(0.1, 0.6, 0.2, 0.3));
+    } else if (type == CabinetType::kLarge) {
+      box_pose.translation() << 0,
+          (mug_pos(1) - mug_radius - cabinet_size[1] / 2) / 2,
+          cabinet_size[2] / 2;
+      boxes.emplace_back(
+          Eigen::Vector3d(cabinet_size[0],
+                          (mug_pos(1) - mug_radius + cabinet_size[1] / 2),
+                          cabinet_size[2]),
+          box_pose, "box4", Eigen::Vector4d(0.1, 0.6, 0.2, 0.3));
+    }
   }
 
   return boxes;
@@ -359,6 +388,7 @@ std::vector<Eigen::VectorXd> SolvePathGlobalIK(
     const std::vector<multibody::GlobalInverseKinematics::Polytope3D>&
         free_space_polytopes,
     const std::vector<BodyContactSphere>& body_contact_spheres,
+    const std::vector<BodyContactSphere>& finger_contact_spheres,
     CabinetType type) {
   const int nT = 6;
   solvers::MixedIntegerRotationConstraintGenerator rotation_generator(
@@ -380,8 +410,8 @@ std::vector<Eigen::VectorXd> SolvePathGlobalIK(
   }
 
   // Continuity constraint
-  const double pos_diff_tol = 0.025;
-  const double angle_diff_tol = 7.0 / 180 * M_PI;
+  const double pos_diff_tol = 0.03;
+  const double angle_diff_tol = 10.0 / 180 * M_PI;
   for (int i = 1; i < nT; ++i) {
     for (int j = 0; j < 3; ++j) {
       prog.AddLinearConstraint(pos(j, i) - pos(j, i - 1) <= pos_diff_tol);
@@ -404,6 +434,15 @@ std::vector<Eigen::VectorXd> SolvePathGlobalIK(
       BodySphereInOneOfPolytopes(
           &prog, R[i], pos.col(i), body_contact_sphere.p_BQ,
           body_contact_sphere.radius, free_space_polytopes);
+    }
+  }
+
+  // Initially, the fingers should also be collision free.
+  for (int i = 0; i < nT - 1; ++i) {
+    for (const auto& finger_contact_sphere : finger_contact_spheres) {
+      BodySphereInOneOfPolytopes(
+          &prog, R[i], pos.col(i), finger_contact_sphere.p_BQ,
+          finger_contact_sphere.radius, free_space_polytopes);
     }
   }
 
@@ -453,6 +492,8 @@ int DoMain(int argc, char** argv) {
   const std::vector<Box> cabinet = Cabinet(cabinet_type);
   const std::vector<BodyContactSphere> body_contact_spheres =
       GetSchunkBodyContactSpheres(*tree);
+  const std::vector<BodyContactSphere> finger_contact_spheres =
+      GetSchunkFingerContactSpheres(*tree);
   const std::vector<Box> free_space_boxes =
       FreeSpaceBoxes(mug_pos, cabinet_type, FLAGS_find_path);
   const auto free_space_polytopes = SetFreeSpace(free_space_boxes);
@@ -468,7 +509,8 @@ int DoMain(int argc, char** argv) {
     q_visualize(1) += 0.05;
   } else {
     q_path = SolvePathGlobalIK(*tree, mug_pos, free_space_polytopes,
-                               body_contact_spheres, cabinet_type);
+                               body_contact_spheres, finger_contact_spheres,
+                               cabinet_type);
     for (auto& q_path_i : q_path) {
       q_path_i(1) += 0.05;
     }
