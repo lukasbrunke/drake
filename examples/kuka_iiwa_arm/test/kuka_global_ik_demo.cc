@@ -24,17 +24,6 @@ namespace examples {
 namespace kuka_iiwa_arm {
 using systems::DrakeVisualizer;
 
-struct BodyContactSphere {
-  BodyContactSphere(int m_link_idx,
-                    const Eigen::Ref<const Eigen::Vector3d>& m_p_BQ,
-                    const std::string m_name, double m_radius)
-      : link_idx{m_link_idx}, p_BQ{m_p_BQ}, name{m_name}, radius{m_radius} {}
-  int link_idx;
-  Eigen::Vector3d p_BQ;
-  std::string name;
-  double radius;
-};
-
 std::vector<BodyContactSphere> GetBodyContactSpheres(
     const RigidBodyTreed& tree) {
   std::vector<BodyContactSphere> points;
@@ -126,16 +115,6 @@ void AddObjects(RigidBodyTreed* rigid_body_tree) {
   rigid_body_tree->addFrame(bottle_frame);
 }
 
-struct Box {
-  Box(const Eigen::Ref<const Eigen::Vector3d>& m_size,
-      const Eigen::Isometry3d& m_pose, const std::string& m_name,
-      const Eigen::Vector4d& m_color)
-      : size{m_size}, pose{m_pose}, name{m_name}, color{m_color} {}
-  Eigen::Vector3d size;
-  Eigen::Isometry3d pose;
-  std::string name;
-  Eigen::Vector4d color;
-};
 
 std::vector<Box> FreeSpaceBoxes() {
   std::vector<Box> boxes;

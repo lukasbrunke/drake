@@ -125,6 +125,17 @@ std::unique_ptr<RigidBodyTreed> ConstructKuka() {
       rigid_body_tree.get());
   return rigid_body_tree;
 }
+
+std::unique_ptr<RigidBodyTreed> ConstructSchunkGripper() {
+  std::unique_ptr<RigidBodyTreed> rigid_body_tree =
+      std::make_unique<RigidBodyTreed>();
+  const std::string schunk_path = FindResourceOrThrow(
+      "drake/examples/schunk_wsg/models/schunk_wsg_50_fixed_joint.sdf");
+  parsers::sdf::AddModelInstancesFromSdfFile(
+      schunk_path, drake::multibody::joints::kQuaternion, nullptr,
+      rigid_body_tree.get());
+  return rigid_body_tree;
+}
 }  // namespace kuka_iiwa_arm
 }  // namespace examples
 }  // namespace drake
