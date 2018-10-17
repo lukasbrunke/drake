@@ -181,6 +181,24 @@ drake_cc_binary(
     ],
 )
 
+drake_cc_binary(
+    name = "schunk_collision_avoidance_test",
+    srcs = ["test/schunk_collision_avoidance_test.cc"],
+    add_test_rule = 1,
+    data = [
+        ":models",
+    ],
+    deps = [
+        ":iiwa_common",
+        ":iiwa_lcm",
+        ":kuka_global_ik_util",
+        "//lcm",
+        "//manipulation/util:simple_tree_visualizer",
+        "//math:autodiff",
+        "//multibody:global_inverse_kinematics",
+    ],
+)
+
 #drake_cc_binary(
 #    name = "kuka_global_ik_infeasible_demo",
 #    testonly = 1,
