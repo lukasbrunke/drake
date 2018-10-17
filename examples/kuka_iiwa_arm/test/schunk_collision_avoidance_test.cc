@@ -13,12 +13,27 @@
 namespace drake {
 namespace examples {
 namespace kuka_iiwa_arm {
-Eigen::Vector3d CabinetSize() { return Eigen::Vector3d(0.24, 0.2, 0.12); }
+
+enum class CabinetType {
+  kSmall,
+  kLarge
+};
+
+Eigen::Vector3d CabinetSize(CabinetType type) {
+ if (type == CabinetType::kSmall) {
+   return Eigen::Vector3d(0.24, 0.2, 0.12);
+ } else if (type == CabinetType::kLarge) {
+   return Eigen::Vector3d(0.24, 0.22, 0.12);
+ } else {
+   return Eigen::Vector3d(0.3, 0.2, 0.12);
+ }
+
+}
 double CabinetFrontWidth() { return 0.03; }
 
-std::vector<Box> Cabinet() {
+std::vector<Box> Cabinet(CabinetType type) {
   const double thickness = 0.01;
-  const auto cabinet_size = CabinetSize();
+  const auto cabinet_size = CabinetSize(type);
   std::vector<Box> cabinet;
   Eigen::Isometry3d box_pose;
 
@@ -103,14 +118,21 @@ std::vector<BodyContactSphere> GetSchunkBodyContactSpheres(
 
   points.emplace_back(schunk_idx, Eigen::Vector3d(0.065, 0, 0.02), "pt15", 0.008);
   points.emplace_back(schunk_idx, Eigen::Vector3d(-0.065, 0, 0.02), "pt16", 0.008);
+  points.emplace_back(schunk_idx, Eigen::Vector3d(0.065, 0, -0.02), "pt17", 0.008);
+  points.emplace_back(schunk_idx, Eigen::Vector3d(-0.065, 0, -0.02), "pt18", 0.008);
+  points.emplace_back(schunk_idx, Eigen::Vector3d(0.065, -0.015, 0.02), "pt19", 0.008);
+  points.emplace_back(schunk_idx, Eigen::Vector3d(-0.065, -0.015, 0.02), "pt20", 0.008);
+  points.emplace_back(schunk_idx, Eigen::Vector3d(0.065, -0.015, -0.02), "pt21", 0.008);
+  points.emplace_back(schunk_idx, Eigen::Vector3d(-0.065, -0.015, -0.02), "pt22", 0.008);
+
 
   return points;
 }
 
-std::vector<Box> FreeSpaceBoxes(const Eigen::Vector3d& mug_pos) {
+std::vector<Box> FreeSpaceBoxes(const Eigen::Vector3d& mug_pos, CabinetType type) {
   std::vector<Box> boxes;
 
-  auto cabinet_size = CabinetSize();
+  auto cabinet_size = CabinetSize(type);
 
   const double mug_radius = 0.037;
   const double min_mug_x = mug_pos(0) - mug_radius;
@@ -177,7 +199,7 @@ Eigen::VectorXd SolveGlobalIK(
     RigidBodyTreed* tree, const Eigen::Vector3d& mug_pos,
     const std::vector<multibody::GlobalInverseKinematics::Polytope3D>&
         free_space_polytopes,
-    const std::vector<BodyContactSphere>& body_contact_spheres) {
+    const std::vector<BodyContactSphere>& body_contact_spheres, CabinetType type) {
   multibody::GlobalInverseKinematics::Options global_ik_options;
   global_ik_options.num_intervals_per_half_axis = 4;
   global_ik_options.linear_constraint_only = false;
@@ -202,7 +224,7 @@ Eigen::VectorXd SolveGlobalIK(
   std::array<Eigen::Vector3d, 2> finger_tips;
   finger_tips[0] << -0.057, 0.105, 0;
   finger_tips[1] << 0.057, 0.105, 0;
-  const auto cabinet_size = CabinetSize();
+  const auto cabinet_size = CabinetSize(type);
   for (const auto& finger_tip : finger_tips) {
     global_ik.AddWorldPositionConstraint(
         schunk_idx, finger_tip,
@@ -258,23 +280,38 @@ int DoMain(int argc, char** argv) {
         "The command should be schunk_collision_avoidance_test <cmd>");
   }
   const int command = std::atoi(argv[1]);
+  CabinetType cabinet_type;
+  switch (command) {
+    case 0: {
+      cabinet_type = CabinetType::kSmall;
+      break;
+    }
+    case 1:
+    case 2: {
+      cabinet_type = CabinetType::kLarge;
+      break;
+    }
+    default: {
+      throw std::runtime_error("Unknown command.");
+    }
+  }
   drake::lcm::DrakeLcm lcm;
   auto tree = ConstructSchunkGripper();
   const Eigen::Vector3d mug_pos(0.035, -0.04, 0);
 
-  const std::vector<Box> cabinet = Cabinet();
+  const std::vector<Box> cabinet = Cabinet(cabinet_type);
   const std::vector<BodyContactSphere> body_contact_spheres =
       GetSchunkBodyContactSpheres(*tree);
-  const std::vector<Box> free_space_boxes = FreeSpaceBoxes(mug_pos);
+  const std::vector<Box> free_space_boxes = FreeSpaceBoxes(mug_pos, cabinet_type);
   const auto free_space_polytopes = SetFreeSpace(free_space_boxes);
 
   Eigen::Matrix<double, 7, 1> q_visualize;
   q_visualize.head<3>() << 0, 0.2, 0;
   q_visualize.tail<4>() << 1, 0, 0, 0;
 
-  if (command == 0) {
+  if (command == 0 || command == 1) {
     q_visualize = SolveGlobalIK(tree.get(), mug_pos, free_space_polytopes,
-                                body_contact_spheres);
+                                body_contact_spheres, cabinet_type);
     q_visualize(1) += 0.05;
   }
 
