@@ -193,6 +193,7 @@ drake_cc_binary(
         ":iiwa_lcm",
         ":kuka_global_ik_util",
         "//lcm",
+        "//common:text_logging_gflags",
         "//manipulation/util:simple_tree_visualizer",
         "//math:autodiff",
         "//multibody:global_inverse_kinematics",
