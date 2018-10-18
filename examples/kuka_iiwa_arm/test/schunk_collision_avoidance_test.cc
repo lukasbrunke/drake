@@ -139,14 +139,14 @@ std::vector<BodyContactSphere> GetSchunkFingerContactSpheres(
     const RigidBodyTreed& tree) {
   std::vector<BodyContactSphere> points;
   const int schunk_idx = tree.FindBodyIndex("body");
-  /*points.emplace_back(schunk_idx, Eigen::Vector3d(-0.057, 0.105, 0),
-                      "finger_pt1", 0.008);*/
+  points.emplace_back(schunk_idx, Eigen::Vector3d(-0.057, 0.1, 0), "finger_pt1",
+                      0.009);
   points.emplace_back(schunk_idx, Eigen::Vector3d(-0.057, 0.085, 0),
                       "finger_pt2", 0.008);
   points.emplace_back(schunk_idx, Eigen::Vector3d(-0.057, 0.065, 0),
                       "finger_pt3", 0.008);
-  /*points.emplace_back(schunk_idx, Eigen::Vector3d(0.057, 0.105, 0),
-                      "finger_pt4", 0.008);*/
+  points.emplace_back(schunk_idx, Eigen::Vector3d(0.057, 0.1, 0), "finger_pt4",
+                      0.009);
   points.emplace_back(schunk_idx, Eigen::Vector3d(0.057, 0.085, 0),
                       "finger_pt5", 0.008);
   points.emplace_back(schunk_idx, Eigen::Vector3d(0.057, 0.065, 0),
@@ -169,39 +169,48 @@ std::vector<BodyContactSphere> GetSchunkBodyContactSpheres(
                       0.008);
   points.emplace_back(schunk_idx, Eigen::Vector3d(0.057, 0.065, 0), "pt6",
                       0.008);*/
-  points.emplace_back(schunk_idx, Eigen::Vector3d(0.065, 0.03, 0.02), "pt7",
+  const double body_half_width = 0.067;
+  points.emplace_back(schunk_idx, Eigen::Vector3d(body_half_width, 0.03, 0.02),
+                      "pt7", 0.008);
+  points.emplace_back(schunk_idx, Eigen::Vector3d(-body_half_width, 0.03, 0.02),
+                      "pt8", 0.008);
+  points.emplace_back(schunk_idx, Eigen::Vector3d(body_half_width, 0.03, -0.02),
+                      "pt9", 0.008);
+  points.emplace_back(schunk_idx,
+                      Eigen::Vector3d(-body_half_width, 0.03, -0.02), "pt10",
                       0.008);
-  points.emplace_back(schunk_idx, Eigen::Vector3d(-0.065, 0.03, 0.02), "pt8",
+  points.emplace_back(schunk_idx, Eigen::Vector3d(body_half_width, -0.03, 0.02),
+                      "pt11", 0.008);
+  points.emplace_back(schunk_idx,
+                      Eigen::Vector3d(-body_half_width, -0.03, 0.02), "pt12",
                       0.008);
-  points.emplace_back(schunk_idx, Eigen::Vector3d(0.065, 0.03, -0.02), "pt9",
+  points.emplace_back(schunk_idx,
+                      Eigen::Vector3d(body_half_width, -0.03, -0.02), "pt13",
                       0.008);
-  points.emplace_back(schunk_idx, Eigen::Vector3d(-0.065, 0.03, -0.02), "pt10",
-                      0.008);
-  points.emplace_back(schunk_idx, Eigen::Vector3d(0.065, -0.03, 0.02), "pt11",
-                      0.008);
-  points.emplace_back(schunk_idx, Eigen::Vector3d(-0.065, -0.03, 0.02), "pt12",
-                      0.008);
-  points.emplace_back(schunk_idx, Eigen::Vector3d(0.065, -0.03, -0.02), "pt13",
-                      0.008);
-  points.emplace_back(schunk_idx, Eigen::Vector3d(-0.065, -0.03, -0.02), "pt14",
+  points.emplace_back(schunk_idx,
+                      Eigen::Vector3d(-body_half_width, -0.03, -0.02), "pt14",
                       0.008);
 
-  points.emplace_back(schunk_idx, Eigen::Vector3d(0.065, 0, 0.02), "pt15",
+  points.emplace_back(schunk_idx, Eigen::Vector3d(body_half_width, 0, 0.02),
+                      "pt15", 0.008);
+  points.emplace_back(schunk_idx, Eigen::Vector3d(-body_half_width, 0, 0.02),
+                      "pt16", 0.008);
+  points.emplace_back(schunk_idx, Eigen::Vector3d(body_half_width, 0, -0.02),
+                      "pt17", 0.008);
+  points.emplace_back(schunk_idx, Eigen::Vector3d(-body_half_width, 0, -0.02),
+                      "pt18", 0.008);
+  points.emplace_back(schunk_idx,
+                      Eigen::Vector3d(body_half_width, -0.015, 0.02), "pt19",
                       0.008);
-  points.emplace_back(schunk_idx, Eigen::Vector3d(-0.065, 0, 0.02), "pt16",
+  points.emplace_back(schunk_idx,
+                      Eigen::Vector3d(-body_half_width, -0.015, 0.02), "pt20",
                       0.008);
-  points.emplace_back(schunk_idx, Eigen::Vector3d(0.065, 0, -0.02), "pt17",
+  points.emplace_back(schunk_idx,
+                      Eigen::Vector3d(body_half_width, -0.015, -0.02), "pt21",
                       0.008);
-  points.emplace_back(schunk_idx, Eigen::Vector3d(-0.065, 0, -0.02), "pt18",
+  points.emplace_back(schunk_idx,
+                      Eigen::Vector3d(-body_half_width, -0.015, -0.02), "pt22",
                       0.008);
-  points.emplace_back(schunk_idx, Eigen::Vector3d(0.065, -0.015, 0.02), "pt19",
-                      0.008);
-  points.emplace_back(schunk_idx, Eigen::Vector3d(-0.065, -0.015, 0.02), "pt20",
-                      0.008);
-  points.emplace_back(schunk_idx, Eigen::Vector3d(0.065, -0.015, -0.02), "pt21",
-                      0.008);
-  points.emplace_back(schunk_idx, Eigen::Vector3d(-0.065, -0.015, -0.02),
-                      "pt22", 0.008);
 
   return points;
 }
@@ -526,6 +535,12 @@ int DoMain(int argc, char** argv) {
   for (const auto& sphere : body_contact_spheres) {
     AddSphereToBody(tree.get(), sphere.link_idx, sphere.p_BQ, sphere.name,
                     std::max(sphere.radius, 0.005));
+  }
+  if (FLAGS_find_path == true) {
+    for (const auto& sphere : finger_contact_spheres) {
+      AddSphereToBody(tree.get(), sphere.link_idx, sphere.p_BQ, sphere.name,
+                      std::max(sphere.radius, 0.005));
+    }
   }
 
   manipulation::SimpleTreeVisualizer simple_tree_visualizer(*tree.get(), &lcm);
