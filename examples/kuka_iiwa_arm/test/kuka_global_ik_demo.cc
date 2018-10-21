@@ -38,10 +38,22 @@ std::vector<BodyContactSphere> GetBodyContactSpheres(
       BodyContactSphere(link7_idx, Eigen::Vector3d(0, -0.07, 0.05), "pt4", 0));
   points.push_back(
       BodyContactSphere(link7_idx, Eigen::Vector3d(0, 0.07, 0.05), "pt6", 0));
+  points.push_back(
+      BodyContactSphere(link7_idx, Eigen::Vector3d(0, 0.07, 0.075), "pt7", 0));
+  points.push_back(
+      BodyContactSphere(link7_idx, Eigen::Vector3d(0, -0.07, 0.075), "pt8", 0));
 
   const int link5_idx = tree.FindBodyIndex("iiwa_link_5");
   points.push_back(BodyContactSphere(link5_idx, Eigen::Vector3d(0, 0, 0),
-                                     "link5_sphere", 0.07));
+                                     "link5_sphere1", 0.07));
+  points.push_back(BodyContactSphere(link5_idx, Eigen::Vector3d(0, 0.03, 0.06),
+                                     "link5_sphere2", 0.04));
+  points.push_back(BodyContactSphere(link5_idx, Eigen::Vector3d(0, 0.07, 0.13),
+                                     "link5_sphere3", 0.015));
+  points.push_back(BodyContactSphere(link5_idx, Eigen::Vector3d(0, 0.08, 0.16),
+                                     "link5_sphere4", 0.015));
+  points.push_back(BodyContactSphere(link5_idx, Eigen::Vector3d(0, 0.06, 0.1),
+                                     "link5_sphere5", 0.02));
   points.push_back(BodyContactSphere(
       link5_idx, Eigen::Vector3d(0.05, 0.06, 0.1), "pt11", 0));
   points.push_back(BodyContactSphere(
@@ -56,8 +68,12 @@ std::vector<BodyContactSphere> GetBodyContactSpheres(
                                      "link6_sphere1", 0.06));
   points.push_back(BodyContactSphere(link6_idx, Eigen::Vector3d(0, 0.03, 0.01),
                                      "link6_sphere2", 0.05));
+  points.push_back(BodyContactSphere(link6_idx, Eigen::Vector3d(0, -0.03, 0.02), "link6_sphere3", 0.04));
   points.push_back(
       BodyContactSphere(link6_idx, Eigen::Vector3d(0, -0.08, 0), "pt16", 0));
+
+  const int link4_idx = tree.FindBodyIndex("iiwa_link_4");
+  points.push_back(BodyContactSphere(link4_idx, Eigen::Vector3d(0, 0.1, 0.04), "link4_sphere1", 0.04));
 
   return points;
 }
