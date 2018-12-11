@@ -187,18 +187,30 @@ symbolic::Polynomial MathematicalProgram::NewFreePolynomial(
 std::pair<symbolic::Polynomial, Binding<PositiveSemidefiniteConstraint>>
 MathematicalProgram::NewSosPolynomial(
     const Eigen::Ref<const VectorX<symbolic::Monomial>>& monomial_basis) {
+  std::cout << "create Q.\n";
   const MatrixXDecisionVariable Q{
       NewSymmetricContinuousVariables(monomial_basis.size())};
+  std::cout << "add psd_binding.\n";
   const auto psd_binding = AddPositiveSemidefiniteConstraint(Q);
   // Constructs a coefficient matrix of Polynomials Q_poly from Q. In the
   // process, we make sure that each Q_poly(i, j) is treated as a decision
   // variable, not an indeterminate.
+  std::cout << "create Q_poly.\n";
   const drake::MatrixX<symbolic::Polynomial> Q_poly{
       Q.unaryExpr([](const Variable& q_i_j) {
         return symbolic::Polynomial{q_i_j /* coeff */, {} /* Monomial */};
       })};
   // p = mᵀ * Q_poly * m.
-  const symbolic::Polynomial p{monomial_basis.dot(Q_poly * monomial_basis)};
+  std::cout << "compute Polynomial p.\n";
+  symbolic::Polynomial p{};
+  for (int i = 0; i < Q_poly.rows(); ++i) {
+    p += symbolic::Polynomial({{pow(monomial_basis(i), 2), Q(i, i)}});
+    for (int j = i + 1; j < Q_poly.cols(); ++j) {
+      p += symbolic::Polynomial({{monomial_basis(i) * monomial_basis(j), 2 * Q(i, j)}});
+    }
+  }
+  //const symbolic::Polynomial p{monomial_basis.dot(Q_poly * monomial_basis)};
+  std::cout << "return NewSosPolynomial.\n";
   return make_pair(p, psd_binding);
 }
 
@@ -792,10 +804,15 @@ pair<Binding<PositiveSemidefiniteConstraint>, Binding<LinearEqualityConstraint>>
 MathematicalProgram::AddSosConstraint(
     const symbolic::Polynomial& p,
     const Eigen::Ref<const VectorX<symbolic::Monomial>>& monomial_basis) {
+  std::cout << "create new sos poly.\n";
   const auto pair = NewSosPolynomial(monomial_basis);
+  std::cout << "get sos_poly.\n";
   const symbolic::Polynomial& sos_poly{pair.first};
+  std::cout << "get psd binding.\n";
   const Binding<PositiveSemidefiniteConstraint>& psd_binding{pair.second};
+  std::cout << "get leq_binding.\n";
   const auto leq_binding = AddLinearEqualityConstraint(sos_poly == p);
+  std::cout << "return.\n";
   return make_pair(psd_binding, leq_binding);
 }
 

@@ -102,4 +102,15 @@ drake_cc_binary(
     ]
 )
 
+drake_cc_binary(
+    name = "symbolic_polynomial_slow_test",
+    testonly = 1,
+    srcs = ["test/symbolic_polynomial_slow_test.cc"],
+    deps = [
+        ":generate_monomial_basis_util",
+        "//solvers:mathematical_program",
+        "@gflags",
+    ],
+)
+
 add_lint_tests()
