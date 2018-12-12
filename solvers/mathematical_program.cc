@@ -791,24 +791,28 @@ MathematicalProgram::AddScaledDiagonallyDominantMatrixConstraint(
 // Note that FindIndeterminateIndex is implemented in
 // mathematical_program_api.cc instead of this file.
 
-pair<Binding<PositiveSemidefiniteConstraint>, Binding<LinearEqualityConstraint>>
+Binding<PositiveSemidefiniteConstraint>
 MathematicalProgram::AddSosConstraint(
     const symbolic::Polynomial& p,
     const Eigen::Ref<const VectorX<symbolic::Monomial>>& monomial_basis) {
   const auto pair = NewSosPolynomial(monomial_basis);
   const symbolic::Polynomial& sos_poly{pair.first};
   const Binding<PositiveSemidefiniteConstraint>& psd_binding{pair.second};
-  const auto leq_binding = AddLinearEqualityConstraint(sos_poly == p);
-  return make_pair(psd_binding, leq_binding);
+  const symbolic::Polynomial diff{p - sos_poly};
+  for (const std::pair<symbolic::Monomial, symbolic::Expression>& item :
+       diff.monomial_to_coefficient_map()) {
+    AddLinearConstraint(item.second == 0);
+  }
+  return psd_binding;
 }
 
-pair<Binding<PositiveSemidefiniteConstraint>, Binding<LinearEqualityConstraint>>
+Binding<PositiveSemidefiniteConstraint>
 MathematicalProgram::AddSosConstraint(const symbolic::Polynomial& p) {
   return AddSosConstraint(
       p, ConstructMonomialBasis(p));
 }
 
-pair<Binding<PositiveSemidefiniteConstraint>, Binding<LinearEqualityConstraint>>
+Binding<PositiveSemidefiniteConstraint>
 MathematicalProgram::AddSosConstraint(
     const symbolic::Expression& e,
     const Eigen::Ref<const VectorX<symbolic::Monomial>>& monomial_basis) {
@@ -817,7 +821,7 @@ MathematicalProgram::AddSosConstraint(
       monomial_basis);
 }
 
-pair<Binding<PositiveSemidefiniteConstraint>, Binding<LinearEqualityConstraint>>
+Binding<PositiveSemidefiniteConstraint>
 MathematicalProgram::AddSosConstraint(const symbolic::Expression& e) {
   return AddSosConstraint(
       symbolic::Polynomial{e, symbolic::Variables{indeterminates_}});

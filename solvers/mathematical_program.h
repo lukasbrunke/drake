@@ -2097,8 +2097,7 @@ class MathematicalProgram {
    *  - The coefficients matrix Q is PSD (positive semidefinite).
    *  - The coefficients matching conditions in linear equality constraint.
    */
-  std::pair<Binding<PositiveSemidefiniteConstraint>,
-            Binding<LinearEqualityConstraint>>
+  Binding<PositiveSemidefiniteConstraint>
   AddSosConstraint(
       const symbolic::Polynomial& p,
       const Eigen::Ref<const VectorX<symbolic::Monomial>>& monomial_basis);
@@ -2112,8 +2111,7 @@ class MathematicalProgram {
    *  - The coefficients matrix Q is PSD (positive semidefinite).
    *  - The coefficients matching conditions in linear equality constraint.
    */
-  std::pair<Binding<PositiveSemidefiniteConstraint>,
-            Binding<LinearEqualityConstraint>>
+  Binding<PositiveSemidefiniteConstraint>
   AddSosConstraint(const symbolic::Polynomial& p);
 
   /**
@@ -2126,8 +2124,7 @@ class MathematicalProgram {
    *  - The coefficients matrix Q is PSD (positive semidefinite).
    *  - The coefficients matching conditions in linear equality constraint.
    */
-  std::pair<Binding<PositiveSemidefiniteConstraint>,
-            Binding<LinearEqualityConstraint>>
+  Binding<PositiveSemidefiniteConstraint>
   AddSosConstraint(
       const symbolic::Expression& e,
       const Eigen::Ref<const VectorX<symbolic::Monomial>>& monomial_basis);
@@ -2142,8 +2139,7 @@ class MathematicalProgram {
    *  - The coefficients matrix Q is PSD (positive semidefinite).
    *  - The coefficients matching conditions in linear equality constraint.
    */
-  std::pair<Binding<PositiveSemidefiniteConstraint>,
-            Binding<LinearEqualityConstraint>>
+  Binding<PositiveSemidefiniteConstraint>
   AddSosConstraint(const symbolic::Expression& e);
 
   // template <typename FunctionType>
