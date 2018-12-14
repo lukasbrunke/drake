@@ -6,7 +6,7 @@ namespace drake {
 namespace solvers {
 int DoMain() {
   MathematicalProgram prog;
-  constexpr int kNumT = 12;
+  constexpr int kNumT = 10;
   auto t = prog.NewIndeterminates<kNumT>();
   const auto m = symbolic::MonomialBasis<kNumT, 3>(symbolic::Variables(t));
   std::cout << "add sdsos polynomial.\n";

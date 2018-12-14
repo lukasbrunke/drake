@@ -13,6 +13,8 @@
 #include <utility>
 #include <vector>
 
+#include <Eigen/Sparse>
+
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
@@ -863,6 +865,8 @@ MathematicalProgram::AddScaledDiagonallyDominantMatrixConstraint(
   };
   // diagonal_sum_var = [M_ij_diagonal(:); X(0, 0); X(1, 1); ...; X(n-1, n-1)]
   const int n_square = n * n;
+  std::vector<Eigen::Triplet<double>> A_diagonal_sum_triplets;
+  A_diagonal_sum_triplets.reserve(n_square);
   VectorXDecisionVariable diagonal_sum_var(n_square);
   for (int i = 0; i < (n_square - n) / 2; ++i) {
     diagonal_sum_var.segment<2>(2 * i) = M_ij_diagonal.col(i);
@@ -882,14 +886,14 @@ MathematicalProgram::AddScaledDiagonallyDominantMatrixConstraint(
   A_diagonal_sum.setZero();
   for (int i = 0; i < n; ++i) {
     // The coefficient for X(i, i)
-    A_diagonal_sum(i, n_square - n + i) = -1;
+    A_diagonal_sum_triplets.emplace_back(i, n_square - n + i, -1);
     for (int j = 0; j < i; ++j) {
       // The coefficient for M[j][i](1, 1)
-      A_diagonal_sum(i, 2 * ij_to_k(j, i) + 1) = 1;
+      A_diagonal_sum_triplets.emplace_back(i, 2 * ij_to_k(j, i) + 1, 1);
     }
     for (int j = i + 1; j < n; ++j) {
       // The coefficient for M[i][j](0, 0)
-      A_diagonal_sum(i, 2 * ij_to_k(i, j)) = 1;
+      A_diagonal_sum_triplets.emplace_back(i, 2 * ij_to_k(i, j), 1);
       // Bind the rotated Lorentz cone constraint to (M[i][j](0, 0); M[i][j](1,
       // 1); M[i][j](0, 1))
       AddConstraint(rotated_lorentz_cone_constraint,
@@ -897,8 +901,11 @@ MathematicalProgram::AddScaledDiagonallyDominantMatrixConstraint(
                                                 M[i][j](0, 1)));
     }
   }
-  AddLinearEqualityConstraint(A_diagonal_sum, Eigen::VectorXd::Zero(n),
-                              diagonal_sum_var);
+  Eigen::SparseMatrix<double> A_diagonal_sum(n, n_square);
+  A_diagonal_sum.setFromTriplets(A_diagonal_sum_triplets.begin(),
+                                 A_diagonal_sum_triplets.end());
+  AddLinearEqualityConstraint(Eigen::MatrixXd(A_diagonal_sum),
+                              Eigen::VectorXd::Zero(n), diagonal_sum_var);
   return M;
 }
 
