@@ -15,6 +15,7 @@
 #include "drake/multibody/rigid_body_tree_construction.h"
 #include "drake/solvers/gurobi_solver.h"
 #include "drake/solvers/mosek_solver.h"
+#include "drake/solvers/solve.h"
 #include "drake/systems/lcm/lcm_publisher_system.h"
 #include "drake/systems/lcm/lcm_subscriber_system.h"
 #include "drake/util/drakeGeometryUtil.h"
@@ -249,14 +250,16 @@ std::vector<Eigen::Matrix<double, 7, 1>> SolveGlobalIK(
     global_ik.SetSolverOption(solvers::GurobiSolver::id(), "PoolSolutions",
                               num_solutions);
   }
-  solvers::SolutionResult sol_result = gurobi_solver.Solve(global_ik);
-  if (sol_result != solvers::SolutionResult::kSolutionFound) {
+  solvers::MathematicalProgramResult sol_result;
+  gurobi_solver.Solve(global_ik, {}, {}, &sol_result);
+  if (!sol_result.is_success()) {
     throw std::runtime_error("global ik fails.");
   }
   std::vector<Eigen::Matrix<double, 7, 1>> q;
 
   for (int i = 0; i < num_solutions; ++i) {
-    q.push_back(global_ik.ReconstructGeneralizedPositionSolution(0, i));
+    q.push_back(
+        global_ik.ReconstructGeneralizedPositionSolution(sol_result, 0, i));
   }
   return q;
 }
@@ -342,9 +345,10 @@ Eigen::Matrix<double, 7, 1> SolveNonlinearIK(
   grasp_cnstr->SetMugCenter(mug_center);
   nl_ik.AddConstraint(grasp_cnstr, q);
 
-  solvers::SolutionResult nl_ik_result = nl_ik.Solve();
-  std::cout << "nonlinear IK status: " << nl_ik_result << std::endl;
-  return nl_ik.GetSolution(q);
+  const auto nl_ik_result = Solve(nl_ik);
+  std::cout << "nonlinear IK status: " << nl_ik_result.get_solution_result()
+            << std::endl;
+  return nl_ik_result.GetSolution(q);
 };
 
 enum class Command {

@@ -161,8 +161,8 @@ drake_cc_library(
     ],
     deps = [
         ":iiwa_common",
-        "//multibody:rigid_body_tree",
-        "//multibody:rigid_body_tree_construction",
+        "//attic/multibody:rigid_body_tree",
+        "//attic/multibody:rigid_body_tree_construction",
     ],
 )
 
@@ -178,9 +178,9 @@ drake_cc_binary(
         ":iiwa_lcm",
         ":kuka_global_ik_util",
         "//lcm",
-        "//manipulation/util:simple_tree_visualizer",
+        "//attic/manipulation/util:simple_tree_visualizer",
         "//math:autodiff",
-        "//multibody:global_inverse_kinematics",
+        "//attic/multibody:global_inverse_kinematics",
     ],
 )
 
@@ -197,9 +197,9 @@ drake_cc_binary(
         ":kuka_global_ik_util",
         "//lcm",
         "//common:text_logging_gflags",
-        "//manipulation/util:simple_tree_visualizer",
+        "//attic/manipulation/util:simple_tree_visualizer",
         "//math:autodiff",
-        "//multibody:global_inverse_kinematics",
+        "//attic/multibody:global_inverse_kinematics",
     ],
 )
 

@@ -166,10 +166,11 @@ TEST_F(KukaTest, CollisionAvoidanceTest) {
   // First run the global IK without collision avoidance.
   solvers::GurobiSolver gurobi_solver;
   global_ik_.SetSolverOption(solvers::GurobiSolver::id(), "OutputFlag", 1);
-  SolutionResult sol_result = gurobi_solver.Solve(global_ik_);
-  EXPECT_EQ(sol_result, SolutionResult::kSolutionFound);
+  solvers::MathematicalProgramResult sol_result;
+  gurobi_solver.Solve(global_ik_, {}, {}, &sol_result);
+  EXPECT_EQ(sol_result.get_solution_result(), SolutionResult::kSolutionFound);
   const auto& q_without_collision_avoidance =
-      global_ik_.ReconstructGeneralizedPositionSolution();
+      global_ik_.ReconstructGeneralizedPositionSolution(sol_result);
   auto cache = rigid_body_tree_->CreateKinematicsCache();
   cache.initialize(q_without_collision_avoidance);
   rigid_body_tree_->doKinematics(cache);
@@ -202,10 +203,10 @@ TEST_F(KukaTest, CollisionAvoidanceTest) {
         link6_idx, link6_pts[i], region_vertices);
   }
 
-  sol_result = gurobi_solver.Solve(global_ik_);
-  EXPECT_EQ(sol_result, SolutionResult::kSolutionFound);
+  gurobi_solver.Solve(global_ik_, {}, {}, &sol_result);
+  EXPECT_TRUE(sol_result.is_success());
   const auto& q_with_collision_avoidance =
-      global_ik_.ReconstructGeneralizedPositionSolution();
+      global_ik_.ReconstructGeneralizedPositionSolution(sol_result);
   cache.initialize(q_with_collision_avoidance);
   rigid_body_tree_->doKinematics(cache);
   const auto ee_pose_ik_with_collision_avoidance =

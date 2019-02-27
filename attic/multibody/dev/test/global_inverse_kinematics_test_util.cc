@@ -52,9 +52,11 @@ KukaTest::KukaTest()
     // half axis.
       ee_idx_(rigid_body_tree_->FindBodyIndex("iiwa_link_ee")) {}
 
-void KukaTest::CheckGlobalIKSolution(double pos_tol, double orient_tol) const {
+void KukaTest::CheckGlobalIKSolution(
+    const solvers::MathematicalProgramResult& result, double pos_tol,
+    double orient_tol) const {
   Eigen::VectorXd q_global_ik =
-      global_ik_.ReconstructGeneralizedPositionSolution();
+      global_ik_.ReconstructGeneralizedPositionSolution(result);
 
   std::cout << "Reconstructed robot posture:\n" << q_global_ik << std::endl;
   KinematicsCache<double> cache = rigid_body_tree_->doKinematics(q_global_ik);

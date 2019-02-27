@@ -265,6 +265,7 @@ void GlobalInverseKinematics::BuildTreeTopology(
 }
 
 Eigen::VectorXd GlobalInverseKinematics::ReconstructGeneralizedPositionSolution(
+    const solvers::MathematicalProgramResult& result,
     double position_error_weight, int solution_number) const {
   std::vector<std::vector<int>> body_children;
   BuildTreeTopology(&body_children);
@@ -303,15 +304,12 @@ Eigen::VectorXd GlobalInverseKinematics::ReconstructGeneralizedPositionSolution(
   p_WBo[0] = Eigen::Vector3d::Zero();
   R_WB[0] = Eigen::Matrix3d::Identity();
   for (int i = 1; i < robot_->get_num_bodies(); ++i) {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     p_WBo[i] = solution_number > 0
-                   ? GetSuboptimalSolution(p_WBo_[i], solution_number)
-                   : GetSolution(p_WBo_[i]);
+                   ? result.GetSuboptimalSolution(p_WBo_[i], solution_number)
+                   : result.GetSolution(p_WBo_[i]);
     R_WB[i] = solution_number > 0
-                  ? GetSuboptimalSolution(R_WB_[i], solution_number)
-                  : GetSolution(R_WB_[i]);
-#pragma GCC diagnostic pop
+                  ? result.GetSuboptimalSolution(R_WB_[i], solution_number)
+                  : result.GetSolution(R_WB_[i]);
   }
   // Only do multiple sweep if the robot is a chain.
   const int max_sweep_iterations = is_kinematic_chain ? 3 : 1;

@@ -353,13 +353,14 @@ Eigen::VectorXd SolveGlobalIK(
   solvers::GurobiSolver gurobi_solver;
   global_ik.SetSolverOption(solvers::GurobiSolver::id(), "OutputFlag", true);
 
-  const auto result = gurobi_solver.Solve(global_ik);
-  if (result != solvers::SolutionResult::kSolutionFound) {
+  solvers::MathematicalProgramResult result;
+  gurobi_solver.Solve(global_ik, {}, {}, &result);
+  if (result.get_solution_result() != solvers::SolutionResult::kSolutionFound) {
     return (Eigen::Matrix<double, 7, 1>() << 0, 0.23, 0.05, 0, 0, 0, 1)
         .finished();
   } else {
-    const auto R_sol = global_ik.GetSolution(R);
-    const auto p_sol = global_ik.GetSolution(p);
+    const auto R_sol = result.GetSolution(R);
+    const auto p_sol = result.GetSolution(p);
     std::cout << "R:\n"
               << R_sol << "\n"
               << "R' * R:\n"
@@ -370,7 +371,7 @@ Eigen::VectorXd SolveGlobalIK(
       std::cout << (p_sol + R_sol * sphere.p_BQ).transpose() << "\n";
     }
     const auto q_reconstruct =
-        global_ik.ReconstructGeneralizedPositionSolution(0);
+        global_ik.ReconstructGeneralizedPositionSolution(result, 0);
     std::cout << "q_reconstruct: " << q_reconstruct.transpose() << "\n";
     const Eigen::Matrix3d R_reconstruct =
         math::RotationMatrixd(
@@ -461,8 +462,9 @@ std::vector<Eigen::VectorXd> SolvePathGlobalIK(
   prog.SetSolverOption(solvers::GurobiSolver::id(), "OutputFlag", true);
 
   solvers::GurobiSolver solver;
-  const auto result = solver.Solve(prog);
-  if (result != solvers::SolutionResult::kSolutionFound) {
+  solvers::MathematicalProgramResult result;
+  solver.Solve(prog, {}, {}, &result);
+  if (result.get_solution_result() != solvers::SolutionResult::kSolutionFound) {
     Eigen::VectorXd q(7);
     q << -0.045, 0.23, 0.05, 0, 0, 0, 1;
     return {q};
@@ -470,8 +472,8 @@ std::vector<Eigen::VectorXd> SolvePathGlobalIK(
   std::vector<Eigen::VectorXd> q(nT);
   for (int i = 0; i < nT; ++i) {
     q[i].resize(7);
-    q[i].head<3>() = prog.GetSolution(pos.col(i));
-    const auto R_sol = prog.GetSolution(R[i]);
+    q[i].head<3>() = result.GetSolution(pos.col(i));
+    const auto R_sol = result.GetSolution(R[i]);
     const math::RotationMatrixd R_proj =
         math::RotationMatrixd::ProjectToRotationMatrix(R_sol);
     q[i].tail<4>() = R_proj.ToQuaternionAsVector4();

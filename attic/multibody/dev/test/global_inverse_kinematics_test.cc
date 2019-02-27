@@ -92,12 +92,13 @@ TEST_F(KukaTest, ReachableWithCost) {
   if (gurobi_solver.available()) {
     // First solve the IK problem without the cost.
     global_ik_.SetSolverOption(solvers::GurobiSolver::id(), "OutputFlag", 1);
-    SolutionResult sol_result = gurobi_solver.Solve(global_ik_);
+    solvers::MathematicalProgramResult sol_result;
+    gurobi_solver.Solve(global_ik_, {}, {}, &sol_result);
 
-    EXPECT_EQ(sol_result, SolutionResult::kSolutionFound);
+    EXPECT_EQ(sol_result.get_solution_result(), SolutionResult::kSolutionFound);
 
     const Eigen::VectorXd q_no_cost =
-        global_ik_.ReconstructGeneralizedPositionSolution();
+        global_ik_.ReconstructGeneralizedPositionSolution(sol_result);
 
     DRAKE_DEMAND(rigid_body_tree_->get_num_bodies() == 12);
     // Now add the cost on the posture error.
@@ -106,18 +107,18 @@ TEST_F(KukaTest, ReachableWithCost) {
     global_ik_.AddPostureCost(q, Eigen::VectorXd::Constant(12, 1),
                               Eigen::VectorXd::Constant(12, 1));
 
-    sol_result = gurobi_solver.Solve(global_ik_);
+    gurobi_solver.Solve(global_ik_, {}, {}, &sol_result);
 
-    EXPECT_EQ(sol_result, SolutionResult::kSolutionFound);
+    EXPECT_EQ(sol_result.get_solution_result(), SolutionResult::kSolutionFound);
 
     // The position tolerance and the orientation tolerance is chosen
     // according to the Gurobi solver tolerance.
     double position_error = 1E-5;
     double orientation_error = 2E-5;
-    CheckGlobalIKSolution(position_error, orientation_error);
+    CheckGlobalIKSolution(sol_result, position_error, orientation_error);
 
     const Eigen::VectorXd q_w_cost =
-        global_ik_.ReconstructGeneralizedPositionSolution();
+        global_ik_.ReconstructGeneralizedPositionSolution(sol_result);
     // There is extra error introduced from gurobi optimality condition and SVD,
     // so the tolerance is loose.
     EXPECT_TRUE(

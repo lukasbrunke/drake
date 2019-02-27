@@ -99,6 +99,7 @@ class GlobalInverseKinematics : public solvers::MathematicalProgram {
    * kinematics problem is solved.
    */
   Eigen::VectorXd ReconstructGeneralizedPositionSolution(
+      const solvers::MathematicalProgramResult& result,
       double position_error_weight = 0, int solution_number = 0) const;
 
   /**
