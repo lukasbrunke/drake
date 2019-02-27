@@ -550,9 +550,34 @@ int DoMain(int argc, char** argv) {
   if (!FLAGS_find_path) {
     simple_tree_visualizer.visualize(q_visualize);
   } else {
-    for (const auto& q : q_path) {
-      simple_tree_visualizer.visualize(q);
-      getchar();
+    // Now create a tree for visualization.
+    const int num_postures = q_path.size();
+    std::unique_ptr<RigidBodyTreed> visualize_tree =
+        std::make_unique<RigidBodyTreed>();
+    const std::string schunk_path = FindResourceOrThrow(
+        "drake/examples/schunk_wsg/models/schunk_wsg_50_fixed_joint.sdf");
+    for (int i = 0; i < num_postures; ++i) {
+      parsers::sdf::AddModelInstancesFromSdfFile(
+          schunk_path, drake::multibody::joints::kQuaternion, nullptr,
+          visualize_tree.get());
+    }
+    AddObjects(visualize_tree.get(), mug_pos);
+    for (const auto& box : cabinet) {
+      AddBoxToTree(visualize_tree.get(), box.size, box.pose, box.name,
+                   box.color);
+    }
+    for (const auto& box : free_space_boxes) {
+      AddBoxToTree(visualize_tree.get(), box.size, box.pose, box.name,
+                   box.color);
+    }
+    drake::lcm::DrakeLcm lcm_path;
+    manipulation::SimpleTreeVisualizer simple_tree_path_visualizer(
+        *visualize_tree.get(), &lcm_path);
+
+    Eigen::VectorXd q_path_all(7 * num_postures);
+    for (int i = 0; i < num_postures; ++i) {
+      q_path_all.segment<7>(i * 7) = q_path[i];
+      simple_tree_path_visualizer.visualize(q_path_all);
     }
   }
 
