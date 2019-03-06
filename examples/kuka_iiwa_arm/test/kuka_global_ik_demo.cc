@@ -56,15 +56,15 @@ std::vector<BodyContactSphere> GetBodyContactSpheres(
   points.push_back(BodyContactSphere(link5_idx, Eigen::Vector3d(0, 0.06, 0.1),
                                      "link5_sphere5", 0.02));
   points.push_back(BodyContactSphere(
-      link5_idx, Eigen::Vector3d(0.05, 0.06, 0.1), "pt11", 0));
+      link5_idx, Eigen::Vector3d(0.04, 0.06, 0.1), "pt11", 0));
   points.push_back(BodyContactSphere(
-      link5_idx, Eigen::Vector3d(-0.05, 0.06, 0.1), "pt12", 0));
+      link5_idx, Eigen::Vector3d(-0.04, 0.06, 0.1), "pt12", 0));
 
   const int link6_idx = tree.FindBodyIndex("iiwa_link_6");
   points.push_back(BodyContactSphere(
-      link6_idx, Eigen::Vector3d(0.05, -0.06, 0.055), "pt13", 0));
+      link6_idx, Eigen::Vector3d(0.04, -0.055, 0.055), "pt13", 0));
   points.push_back(BodyContactSphere(
-      link6_idx, Eigen::Vector3d(-0.05, -0.06, 0.055), "pt14", 0));
+      link6_idx, Eigen::Vector3d(-0.04, -0.055, 0.055), "pt14", 0));
   points.push_back(BodyContactSphere(link6_idx, Eigen::Vector3d(0, 0, -0.035),
                                      "link6_sphere1", 0.06));
   points.push_back(BodyContactSphere(link6_idx, Eigen::Vector3d(0, 0.03, 0.01),
