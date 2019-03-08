@@ -138,6 +138,7 @@ RationalForwardKinematics::RationalForwardKinematics(
       map_t_to_mobilizer_.emplace(t_(t_.rows() - 1).get_id(),
                                   mobilizer->index());
       map_mobilizer_to_t_index_.emplace(mobilizer->index(), t_.rows() - 1);
+      t_id_to_index_.emplace(t_angle.get_id(), t_.rows() - 1);
     } else if (dynamic_cast<const internal::WeldMobilizer<double>*>(
                    mobilizer) != nullptr) {
     } else if (dynamic_cast<const internal::SpaceXYZMobilizer<double>*>(

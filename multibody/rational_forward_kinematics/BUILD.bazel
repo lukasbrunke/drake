@@ -84,6 +84,17 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "sweeping_volume_outer_approximation",
+    srcs = ["sweeping_volume_outer_approximation.cc"],
+    hdrs = ["sweeping_volume_outer_approximation.h"],
+    deps = [
+        ":convex_geometry",
+        ":generate_monomial_basis_util",
+        ":rational_forward_kinematics",
+    ],
+)
+
+drake_cc_library(
     name = "rational_forward_kinematics_test_utilities",
     testonly = 1,
     srcs = ["test/rational_forward_kinematics_test_utilities.cc"],
@@ -226,5 +237,16 @@ drake_cc_binary(
         "@gtest//:without_main",
     ],
 )
+
+drake_cc_binary(
+    name = "sweeping_volume_outer_approximation_demo",
+    srcs = ["test/sweeping_volume_outer_approximation_demo.cc"],
+    testonly = 1,
+    deps = [
+        ":sweeping_volume_outer_approximation",
+        ":rational_forward_kinematics_test_utilities",
+    ],
+)
+
 
 add_lint_tests()

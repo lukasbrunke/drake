@@ -112,6 +112,10 @@ class RationalForwardKinematics {
   // Return the indeterminates t on the path from start to the end.
   VectorX<symbolic::Variable> FindTOnPath(BodyIndex start, BodyIndex end) const;
 
+  const std::unordered_map<symbolic::Variable::Id, int>& t_id_to_index() const {
+    return t_id_to_index_;
+  }
+
  private:
   // Compute the pose of the link, connected to its parent link through a
   // revolute joint.
@@ -169,6 +173,8 @@ class RationalForwardKinematics {
   // t_angles_[map_t_index_to_angle_index_[i]] = t_[i]
   std::unordered_map<int, int> map_t_index_to_angle_index_;
   std::unordered_map<int, int> map_angle_index_to_t_index_;
+  // t_id_to_index_(t_(i).get_id()) = i
+  std::unordered_map<symbolic::Variable::Id, int> t_id_to_index_;
   symbolic::Variables t_variables_;
 };
 
