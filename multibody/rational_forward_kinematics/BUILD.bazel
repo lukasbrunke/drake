@@ -79,7 +79,7 @@ drake_cc_library(
     srcs = ["closest_pair.cc"],
     hdrs = ["closest_pair.h"],
     deps = [
-        "//multibody/multibody_tree",
+        "//multibody/tree:tree",
     ],
 )
 
@@ -106,7 +106,7 @@ drake_cc_library(
         ":configuration_space_collision_free_region",
         "//common:find_resource",
         "//multibody/benchmarks/kuka_iiwa_robot",
-        "//multibody/multibody_tree/multibody_plant",
+        "//multibody/plant:plant",
         "//multibody/parsing:parser",
         "//systems/rendering:multibody_position_to_geometry_pose",
         "//systems/analysis:simulator",
