@@ -4,8 +4,10 @@
 
 #include "drake/common/test_utilities/eigen_matrix_compare.h"
 #include "drake/common/test_utilities/symbolic_test_util.h"
+#include "drake/multibody/inverse_kinematics/inverse_kinematics.h"
 #include "drake/multibody/rational_forward_kinematics/rational_forward_kinematics_internal.h"
 #include "drake/multibody/rational_forward_kinematics/test/rational_forward_kinematics_test_utilities.h"
+#include "drake/solvers/solve.h"
 
 namespace drake {
 namespace multibody {
@@ -397,6 +399,28 @@ TEST_F(IiwaConfigurationSpaceTest,
                    link5_polytopes_[0], PlaneSide::kNegative,
                    SeparatingPlaneOrder::kAffine, t.head<3>(), t.head<5>());
   }
+}
+
+TEST_F(IiwaConfigurationSpaceTest, IsInCollision) {
+  ConfigurationSpaceCollisionFreeRegion dut(
+      *iiwa_, {link7_polytopes_[0], link7_polytopes_[1], link5_polytopes_[0]},
+      {obstacles_[0], obstacles_[1]}, SeparatingPlaneOrder::kAffine);
+  auto context = iiwa_->CreateDefaultContext();
+  Eigen::VectorXd q(7);
+  q << 0, 0, 0, 0, 0, 0, 0;
+  iiwa_->SetPositions(context.get(), q);
+  EXPECT_FALSE(dut.IsPostureCollisionFree(*context));
+
+  // Now solve a posture that link7 reaches obstacles_[1]
+  InverseKinematics ik(*iiwa_);
+
+  ik.AddPositionConstraint(iiwa_->get_body(iiwa_link_[7]).body_frame(),
+                           link7_polytopes_[1]->p_BC(), iiwa_->world_frame(),
+                           obstacles_[1]->p_BC(), obstacles_[1]->p_BC());
+  const auto result = solvers::Solve(ik.prog());
+  EXPECT_TRUE(result.is_success());
+  iiwa_->SetPositions(context.get(), result.GetSolution(ik.q()));
+  EXPECT_TRUE(dut.IsPostureCollisionFree(*context));
 }
 
 }  // namespace multibody

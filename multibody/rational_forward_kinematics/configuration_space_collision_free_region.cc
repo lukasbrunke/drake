@@ -473,6 +473,26 @@ double ConfigurationSpaceCollisionFreeRegion::FindLargestBoxThroughBinarySearch(
   return rho_lower;
 }
 
+bool ConfigurationSpaceCollisionFreeRegion::IsPostureCollisionFree(
+    const systems::Context<double>& context) const {
+  const auto& plant = rational_forward_kinematics_.plant();
+  math::RigidTransform<double> X_WW;
+  X_WW.SetIdentity();
+  for (const auto& link_and_polytopes : link_polytopes_) {
+    const Eigen::Isometry3d X_WB = plant.EvalBodyPoseInWorld(
+        context, plant.get_body(link_and_polytopes.first));
+    for (const auto& link_polytope : link_and_polytopes.second) {
+      for (const auto& obstacle : obstacles_) {
+        if (link_polytope->IsInCollision(
+                *obstacle, math::RigidTransform<double>(X_WB), X_WW)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
 std::vector<LinkVertexOnPlaneSideRational>
 GenerateLinkOnOneSideOfPlaneRationalFunction(
     const RationalForwardKinematics& rational_forward_kinematics,

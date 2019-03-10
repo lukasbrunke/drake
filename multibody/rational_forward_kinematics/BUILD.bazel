@@ -147,6 +147,7 @@ drake_cc_googletest(
         ":rational_forward_kinematics_test_utilities",
         "//common/test_utilities:eigen_matrix_compare",
         "//common/test_utilities:symbolic_test_util",
+        "//multibody/inverse_kinematics:inverse_kinematics",
     ],
 )
 

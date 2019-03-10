@@ -198,6 +198,12 @@ class ConfigurationSpaceCollisionFreeRegion {
       double rho_lower_initial, double rho_upper_initial, double rho_tolerance,
       const VerificationOption& verification_option = {}) const;
 
+  /**
+   * For a given posture (stored in @param context), return if the robot link
+   * is in collision with the world obstacle or not.
+   */
+  bool IsPostureCollisionFree(const systems::Context<double>& context) const;
+
  private:
   bool IsLinkPairCollisionIgnored(
       ConvexGeometry::Id id1, ConvexGeometry::Id id2,
