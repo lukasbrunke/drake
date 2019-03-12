@@ -1536,6 +1536,14 @@ drake_cc_googletest(
     ],
 )
 
+drake_cc_binary(
+    name = "mosek_psd_demo",
+    srcs = ["test/mosek_psd_demo.cc"],
+    deps = [
+        ":mathematical_program",
+    ],
+)
+
 # The extra_srcs are required here because add_lint_tests() doesn't understand
 # how to extract labels from select() functions yet.
 add_lint_tests(cpplint_extra_srcs = [
