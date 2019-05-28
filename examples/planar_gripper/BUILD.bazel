@@ -37,6 +37,20 @@ drake_py_binary(
     ],
 )
 
+drake_cc_library(
+    name = "brick_static_equilibrium_constraint",
+    srcs = ["brick_static_equilibrium_constraint.cc"],
+    hdrs = ["brick_static_equilibrium_constraint.h"],
+    deps = [
+        ":gripper_brick",
+        "//solvers:constraint",
+        "//solvers:mathematical_program",
+        "//multibody/plant",
+        "//multibody/inverse_kinematics:kinematic_constraint",
+        "//math:autodiff",
+    ],
+)
+
 drake_py_binary(
     name = "planar_finger_simulation",
     srcs = ["planar_finger_simulation.py"],
@@ -55,23 +69,43 @@ drake_py_binary(
     ],
 )
 
-drake_cc_binary(
-    name = "toy_gripper",
-    srcs = ["toy_gripper.cc"],
-    add_test_rule = 1,
-    data = ["planar_finger.sdf"],
-    test_rule_args = [
-        "--simulation_time=0.1",
-        "--target_realtime_rate=0.0",
+drake_cc_library(
+    name = "gripper_brick",
+    srcs = ["gripper_brick.cc"],
+    hdrs = ["gripper_brick.h"],
+    data = [
+        "//examples/planar_gripper:1dof_brick.sdf",
+        "//examples/planar_gripper:brick.sdf",
+        "//examples/planar_gripper:planar_brick.sdf",
+        "//examples/planar_gripper:planar_gripper.sdf",
     ],
     deps = [
         "//common:find_resource",
-        "//common:text_logging_gflags",
         "//geometry:geometry_visualization",
         "//multibody/parsing",
         "//multibody/plant",
-        "//systems/analysis:simulator",
         "//systems/framework:diagram",
-        "@gflags",
+        "//systems/analysis:simulator",
+    ],
+)
+
+drake_cc_binary(
+    name = "reorient_ik_demo",
+    testonly = 1,
+    srcs = ["reorient_ik_demo.cc"],
+    deps = [
+        ":brick_static_equilibrium_constraint",
+        ":gripper_brick",
+        "//multibody/inverse_kinematics",
+        "//solvers:solve",
+    ],
+)
+
+drake_cc_googletest(
+    name = "brick_static_equilibrium_constraint_test",
+    deps = [
+        ":brick_static_equilibrium_constraint",
+        "//math:compute_numerical_gradient",
+        "//common/test_utilities:eigen_matrix_compare",
     ],
 )

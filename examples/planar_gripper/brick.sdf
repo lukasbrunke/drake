@@ -18,7 +18,7 @@
       <pose frame=''>0 0 0 0 0 0</pose>
       <geometry>
         <box>
-          <size>0.025 0.077 0.077</size>
+          <size>0.025 0.092 0.092</size>
         </box>
         <!--<sphere>-->
           <!--<radius>0.1</radius>-->
@@ -32,7 +32,7 @@
       <pose>0 0 0 0 0 0</pose>
       <geometry>
         <box>
-          <size>0.025 0.077 0.077</size>
+          <size>0.025 0.092 0.092</size>
         </box>
       </geometry>
     </collision>
