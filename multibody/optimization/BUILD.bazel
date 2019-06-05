@@ -17,6 +17,7 @@ package(default_visibility = ["//visibility:public"])
 drake_cc_package_library(
     name = "optimization",
     deps = [
+        ":contact_implicit_trajectory_optimization",
         ":contact_wrench",
         ":contact_wrench_evaluator",
         ":static_equilibrium_constraint",
@@ -98,6 +99,20 @@ drake_cc_library(
         ":contact_wrench_evaluator",
         ":static_equilibrium_constraint",
         ":static_friction_cone_complementarity_constraint",
+    ],
+)
+
+drake_cc_library(
+    name = "contact_implicit_trajectory_optimization",
+    srcs = ["contact_implicit_trajectory_optimization.cc"],
+    hdrs = ["contact_implicit_trajectory_optimization.h"],
+    deps = [
+        ":contact_wrench_evaluator",
+        ":static_friction_cone_complementarity_constraint",
+        "//common:sorted_pair",
+        "//multibody/inverse_kinematics:kinematic_constraint",
+        "//multibody/plant",
+        "//systems/trajectory_optimization:multiple_shooting",
     ],
 )
 
