@@ -3,6 +3,7 @@
 #include <utility>
 #include <vector>
 
+#include "drake/multibody/inverse_kinematics/distance_constraint.h"
 #include "drake/multibody/inverse_kinematics/kinematic_constraint_utilities.h"
 #include "drake/multibody/optimization/static_friction_cone_complementarity_constraint.h"
 #include "drake/multibody/optimization/static_friction_cone_constraint.h"
@@ -105,8 +106,12 @@ void ContactImplicitTrajectoryOptimization::FinalizeContactPairs(
           // First add the friction cone constraint.
           AddConstraint(std::make_shared<StaticFrictionConeConstraint>(
                             contact_wrench_evaluator.get()),
-                        lambda);
+                        {state(i).head(plant_.num_positions()), lambda});
           // Now add the constraint that the two geometries are in contact.
+          AddConstraint(
+              std::make_shared<DistanceConstraint>(
+                  &plant_, contact_pair_type.first, contexts_[i], 0, 0),
+              state(i).head(plant_.num_positions()));
         } else if (contact_pair_type.second == ContactType::kImplicit) {
           // Add the complementarity constraint 0 ≤ φ(q) ⊥ fₙ ≥ 0.
           AddStaticFrictionConeComplementarityConstraint(
