@@ -14,6 +14,7 @@
 #include <Eigen/Core>
 #include <Eigen/SparseCore>
 #include <mosek.h>
+#include "valgrind/callgrind.h"
 
 #include "drake/common/never_destroyed.h"
 #include "drake/common/scoped_singleton.h"
@@ -1459,11 +1460,13 @@ void MosekSolver::DoSolve(const MathematicalProgram& prog,
 
   result->set_solution_result(SolutionResult::kUnknownError);
   // Run optimizer.
+  CALLGRIND_TOGGLE_COLLECT;
   if (rescode == MSK_RES_OK) {
     // TODO(hongkai.dai@tri.global): add trmcode to the returned struct.
     MSKrescodee trmcode;  // termination code
     rescode = MSK_optimizetrm(task, &trmcode);
   }
+  CALLGRIND_TOGGLE_COLLECT;
 
   // Determines the solution type.
   MSKsoltypee solution_type;
