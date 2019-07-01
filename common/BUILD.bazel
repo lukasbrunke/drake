@@ -1286,6 +1286,15 @@ drake_cc_googletest(
     ],
 )
 
+drake_cc_binary(
+    name = "symbolic_expand_test",
+    srcs = ["test/symbolic_expand_test.cc"],
+    deps = [
+        "//common:essential",
+        "//common:symbolic",
+    ],
+)
+
 # TODO(jwnimmer-tri) These tests are currently missing...
 # - drake_assert_test in fancy variants
 # - drake_assert_test_compile in fancy variants
