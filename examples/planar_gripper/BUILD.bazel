@@ -54,6 +54,7 @@ drake_cc_library(
     hdrs = ["brick_static_equilibrium_constraint.h"],
     deps = [
         ":gripper_brick",
+        ":gripper_brick_planning_utils",
         "//math:autodiff",
         "//multibody/inverse_kinematics:kinematic_constraint",
         "//multibody/plant",
@@ -159,6 +160,28 @@ drake_cc_library(
         "//multibody/plant",
         "//systems/analysis:simulator",
         "//systems/framework:diagram",
+    ],
+)
+
+drake_cc_library(
+    name = "gripper_brick_planning_utils",
+    hdrs = ["gripper_brick_planning_utils.h"],
+    srcs = ["gripper_brick_planning_utils.cc"],
+    deps = [
+        ":gripper_brick",
+        "//multibody/inverse_kinematics:kinematic_constraint",
+        "//solvers:mathematical_program_lite",
+    ],
+)
+
+drake_cc_library(
+    name = "gripper_brick_trajectory_optimization",
+    hdrs = ["gripper_brick_trajectory_optimization.h"],
+    srcs = ["gripper_brick_trajectory_optimization.cc"],
+    deps = [
+        ":brick_static_equilibrium_constraint",
+        ":gripper_brick",
+        "//solvers:mathematical_program_lite",
     ],
 )
 
