@@ -26,39 +26,6 @@ BrickStaticEquilibriumNonlinearConstraint::
                     .get_default_mass();
 }
 
-Eigen::Vector3d
-BrickStaticEquilibriumNonlinearConstraint::ComputeFingerTipInBrickFrame(
-    const multibody::MultibodyPlant<double>& plant, const Finger finger,
-    const systems::Context<double>& plant_context,
-    const Eigen::Ref<const Eigen::VectorXd>&) const {
-  Eigen::Vector3d p_BTip;
-  plant.CalcPointsPositions(plant_context,
-                            gripper_brick_system_.finger_link2_frame(finger),
-                            gripper_brick_system_.p_F2Tip(),
-                            gripper_brick_system_.brick_frame(), &p_BTip);
-  return p_BTip;
-}
-
-Vector3<AutoDiffXd>
-BrickStaticEquilibriumNonlinearConstraint::ComputeFingerTipInBrickFrame(
-    const multibody::MultibodyPlant<double>& plant, const Finger finger,
-    const systems::Context<double>& plant_context,
-    const Eigen::Ref<const AutoDiffVecXd>& q) const {
-  Eigen::Vector3d p_BTip;
-  plant.CalcPointsPositions(plant_context,
-                            gripper_brick_system_.finger_link2_frame(finger),
-                            gripper_brick_system_.p_F2Tip(),
-                            gripper_brick_system_.brick_frame(), &p_BTip);
-  Eigen::Matrix3Xd Js_v_BF2_B(3, plant.num_positions());
-  plant.CalcJacobianTranslationalVelocity(
-      plant_context, multibody::JacobianWrtVariable::kQDot,
-      gripper_brick_system_.finger_link2_frame(finger),
-      gripper_brick_system_.p_F2Tip(), gripper_brick_system_.brick_frame(),
-      gripper_brick_system_.brick_frame(), &Js_v_BF2_B);
-  return math::initializeAutoDiffGivenGradientMatrix(
-      p_BTip, Js_v_BF2_B * math::autoDiffToGradientMatrix(q));
-}
-
 template <typename T>
 void BrickStaticEquilibriumNonlinearConstraint::DoEvalGeneric(
     const Eigen::Ref<const VectorX<T>>& x, VectorX<T>* y) const {
@@ -81,8 +48,8 @@ void BrickStaticEquilibriumNonlinearConstraint::DoEvalGeneric(
     y->template head<2>() +=
         x.template segment<2>(plant.num_positions() + i * 2);
     const Vector3<T> p_BTip = ComputeFingerTipInBrickFrame(
-        plant, finger_face_contacts_[i].first, *plant_mutable_context_,
-        x.head(plant.num_positions()));
+        gripper_brick_system_, finger_face_contacts_[i].first,
+        *plant_mutable_context_, x.head(plant.num_positions()));
     // C is the point of contact between the finger and the brick.
     Vector2<T> p_BC = p_BTip.template tail<2>();
     switch (finger_face_contacts_[i].second) {

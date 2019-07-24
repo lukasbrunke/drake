@@ -20,16 +20,6 @@ class BrickStaticEquilibriumNonlinearConstraint : public solvers::Constraint {
       systems::Context<double> *plant_mutable_context);
 
  private:
-  Eigen::Vector3d ComputeFingerTipInBrickFrame(
-      const multibody::MultibodyPlant<double> &plant, const Finger finger,
-      const systems::Context<double> &plant_context,
-      const Eigen::Ref<const Eigen::VectorXd> &) const;
-
-  Vector3<AutoDiffXd> ComputeFingerTipInBrickFrame(
-      const multibody::MultibodyPlant<double> &plant, const Finger finger,
-      const systems::Context<double> &plant_context,
-      const Eigen::Ref<const AutoDiffVecXd> &q) const;
-
   template<typename T>
   void DoEvalGeneric(const Eigen::Ref<const VectorX<T>> &x,
                      VectorX<T> *y) const;

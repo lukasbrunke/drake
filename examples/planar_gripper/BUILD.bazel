@@ -175,6 +175,18 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "brick_dynamic_constraint",
+    hdrs = ["brick_dynamic_constraint.h"],
+    srcs = ["brick_dynamic_constraint.cc"],
+    deps = [
+        ":gripper_brick",
+        ":gripper_brick_planning_utils",
+        "//multibody/inverse_kinematics:kinematic_constraint",
+        "//solvers:constraint",
+    ],
+)
+
+drake_cc_library(
     name = "gripper_brick_trajectory_optimization",
     hdrs = ["gripper_brick_trajectory_optimization.h"],
     srcs = ["gripper_brick_trajectory_optimization.cc"],
@@ -201,6 +213,15 @@ drake_cc_googletest(
     name = "brick_static_equilibrium_constraint_test",
     deps = [
         ":brick_static_equilibrium_constraint",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//math:compute_numerical_gradient",
+    ],
+)
+
+drake_cc_googletest(
+    name = "brick_dynamic_constraint_test",
+    deps = [
+        ":brick_dynamic_constraint",
         "//common/test_utilities:eigen_matrix_compare",
         "//math:compute_numerical_gradient",
     ],

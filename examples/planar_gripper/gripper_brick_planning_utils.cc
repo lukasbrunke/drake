@@ -1,5 +1,6 @@
 #include "drake/examples/planar_gripper/gripper_brick_planning_utils.h"
 
+#include "drake/math/autodiff_gradient.h"
 #include "drake/multibody/inverse_kinematics/position_constraint.h"
 
 namespace drake {
@@ -91,6 +92,34 @@ void AddFingerTipInContactWithBrickFace(
                           &(gripper_brick_system.plant()), brick, p_BTip_lower,
                           p_BTip_upper, finger_link2, p_F2Tip, plant_context),
                       q_vars);
+}
+
+Eigen::Vector3d ComputeFingerTipInBrickFrame(
+    const GripperBrickSystem<double>& gripper_brick, const Finger finger,
+    const systems::Context<double>& plant_context,
+    const Eigen::Ref<const Eigen::VectorXd>&) {
+  Eigen::Vector3d p_BTip;
+  gripper_brick.plant().CalcPointsPositions(
+      plant_context, gripper_brick.finger_link2_frame(finger),
+      gripper_brick.p_F2Tip(), gripper_brick.brick_frame(), &p_BTip);
+  return p_BTip;
+}
+
+Vector3<AutoDiffXd> ComputeFingerTipInBrickFrame(
+    const GripperBrickSystem<double>& gripper_brick, const Finger finger,
+    const systems::Context<double>& plant_context,
+    const Eigen::Ref<const AutoDiffVecXd>& q) {
+  Eigen::Vector3d p_BTip;
+  gripper_brick.plant().CalcPointsPositions(
+      plant_context, gripper_brick.finger_link2_frame(finger),
+      gripper_brick.p_F2Tip(), gripper_brick.brick_frame(), &p_BTip);
+  Eigen::Matrix3Xd Js_v_BF2_B(3, gripper_brick.plant().num_positions());
+  gripper_brick.plant().CalcJacobianTranslationalVelocity(
+      plant_context, multibody::JacobianWrtVariable::kQDot,
+      gripper_brick.finger_link2_frame(finger), gripper_brick.p_F2Tip(),
+      gripper_brick.brick_frame(), gripper_brick.brick_frame(), &Js_v_BF2_B);
+  return math::initializeAutoDiffGivenGradientMatrix(
+      p_BTip, Js_v_BF2_B * math::autoDiffToGradientMatrix(q));
 }
 
 template void AddFrictionConeConstraint<double>(

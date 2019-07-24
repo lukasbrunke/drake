@@ -29,6 +29,22 @@ class GripperBrickTrajectoryOptimization {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(GripperBrickTrajectoryOptimization);
 
+  enum class IntegrationMethod {
+    kBackwardEuler,
+    kMidpoint,
+  };
+
+  struct Options {
+    Options(double m_face_shrink_factor, double m_minimum_clearing_distance,
+            IntegrationMethod m_integration_method)
+        : face_shrink_factor(m_face_shrink_factor),
+          minimum_clearing_distance(m_minimum_clearing_distance),
+          integration_method{m_integration_method} {}
+    double face_shrink_factor = 0.8;
+    double minimum_clearing_distance = 0.01;
+    IntegrationMethod integration_method = IntegrationMethod::kMidpoint;
+  };
+
   /**
    * @param gripper_brick The system for which to plan the trajectory.
    * @param nT The number of knot points.
@@ -42,9 +58,15 @@ class GripperBrickTrajectoryOptimization {
   GripperBrickTrajectoryOptimization(
       const GripperBrickSystem<double>* gripper_brick, int nT,
       const std::unordered_map<Finger, BrickFace>& initial_contact,
-      const std::vector<FingerTransition>& finger_transitions);
+      const std::vector<FingerTransition>& finger_transitions,
+      const Options& options);
 
  private:
+  void AssignVariableForContactForces(
+      const std::unordered_map<Finger, BrickFace>& initial_contact,
+      const std::vector<FingerTransition>& finger_transitions,
+      const Options& options);
+
   const GripperBrickSystem<double>* const gripper_brick_;
   // number of knots.
   int nT_;
@@ -67,6 +89,7 @@ class GripperBrickTrajectoryOptimization {
   // diagram_contexts_[i] is the diagram context for the i'th knot.
   std::vector<std::unique_ptr<systems::Context<double>>> diagram_contexts_;
   std::vector<systems::Context<double>*> plant_mutable_contexts_;
+  VectorX<symbolic::Variable> dt_;
 };
 }  // namespace planar_gripper
 }  // namespace examples

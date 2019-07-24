@@ -43,6 +43,15 @@ void AddFingerTipInContactWithBrickFace(
     BrickFace brick_face, solvers::MathematicalProgram* prog,
     const Eigen::Ref<const VectorX<symbolic::Variable>>& q_vars,
     systems::Context<double>* plant_context, double face_shrink_factor);
+
+Eigen::Vector3d ComputeFingerTipInBrickFrame(
+    const GripperBrickSystem<double>& gripper_brick, const Finger finger,
+    const systems::Context<double>& plant_context,
+    const Eigen::Ref<const Eigen::VectorXd>& q);
+Vector3<AutoDiffXd> ComputeFingerTipInBrickFrame(
+    const GripperBrickSystem<double>& gripper_brick, const Finger finger,
+    const systems::Context<double>& plant_context,
+    const Eigen::Ref<const AutoDiffVecXd>& q);
 }  // namespace planar_gripper
 }  // namespace examples
 }  // namespace drake

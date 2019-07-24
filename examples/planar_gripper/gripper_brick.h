@@ -14,6 +14,8 @@ enum class Finger {
   kFinger3,
 };
 
+std::string to_string(Finger finger);
+
 enum class BrickFace {
   kPosZ,
   kNegZ,
