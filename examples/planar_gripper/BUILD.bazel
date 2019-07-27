@@ -201,7 +201,9 @@ drake_cc_library(
     deps = [
         ":brick_static_equilibrium_constraint",
         ":gripper_brick",
+        ":brick_dynamic_constraint",
         "//solvers:mathematical_program_lite",
+        "//systems/trajectory_optimization:integration_constraint",
     ],
 )
 
