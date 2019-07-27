@@ -72,7 +72,9 @@ class GripperBrickTrajectoryOptimization {
       const std::map<Finger, BrickFace>& initial_contact,
       const Options& options);
 
-  void AddDynamicConstraint();
+  void AddDynamicConstraint(
+      const std::vector<const FingerTransition*>& sorted_finger_transitions,
+      IntegrationMethod integration_method);
 
   const GripperBrickHelper<double>* const gripper_brick_;
   // number of knots.
