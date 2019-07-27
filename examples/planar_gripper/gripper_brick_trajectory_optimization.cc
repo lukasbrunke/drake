@@ -3,9 +3,11 @@
 #include <set>
 #include <utility>
 
+#include "drake/examples/planar_gripper/brick_dynamic_constraint.h"
 #include "drake/examples/planar_gripper/brick_static_equilibrium_constraint.h"
 #include "drake/examples/planar_gripper/gripper_brick_planning_utils.h"
 #include "drake/multibody/inverse_kinematics/kinematic_constraint_utilities.h"
+#include "drake/systems/trajectory_optimization/integration_constraint.h"
 
 namespace drake {
 namespace examples {
@@ -127,6 +129,59 @@ void GripperBrickTrajectoryOptimization::AssignVariableForContactForces(
     for (const auto& finger_face : finger_face_contacts_[i]) {
       auto f = prog_->NewContinuousVariables<2>();
       f_FB_B_[i].emplace(finger_face.first, f);
+    }
+  }
+}
+
+void GripperBrickTrajectoryOptimization::AddDynamicConstraint(
+    const std::vector<const FingerTransition*>& sorted_finger_transitions,
+    GripperBrickTrajectoryOptimization::IntegrationMethod integration_method) {
+  // First add the integration constraint on the brick position. We choose
+  // midpoint integration.
+  Vector3<symbolic::Variable> q_brick_l, v_brick_l, q_brick_r, v_brick_r;
+  q_brick_l << q_vars_(gripper_brick_->brick_translate_y_position_index(), 0),
+      q_vars_(gripper_brick_->brick_translate_z_position_index(), 0),
+      q_vars_(gripper_brick_->brick_revolute_x_position_index(), 0);
+  v_brick_l << brick_v_y_vars_(0), brick_v_z_vars_(0), brick_omega_x_vars_(0);
+  auto position_midpoint_constraint = std::make_shared<
+      systems::trajectory_optimization::MidPointIntegrationConstraint>(3);
+  for (int i = 1; i < nT_; ++i) {
+    q_brick_r << q_vars_(gripper_brick_->brick_translate_y_position_index(), i),
+        q_vars_(gripper_brick_->brick_translate_z_position_index(), i),
+        q_vars_(gripper_brick_->brick_revolute_x_position_index(), i);
+    v_brick_r << brick_v_y_vars_(i), brick_v_z_vars_(i), brick_omega_x_vars_(i);
+    VectorX<symbolic::Variable> constraint_x;
+    position_midpoint_constraint->ComposeX<symbolic::Variable>(
+        q_brick_r, q_brick_l, v_brick_r, v_brick_l, dt_(i - 1), &constraint_x);
+    prog_->AddConstraint(position_midpoint_constraint, constraint_x);
+    q_brick_l = q_brick_r;
+    v_brick_l = v_brick_r;
+  }
+
+  // Now add the dynamic constraint
+  int last_transition_end_knot = 0;
+  for (const auto& finger_transition : sorted_finger_transitions) {
+    for (int i = last_transition_end_knot;
+         i < finger_transition->start_knot_index; ++i) {
+      switch (integration_method) {
+        case IntegrationMethod::kBackwardEuler: {
+          auto constraint =
+              std::make_shared<BrickDynamicBackwardEulerConstraint>(
+                  gripper_brick_, plant_mutable_contexts_[i + 1],
+                  finger_face_contacts_[i], brick_lid_friction_force_magnitude_,
+                  brick_lid_friction_torque_magnitude_);
+          VectorX<symbolic::Variable> bound_vars;
+          Matrix2<symbolic::Variable> f_FB_B_r;
+          constraint->ComposeX<symbolic::Variable>(
+              q_vars_.col(i + 1), brick_v_y_vars_(i + 1),
+              brick_v_z_vars_(i + 1), brick_omega_x_vars_(i + 1), f_FB_B_r,
+              dt_(i), &bound_vars);
+          break;
+        }
+        case IntegrationMethod::kMidpoint: {
+          break;
+        }
+      }
     }
   }
 }
