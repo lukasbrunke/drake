@@ -242,6 +242,15 @@ drake_cc_googletest(
     deps = [
         ":gripper_brick_trajectory_optimization",
         "//common/test_utilities:eigen_matrix_compare",
+        "//solvers:solve",
+    ],
+)
+
+drake_cc_googletest(
+    name = "gripper_brick_planning_utils_test",
+    deps = [
+        ":gripper_brick_planning_utils",
+        "//solvers:solve",
     ],
 )
 

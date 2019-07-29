@@ -329,12 +329,12 @@ int DoMain() {
                                          .position_start();
     std::cout << joint_name << " starts at " << position_start_index << "\n";
   };
-  print_joint_start_index("finger1_ShoulderJoint");
-  print_joint_start_index("finger1_ElbowJoint");
-  print_joint_start_index("finger2_ShoulderJoint");
-  print_joint_start_index("finger2_ElbowJoint");
-  print_joint_start_index("finger3_ShoulderJoint");
-  print_joint_start_index("finger3_ElbowJoint");
+  print_joint_start_index("finger1_BaseJoint");
+  print_joint_start_index("finger1_MidJoint");
+  print_joint_start_index("finger2_BaseJoint");
+  print_joint_start_index("finger2_MidJoint");
+  print_joint_start_index("finger3_BaseJoint");
+  print_joint_start_index("finger3_MidJoint");
   print_joint_start_index("brick_translate_y_joint");
   print_joint_start_index("brick_translate_z_joint");
   print_joint_start_index("brick_revolute_x_joint");
