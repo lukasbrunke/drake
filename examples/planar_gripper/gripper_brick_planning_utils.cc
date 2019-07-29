@@ -1,12 +1,16 @@
 #include "drake/examples/planar_gripper/gripper_brick_planning_utils.h"
 
+#include <limits>
 #include <memory>
 
 #include "drake/math/autodiff_gradient.h"
+#include "drake/multibody/inverse_kinematics/kinematic_constraint_utilities.h"
 #include "drake/multibody/inverse_kinematics/position_constraint.h"
 
 namespace drake {
 namespace examples {
+const double kInf = std::numeric_limits<double>::infinity();
+
 namespace planar_gripper {
 template <typename T>
 void AddFrictionConeConstraint(
@@ -122,6 +126,101 @@ Vector3<AutoDiffXd> ComputeFingerTipInBrickFrame(
       gripper_brick.brick_frame(), gripper_brick.brick_frame(), &Js_v_BF2_B);
   return math::initializeAutoDiffGivenGradientMatrix(
       p_BTip, Js_v_BF2_B * math::autoDiffToGradientMatrix(q));
+}
+
+namespace internal {
+FingerNoSlidingConstraint::FingerNoSlidingConstraint(
+    const GripperBrickHelper<double>* gripper_brick, Finger finger,
+    BrickFace face, systems::Context<double>* from_context,
+    systems::Context<double>* to_context)
+    : solvers::Constraint(1, 2 * gripper_brick->plant().num_positions(),
+                          Vector1d(0), Vector1d(0),
+                          "finger_no_sliding_constraint"),
+      gripper_brick_(gripper_brick),
+      finger_(finger),
+      face_(face),
+      from_context_(from_context),
+      to_context_(to_context) {}
+
+template <typename T>
+void FingerNoSlidingConstraint::DoEvalGeneric(
+    const Eigen::Ref<const VectorX<T>>& x, VectorX<T>* y) const {
+  y->resize(1);
+  const int nq = gripper_brick_->plant().num_positions();
+  const auto& q_from = x.head(nq);
+  const auto& q_to = x.tail(nq);
+  multibody::internal::UpdateContextConfiguration(
+      from_context_, gripper_brick_->plant(), q_from);
+  multibody::internal::UpdateContextConfiguration(
+      to_context_, gripper_brick_->plant(), q_to);
+
+  const Vector3<T> p_BTip_from = ComputeFingerTipInBrickFrame(
+      *gripper_brick_, finger_, *from_context_, x.head(nq));
+  const Vector3<T> p_BTip_to = ComputeFingerTipInBrickFrame(
+      *gripper_brick_, finger_, *to_context_, x.tail(nq));
+  const T theta_from = gripper_brick_->CalcFingerLink2Orientation(
+      finger_, T(q_from(gripper_brick_->finger_base_position_index(finger_))),
+      T(q_from(gripper_brick_->finger_mid_position_index(finger_))));
+  const T theta_to = gripper_brick_->CalcFingerLink2Orientation(
+      finger_, T(q_to(gripper_brick_->finger_base_position_index(finger_))),
+      T(q_to(gripper_brick_->finger_mid_position_index(finger_))));
+  switch (face_) {
+    case BrickFace::kPosY:
+    case BrickFace::kNegY: {
+      // rolling with positive delta_theta about x axis causes positive
+      // translation along the z axis.
+      (*y)(0) = p_BTip_to(2) - p_BTip_from(2) -
+                gripper_brick_->finger_tip_radius() * (theta_to - theta_from);
+      break;
+    }
+    case BrickFace::kPosZ:
+    case BrickFace::kNegZ: {
+      // rolling with positive delta_theta about x axis causes negative
+      // translation along the y axis.
+      (*y)(0) = -(p_BTip_to(1) - p_BTip_from(1)) -
+                gripper_brick_->finger_tip_radius() * (theta_to - theta_from);
+      break;
+    }
+  }
+}
+
+void FingerNoSlidingConstraint::DoEval(
+    const Eigen::Ref<const Eigen::VectorXd>& x, Eigen::VectorXd* y) const {
+  DoEvalGeneric<double>(x, y);
+}
+
+void FingerNoSlidingConstraint::DoEval(const Eigen::Ref<const AutoDiffVecXd>& x,
+                                       AutoDiffVecXd* y) const {
+  DoEvalGeneric<AutoDiffXd>(x, y);
+}
+
+}  // namespace internal
+
+void AddFingerNoSlidingConstraint(
+    const GripperBrickHelper<double>& gripper_brick, Finger finger,
+    BrickFace face, double rolling_angle_bound,
+    solvers::MathematicalProgram* prog, systems::Context<double>* from_context,
+    systems::Context<double>* to_context,
+    const Eigen::Ref<const VectorX<symbolic::Variable>>& q_from,
+    const Eigen::Ref<const VectorX<symbolic::Variable>>& q_to,
+    double face_shrink_factor) {
+  AddFingerTipInContactWithBrickFace(gripper_brick, finger, face, prog, q_to,
+                                     to_context, face_shrink_factor);
+
+  prog->AddConstraint(
+      std::make_shared<internal::FingerNoSlidingConstraint>(
+          &gripper_brick, finger, face, from_context, to_context),
+      {q_from, q_to});
+  const symbolic::Expression theta_from =
+      gripper_brick.CalcFingerLink2Orientation<symbolic::Expression>(
+          finger, q_from(gripper_brick.finger_base_position_index(finger)),
+          q_from(gripper_brick.finger_mid_position_index(finger)));
+  const symbolic::Expression theta_to =
+      gripper_brick.CalcFingerLink2Orientation<symbolic::Expression>(
+          finger, q_to(gripper_brick.finger_base_position_index(finger)),
+          q_to(gripper_brick.finger_mid_position_index(finger)));
+  prog->AddLinearConstraint(theta_from - theta_to, -rolling_angle_bound,
+                            rolling_angle_bound);
 }
 
 template void AddFrictionConeConstraint<double>(
