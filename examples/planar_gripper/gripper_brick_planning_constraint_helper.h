@@ -62,6 +62,72 @@ Vector3<AutoDiffXd> ComputeFingerTipInBrickFrame(
     const GripperBrickHelper<double>& gripper_brick, const Finger finger,
     const systems::Context<double>& plant_context,
     const Eigen::Ref<const AutoDiffVecXd>& q);
+
+/**
+ * Impose the kinematic constraint that the finger is sticking to or rolling on
+ * the face, but not sliding on the face.
+ * @param gripper_brick Contains the gripper brick diagram.
+ * @param finger The finger that should not slide.
+ * @param face The brick face that the finger sticks to (or rolls on).
+ * @param prog The optimization program to which the constraint is added.
+ * @param from_context The context containing posture, from which the finger
+ * should stick to (or roll).
+ * @param to_context The context that contains the value of the posture after
+ * rolling (sticking).
+ * @param q_from The variable representing the "from" posture.
+ * @param q_to The variable representing the "to" posture.
+ */
+void AddFingerNoSlidingConstraint(
+    const GripperBrickHelper<double>& gripper_brick, Finger finger,
+    BrickFace face, double rolling_angle_bound,
+    solvers::MathematicalProgram* prog, systems::Context<double>* from_context,
+    systems::Context<double>* to_context,
+    const Eigen::Ref<const VectorX<symbolic::Variable>>& q_from,
+    const Eigen::Ref<const VectorX<symbolic::Variable>>& q_to,
+    double face_shrink_factor);
+
+namespace internal {
+/**
+ * Impose the constraint that the finger slides along the line (coinciding with
+ * the face).
+ * The formulation of the constraint is
+ *
+ *     p_translation_to - p_translation_from - radius * (θ_to - θ_from) = 0
+ */
+class FingerNoSlidingConstraint : public solvers::Constraint {
+ public:
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(FingerNoSlidingConstraint)
+
+  FingerNoSlidingConstraint(const GripperBrickHelper<double>* gripper_brick,
+                            Finger finger, BrickFace face,
+                            systems::Context<double>* from_context,
+                            systems::Context<double>* to_context);
+
+  ~FingerNoSlidingConstraint() override {}
+
+ private:
+  template <typename T>
+  void DoEvalGeneric(const Eigen::Ref<const VectorX<T>>& x,
+                     VectorX<T>* y) const;
+
+  void DoEval(const Eigen::Ref<const Eigen::VectorXd>& x,
+              Eigen::VectorXd* y) const override;
+
+  void DoEval(const Eigen::Ref<const AutoDiffVecXd>& x,
+              AutoDiffVecXd* y) const override;
+
+  void DoEval(const Eigen::Ref<const VectorX<symbolic::Variable>>&,
+              VectorX<symbolic::Expression>*) const override {
+    throw std::runtime_error(
+        "FingerNoSlidingConstraint::Eval doesn't support symbolic variables.");
+  }
+  const GripperBrickHelper<double>* gripper_brick_;
+  Finger finger_;
+  BrickFace face_;
+  systems::Context<double>* from_context_;
+  systems::Context<double>* to_context_;
+};
+}  // namespace internal
 }  // namespace planar_gripper
 }  // namespace examples
 }  // namespace drake
