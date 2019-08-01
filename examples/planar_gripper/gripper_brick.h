@@ -103,6 +103,15 @@ class GripperBrickHelper {
     return base_theta + base_joint_angle + middle_joint_angle;
   }
 
+  geometry::GeometryId finger_tip_sphere_geometry_id(Finger finger) const {
+    return plant_->GetCollisionGeometriesForBody(
+        finger_link2_frame(finger).body())[0];
+  }
+
+  geometry::GeometryId brick_geometry_id() const {
+    return plant_->GetCollisionGeometriesForBody(brick_frame().body())[0];
+  }
+
  private:
   std::unique_ptr<systems::Diagram<T>> diagram_;
   multibody::MultibodyPlant<T>* plant_;
