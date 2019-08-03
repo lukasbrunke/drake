@@ -207,8 +207,8 @@ void AddFingerNoSlidingConstraint(
     const Eigen::Ref<const VectorX<symbolic::Variable>>& q_from,
     const Eigen::Ref<const VectorX<symbolic::Variable>>& q_to,
     double face_shrink_factor) {
-  AddFingerTipInContactWithBrickFace(gripper_brick, finger, face, prog, q_to,
-                                     to_context, face_shrink_factor);
+  AddFingerTipInContactWithBrickFaceConstraint(
+      gripper_brick, finger, face, prog, q_to, to_context, face_shrink_factor);
 
   prog->AddConstraint(
       std::make_shared<internal::FingerNoSlidingConstraint>(
