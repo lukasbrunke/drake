@@ -106,8 +106,9 @@ GTEST_TEST(TestAddFingerNoSlidingConstraint, Test) {
       &(gripper_brick.diagram().GetMutableSubsystemContext(
           gripper_brick.plant(), diagram_context_to.get()));
   const double face_shrink_factor{0.8};
-  AddFingerTipInContactWithBrickFace(gripper_brick, finger, face, &prog, q_from,
-                                     plant_context_from, face_shrink_factor);
+  AddFingerTipInContactWithBrickFaceConstraint(
+      gripper_brick, finger, face, &prog, q_from, plant_context_from,
+      face_shrink_factor);
   const double rolling_angle_bound{0.1 * M_PI};
   AddFingerNoSlidingConstraint(gripper_brick, finger, face, rolling_angle_bound,
                                &prog, plant_context_from, plant_context_to,
@@ -129,7 +130,7 @@ GTEST_TEST(TestAddFingerNoSlidingConstraint, Test) {
         gripper_brick.plant().CalcRelativeTransform(
             *plant_context, gripper_brick.brick_frame(),
             gripper_brick.finger_link2_frame(finger));
-    const Eigen::Vector3d p_BTip = X_BL2 * gripper_brick.p_L2Tip();
+    const Eigen::Vector3d p_BTip = X_BL2 * gripper_brick.p_L2Fingertip();
     const Eigen::Vector3d brick_size = gripper_brick.brick_size();
     const double depth = 1E-3;
     EXPECT_NEAR(p_BTip(2),
@@ -157,9 +158,11 @@ GTEST_TEST(TestAddFingerNoSlidingConstraint, Test) {
   EXPECT_GE(theta, -rolling_angle_bound - 1E-5);
   EXPECT_LE(theta, rolling_angle_bound + 1E-5);
 
-  const Eigen::Vector3d p_BTip_from = X_BL2_from * gripper_brick.p_L2Tip();
-  const Eigen::Vector3d p_BTip_to = X_BL2_to * gripper_brick.p_L2Tip();
-  EXPECT_NEAR(p_BTip_to(1) - p_BTip_from(1),
+  const Eigen::Vector3d p_BFingertip_from =
+      X_BL2_from * gripper_brick.p_L2Fingertip();
+  const Eigen::Vector3d p_BFingertip_to =
+      X_BL2_to * gripper_brick.p_L2Fingertip();
+  EXPECT_NEAR(p_BFingertip_to(1) - p_BFingertip_from(1),
               -gripper_brick.finger_tip_radius() * theta, 1E-5);
 }
 }  // namespace planar_gripper
