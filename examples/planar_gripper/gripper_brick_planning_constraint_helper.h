@@ -27,7 +27,7 @@ void AddFrictionConeConstraint(
     const GripperBrickHelper<T>& gripper_brick, Finger finger,
     BrickFace brick_face,
     const Eigen::Ref<const Vector2<symbolic::Variable>>& f_Cb_B,
-    solvers::MathematicalProgram* prog);
+    double friction_cone_shrink_factor, solvers::MathematicalProgram* prog);
 
 /**
  * Add the kinematic constraint that the finger tip (the sphere collision
