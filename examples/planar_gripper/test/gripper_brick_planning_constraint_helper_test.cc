@@ -11,8 +11,9 @@ GTEST_TEST(AddFrictionConeConstraintTest, Test) {
   GripperBrickHelper<double> gripper_brick;
   solvers::MathematicalProgram prog;
   auto f_Cb_B = prog.NewContinuousVariables<2>();
+  const double friction_cone_shrink_factor = 1;
   AddFrictionConeConstraint(gripper_brick, Finger::kFinger2, BrickFace::kNegY,
-                            f_Cb_B, &prog);
+                            f_Cb_B, friction_cone_shrink_factor, &prog);
 
   auto check_force_in_cone = [&prog, &f_Cb_B](const Eigen::Vector2d& f_Cb_B_val,
                                               bool is_in_cone) {
