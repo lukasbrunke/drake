@@ -17,7 +17,7 @@ void AddFrictionConeConstraint(
     const GripperBrickHelper<T>& gripper_brick_system, const Finger finger,
     const BrickFace brick_face,
     const Eigen::Ref<const Vector2<symbolic::Variable>>& f_Cb_B,
-    solvers::MathematicalProgram* prog) {
+    double friction_cone_shrink_factor, solvers::MathematicalProgram* prog) {
   const auto& plant = gripper_brick_system.plant();
   const multibody::CoulombFriction<double>& brick_friction =
       plant.default_coulomb_friction(plant.GetCollisionGeometriesForBody(
@@ -28,7 +28,8 @@ void AddFrictionConeConstraint(
   const multibody::CoulombFriction<double> combined_friction =
       multibody::CalcContactFrictionFromSurfaceProperties(brick_friction,
                                                           finger_tip_friction);
-  const double mu = combined_friction.static_friction();
+  const double mu =
+      combined_friction.static_friction() * friction_cone_shrink_factor;
   switch (brick_face) {
     case BrickFace::kNegY: {
       prog->AddLinearConstraint(f_Cb_B(0) >= 0);
@@ -228,7 +229,7 @@ void AddFingerNoSlidingConstraint(
 
 template void AddFrictionConeConstraint<double>(
     const GripperBrickHelper<double>&, Finger, BrickFace,
-    const Eigen::Ref<const Vector2<symbolic::Variable>>&,
+    const Eigen::Ref<const Vector2<symbolic::Variable>>&, double,
     solvers::MathematicalProgram*);
 }  // namespace planar_gripper
 }  // namespace examples
