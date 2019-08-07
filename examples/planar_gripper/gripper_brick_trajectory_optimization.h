@@ -87,16 +87,19 @@ class GripperBrickTrajectoryOptimization {
 
   const MatrixX<symbolic::Variable>& q_vars() const { return q_vars_; }
 
-  const VectorX<symbolic::Variable>& brick_v_y_vars() const {
-    return brick_v_y_vars_;
+  const MatrixX<symbolic::Variable>& v_vars() const { return v_vars_; }
+
+  const symbolic::Variable& brick_v_y_vars(int knot) const {
+    return v_vars_(gripper_brick_->brick_translate_y_position_index(), knot);
   }
 
-  const VectorX<symbolic::Variable>& brick_v_z_vars() const {
-    return brick_v_z_vars_;
+  const symbolic::Variable& brick_v_z_vars(int knot) const {
+    return v_vars_(gripper_brick_->brick_translate_z_position_index(),
+                           knot);
   }
 
-  const VectorX<symbolic::Variable>& brick_omega_x_vars() const {
-    return brick_omega_x_vars_;
+  const symbolic::Variable& brick_omega_x_vars(int knot) const {
+    return v_vars_(gripper_brick_->brick_revolute_x_position_index(), knot);
   }
 
   const std::vector<std::unordered_map<Finger, Vector2<symbolic::Variable>>>&
@@ -212,7 +215,7 @@ class GripperBrickTrajectoryOptimization {
 
   void AddMiddlePointIntegrationConstraint();
 
-  const GripperBrickHelper<double>* const gripper_brick_;
+  const GripperBrickHelper<AutoDiffXd>* const gripper_brick_;
   // number of knots.
   int nT_;
   std::unique_ptr<solvers::MathematicalProgram> prog_;
@@ -221,15 +224,6 @@ class GripperBrickTrajectoryOptimization {
 
   MatrixX<symbolic::Variable> v_vars_;
 
-  // brick_v_y_vars_(i) represents the brick y translational velocity variable
-  // at the i'th knot.
-  VectorX<symbolic::Variable> brick_v_y_vars_;
-  // brick_v_z_vars_(i) represents the brick z translational velocity variable
-  // at the i'th knot.
-  VectorX<symbolic::Variable> brick_v_z_vars_;
-  // brick_omega_x_vars_(i) represents the brick z translational velocity
-  // variable at the i'th knot.
-  VectorX<symbolic::Variable> brick_omega_x_vars_;
   // f_FB_B_[knot][finger] represents the contact force from the finger (F) to
   // the brick (B) expressed in the brick (B) frame at a given knot for a given
   // finger.

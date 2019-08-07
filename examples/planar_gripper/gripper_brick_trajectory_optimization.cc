@@ -28,9 +28,8 @@ GripperBrickTrajectoryOptimization::GripperBrickTrajectoryOptimization(
       prog_{std::make_unique<solvers::MathematicalProgram>()},
       q_vars_{prog_->NewContinuousVariables(
           gripper_brick_->plant().num_positions(), nT_)},
-      brick_v_y_vars_{prog_->NewContinuousVariables(nT_)},
-      brick_v_z_vars_{prog_->NewContinuousVariables(nT_)},
-      brick_omega_x_vars_{prog_->NewContinuousVariables(nT_)},
+      v_vars_{prog_->NewContinuousVariables(
+          gripper_brick_->plant().num_velocities(), nT_)},
       f_FB_B_(nT_),
       plant_mutable_contexts_(nT_),
       dt_(prog_->NewContinuousVariables(nT_ - 1)),
@@ -204,12 +203,12 @@ void GripperBrickTrajectoryOptimization::AddDynamicConstraint(
             VectorX<symbolic::Variable> bound_vars;
             constraint->ComposeX<symbolic::Variable>(
                 this->q_vars_.col(right_knot_index),
-                this->brick_v_y_vars()(right_knot_index),
-                this->brick_v_z_vars()(right_knot_index),
-                this->brick_omega_x_vars()(right_knot_index),
-                this->brick_v_y_vars()(left_knot_index),
-                this->brick_v_z_vars()(left_knot_index),
-                this->brick_omega_x_vars()(left_knot_index), f_FB_B_r,
+                this->brick_v_y_vars(right_knot_index),
+                this->brick_v_z_vars(right_knot_index),
+                this->brick_omega_x_vars(right_knot_index),
+                this->brick_v_y_vars(left_knot_index),
+                this->brick_v_z_vars(left_knot_index),
+                this->brick_omega_x_vars(left_knot_index), f_FB_B_r,
                 this->dt_(left_knot_index), &bound_vars);
             this->prog_->AddConstraint(constraint, bound_vars);
             break;
@@ -226,12 +225,12 @@ void GripperBrickTrajectoryOptimization::AddDynamicConstraint(
             constraint->ComposeX<symbolic::Variable>(
                 this->q_vars_.col(right_knot_index),
                 this->q_vars_.col(left_knot_index),
-                this->brick_v_y_vars()(right_knot_index),
-                this->brick_v_z_vars()(right_knot_index),
-                this->brick_omega_x_vars()(right_knot_index),
-                this->brick_v_y_vars()(left_knot_index),
-                this->brick_v_z_vars()(left_knot_index),
-                this->brick_omega_x_vars()(left_knot_index), f_FB_B_r, f_FB_B_l,
+                this->brick_v_y_vars(right_knot_index),
+                this->brick_v_z_vars(right_knot_index),
+                this->brick_omega_x_vars(right_knot_index),
+                this->brick_v_y_vars(left_knot_index),
+                this->brick_v_z_vars(left_knot_index),
+                this->brick_omega_x_vars(left_knot_index), f_FB_B_r, f_FB_B_l,
                 this->dt_(left_knot_index), &bound_vars);
             this->prog_->AddConstraint(constraint, bound_vars);
             break;
@@ -273,16 +272,16 @@ void GripperBrickTrajectoryOptimization::
   q_brick_l << q_vars_(gripper_brick_->brick_translate_y_position_index(), 0),
       q_vars_(gripper_brick_->brick_translate_z_position_index(), 0),
       q_vars_(gripper_brick_->brick_revolute_x_position_index(), 0);
-  v_brick_l << brick_v_y_vars()(0), brick_v_z_vars()(0),
-      brick_omega_x_vars()(0);
+  v_brick_l << brick_v_y_vars(0), brick_v_z_vars(0),
+      brick_omega_x_vars(0);
   auto position_midpoint_constraint = std::make_shared<
       systems::trajectory_optimization::MidPointIntegrationConstraint>(3);
   for (int i = 1; i < nT_; ++i) {
     q_brick_r << q_vars_(gripper_brick_->brick_translate_y_position_index(), i),
         q_vars_(gripper_brick_->brick_translate_z_position_index(), i),
         q_vars_(gripper_brick_->brick_revolute_x_position_index(), i);
-    v_brick_r << brick_v_y_vars()(i), brick_v_z_vars()(i),
-        brick_omega_x_vars()(i);
+    v_brick_r << brick_v_y_vars(i), brick_v_z_vars(i),
+        brick_omega_x_vars(i);
     VectorX<symbolic::Variable> constraint_x;
     position_midpoint_constraint->ComposeX<symbolic::Variable>(
         q_brick_r, q_brick_l, v_brick_r, v_brick_l, dt_(i - 1), &constraint_x);
@@ -632,10 +631,10 @@ void GripperBrickTrajectoryOptimization::AddMiddlePointIntegrationConstraint() {
                          i + 1),
         q_vars_(gripper_brick_->brick_translate_z_position_index(), i + 1),
         q_vars_(gripper_brick_->brick_revolute_x_position_index(), i + 1);
-    v_brick_l << brick_v_y_vars()(i), brick_v_z_vars()(i),
-        brick_omega_x_vars()(i);
-    v_brick_r << brick_v_y_vars()(i + 1), brick_v_z_vars()(i + 1),
-        brick_omega_x_vars()(i + 1);
+    v_brick_l << brick_v_y_vars(i), brick_v_z_vars(i),
+        brick_omega_x_vars(i);
+    v_brick_r << brick_v_y_vars(i + 1), brick_v_z_vars(i + 1),
+        brick_omega_x_vars(i + 1);
     q_brick_m << q_mid_vars_(gripper_brick_->brick_translate_y_position_index(),
                              i),
         q_mid_vars_(gripper_brick_->brick_translate_z_position_index(), i),

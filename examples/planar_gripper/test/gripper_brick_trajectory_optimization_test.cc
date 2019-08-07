@@ -100,12 +100,13 @@ GTEST_TEST(GripperBrickTrajectoryOptimizationTest, TestConstructor) {
 
     // Check the position interpolation constraint
     const Eigen::MatrixXd q_sol = result.GetSolution(dut.q_vars());
+    const Eigen::MatrixXd v_sol = result.GetSolution(dut.v_vars());
     const Eigen::VectorXd brick_v_y_sol =
-        result.GetSolution(dut.brick_v_y_vars());
+        v_sol.row(gripper_brick.brick_translate_y_position_index()).transpose();
     const Eigen::VectorXd brick_v_z_sol =
-        result.GetSolution(dut.brick_v_z_vars());
+        v_sol.row(gripper_brick.brick_translate_z_position_index()).transpose();
     const Eigen::VectorXd brick_omega_x_sol =
-        result.GetSolution(dut.brick_omega_x_vars());
+        v_sol.row(gripper_brick.brick_revolute_x_position_index()).transpose();
     const Eigen::VectorXd dt_sol = result.GetSolution(dut.dt());
     // Check the integration constraint on brick pose.
     for (int i = 0; i < nT - 1; ++i) {
