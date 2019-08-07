@@ -22,7 +22,9 @@ using drake::multibody::MultibodyPlant;
 using Eigen::Vector3d;
 
 template <typename T>
-void WeldGripperFrames(MultibodyPlant<T>* plant) {
+std::array<math::RigidTransformd, 3> WeldGripperFrames(
+    MultibodyPlant<T>* plant) {
+  std::array<math::RigidTransformd, 3> X_WF;
   // The finger base links are all welded a fixed distance from the world
   // origin, on the Y-Z plane.
   const double kOriginToBaseDistance = 0.19;
@@ -38,6 +40,7 @@ void WeldGripperFrames(MultibodyPlant<T>* plant) {
   const multibody::Frame<T>& finger1_base_frame =
       plant->GetFrameByName("finger1_base");
   plant->WeldFrames(plant->world_frame(), finger1_base_frame, X_WF1);
+  X_WF[0] = X_WF1;
 
   // Weld the second finger. The second finger is 120 degrees from the first
   // finger (i.e., the arc from finger 1's base to finger 2's base is 120
@@ -48,6 +51,7 @@ void WeldGripperFrames(MultibodyPlant<T>* plant) {
   const multibody::Frame<T>& finger2_base_frame =
       plant->GetFrameByName("finger2_base");
   plant->WeldFrames(plant->world_frame(), finger2_base_frame, X_WF2);
+  X_WF[1] = X_WF2;
 
   // Weld the 3rd finger. The third finger is 120 degrees from the second
   // finger.
@@ -57,6 +61,7 @@ void WeldGripperFrames(MultibodyPlant<T>* plant) {
   const multibody::Frame<T>& finger3_base_frame =
       plant->GetFrameByName("finger3_base");
   plant->WeldFrames(plant->world_frame(), finger3_base_frame, X_WF3);
+  X_WF[2] = X_WF3;
 }
 
 // Explicit instantiations.

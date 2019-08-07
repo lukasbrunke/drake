@@ -19,9 +19,11 @@ using drake::multibody::MultibodyPlant;
  * joint angles are zero, and all motion lies in the Y-Z plane.
  * @tparam T The scalar type. Currently only supports double.
  * @param plant The plant containing the planar-gripper.
+ * @return X_WF X_WF[i] is the pose of the base of finger i + 1 in the world
+ * frame.
  */
 template <typename T>
-void WeldGripperFrames(MultibodyPlant<T>* plant);
+std::array<math::RigidTransformd, 3> WeldGripperFrames(MultibodyPlant<T>* plant);
 
 /**
  * Parses a text file containing keyframe joint positions for the planar gripper

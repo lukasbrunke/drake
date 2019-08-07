@@ -42,6 +42,12 @@ GTEST_TEST(GripperBrickHelperTest, Test) {
     } else {
       throw std::runtime_error("The rotation axis should be x axis.");
     }
+
+    Eigen::Vector3d p_L1L2;
+    dut.plant().CalcPointsPositions(
+        *plant_mutable_context, dut.finger_link2_frame(finger),
+        Eigen::Vector3d::Zero(), dut.finger_link1_frame(finger), &p_L1L2);
+    EXPECT_NEAR(p_L1L2.norm(), dut.get_finger_link1_length(finger), 1E-14);
   }
 }
 }  // namespace planar_gripper
