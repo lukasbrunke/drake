@@ -23,6 +23,7 @@ drake_cc_library(
     name = "planar_gripper_common",
     srcs = ["planar_gripper_common.cc"],
     hdrs = ["planar_gripper_common.h"],
+    visibility = ["//visibility:public"],
     deps = [
         "//common:find_resource",
         "//multibody/plant",
@@ -35,6 +36,7 @@ drake_cc_library(
     name = "brick_static_equilibrium_constraint",
     srcs = ["brick_static_equilibrium_constraint.cc"],
     hdrs = ["brick_static_equilibrium_constraint.h"],
+    visibility = ["//visibility:public"],
     deps = [
         ":gripper_brick",
         ":gripper_brick_planning_constraint_helper",
@@ -101,6 +103,7 @@ drake_cc_library(
     name = "gripper_brick_planning_constraint_helper",
     srcs = ["gripper_brick_planning_constraint_helper.cc"],
     hdrs = ["gripper_brick_planning_constraint_helper.h"],
+    visibility = ["//visibility:public"],
     deps = [
         ":gripper_brick",
         "//multibody/inverse_kinematics:kinematic_constraint",
@@ -112,6 +115,7 @@ drake_cc_library(
     name = "brick_dynamic_constraint",
     srcs = ["brick_dynamic_constraint.cc"],
     hdrs = ["brick_dynamic_constraint.h"],
+    visibility = ["//visibility:public"],
     deps = [
         ":gripper_brick",
         ":gripper_brick_planning_constraint_helper",
@@ -124,6 +128,7 @@ drake_cc_library(
     name = "gripper_brick_trajectory_optimization",
     srcs = ["gripper_brick_trajectory_optimization.cc"],
     hdrs = ["gripper_brick_trajectory_optimization.h"],
+    visibility = ["//visibility:public"],
     deps = [
         ":brick_dynamic_constraint",
         ":brick_static_equilibrium_constraint",

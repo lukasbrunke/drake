@@ -215,7 +215,7 @@ class GripperBrickTrajectoryOptimization {
 
   void AddMiddlePointIntegrationConstraint();
 
-  const GripperBrickHelper<AutoDiffXd>* const gripper_brick_;
+  const GripperBrickHelper<double>* const gripper_brick_;
   // number of knots.
   int nT_;
   std::unique_ptr<solvers::MathematicalProgram> prog_;

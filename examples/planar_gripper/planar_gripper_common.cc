@@ -62,10 +62,12 @@ std::array<math::RigidTransformd, 3> WeldGripperFrames(
       plant->GetFrameByName("finger3_base");
   plant->WeldFrames(plant->world_frame(), finger3_base_frame, X_WF3);
   X_WF[2] = X_WF3;
+  return X_WF;
 }
 
 // Explicit instantiations.
-template void WeldGripperFrames(MultibodyPlant<double>* plant);
+template std::array<math::RigidTransformd, 3> WeldGripperFrames(
+    MultibodyPlant<double>* plant);
 
 /// Build a keyframe matrix for joints in joint_ordering by extracting the
 /// appropriate columns from all_keyframes. The interpretation of columns in
