@@ -103,10 +103,7 @@ class GripperBrickHelper {
     return base_theta + base_joint_angle + middle_joint_angle;
   }
 
-  geometry::GeometryId finger_tip_sphere_geometry_id(Finger finger) const {
-    return plant_->GetCollisionGeometriesForBody(
-        finger_link2_frame(finger).body())[0];
-  }
+  geometry::GeometryId finger_tip_sphere_geometry_id(Finger finger) const;
 
   geometry::GeometryId brick_geometry_id() const {
     return plant_->GetCollisionGeometriesForBody(brick_frame().body())[0];
@@ -123,6 +120,7 @@ class GripperBrickHelper {
   int brick_revolute_x_position_index_;
   const multibody::Frame<double>* brick_frame_;
   std::array<const multibody::Frame<double>*, 3> finger_link2_frames_;
+  std::array<geometry::GeometryId, 3> finger_tip_sphere_geometry_ids_;
 
   Eigen::Vector3d p_L2Fingertip_;
   double finger_tip_radius_;
