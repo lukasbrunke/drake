@@ -23,8 +23,8 @@ void AddFrictionConeConstraint(
       plant.default_coulomb_friction(plant.GetCollisionGeometriesForBody(
           gripper_brick_system.brick_frame().body())[0]);
   const multibody::CoulombFriction<double>& finger_tip_friction =
-      plant.default_coulomb_friction(plant.GetCollisionGeometriesForBody(
-          gripper_brick_system.finger_link2_frame(finger).body())[0]);
+      plant.default_coulomb_friction(
+          gripper_brick_system.finger_tip_sphere_geometry_id(finger));
   const multibody::CoulombFriction<double> combined_friction =
       multibody::CalcContactFrictionFromSurfaceProperties(brick_friction,
                                                           finger_tip_friction);
