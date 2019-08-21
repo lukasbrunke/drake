@@ -52,7 +52,7 @@ void AddFingerTipInContactWithBrickFaceConstraint(
     BrickFace brick_face, solvers::MathematicalProgram* prog,
     const Eigen::Ref<const VectorX<symbolic::Variable>>& q_vars,
     systems::Context<double>* plant_context, double face_shrink_factor,
-    double depth = 1e-3);
+    double depth);
 
 Eigen::Vector3d ComputeFingerTipInBrickFrame(
     const GripperBrickHelper<double>& gripper_brick, const Finger finger,
@@ -84,7 +84,33 @@ void AddFingerNoSlidingConstraint(
     systems::Context<double>* to_context,
     const Eigen::Ref<const VectorX<symbolic::Variable>>& q_from,
     const Eigen::Ref<const VectorX<symbolic::Variable>>& q_to,
-    double face_shrink_factor);
+    double face_shrink_factor, double depth);
+
+/**
+ * Impose the kinematic constraint that the finger can only roll (or stick) from
+ * a given fixed posture with at most certain degree about the z axis.
+ * @param gripper_brick Contains the gripper brick diagram.
+ * @param finger The finger that should not slide.
+ * @param face The brick face that the finger sticks to (or rolls on).
+ * @param rolling_angle_lower The lower bound on the rolling angle.
+ * @param rolling_angle_upper The upper bound on the rolling angle.
+ * @param prog The optimization program to which the constraint is added.
+ * @param from_context The context containing posture, from which the finger
+ * should stick to (or roll).
+ * @param to_context The context that contains the value of the posture after
+ * rolling (sticking).
+ * @param q_to The variable representing the "to" posture.
+ * @param face_shrink_factor A factor < 1, indicates the region on the face that
+ * the finger can roll within.
+ */
+void AddFingerNoSlidingFromFixedPostureConstraint(
+    const GripperBrickHelper<double>& gripper_brick, Finger finger,
+    BrickFace face, double rolling_angle_lower, double rolling_angle_upper,
+    solvers::MathematicalProgram* prog,
+    const systems::Context<double>& from_fixed_context,
+    systems::Context<double>* to_context,
+    const Eigen::Ref<const VectorX<symbolic::Variable>>& q_to,
+    double face_shrink_factor, double depth);
 
 namespace internal {
 /**
@@ -93,6 +119,7 @@ namespace internal {
  * The formulation of the constraint is
  *
  *     p_translation_to - p_translation_from - radius * (θ_to - θ_from) = 0
+ * The variables are (q_from, q_to)
  */
 class FingerNoSlidingConstraint : public solvers::Constraint {
  public:
@@ -125,6 +152,46 @@ class FingerNoSlidingConstraint : public solvers::Constraint {
   Finger finger_;
   BrickFace face_;
   systems::Context<double>* from_context_;
+  systems::Context<double>* to_context_;
+};
+
+/**
+ * Same as FingerNoSlidingConstraint, except the "from posture" is fixed, so the
+ * decision variables are only q_to.
+ */
+class FingerNoSlidingFromFixedPostureConstraint : public solvers::Constraint {
+ public:
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(FingerNoSlidingFromFixedPostureConstraint)
+
+  FingerNoSlidingFromFixedPostureConstraint(
+      const GripperBrickHelper<double>* gripper_brick, Finger finger,
+      BrickFace face, const systems::Context<double>* from_context,
+      systems::Context<double>* to_context);
+
+  ~FingerNoSlidingFromFixedPostureConstraint() override {}
+
+ private:
+  template <typename T>
+  void DoEvalGeneric(const Eigen::Ref<const VectorX<T>>& x,
+                     VectorX<T>* y) const;
+
+  void DoEval(const Eigen::Ref<const Eigen::VectorXd>& x,
+              Eigen::VectorXd* y) const override;
+
+  void DoEval(const Eigen::Ref<const AutoDiffVecXd>& x,
+              AutoDiffVecXd* y) const override;
+
+  void DoEval(const Eigen::Ref<const VectorX<symbolic::Variable>>&,
+              VectorX<symbolic::Expression>*) const override {
+    throw std::runtime_error(
+        "FingerNoSlidingConstraint::Eval doesn't support symbolic variables.");
+  }
+
+ private:
+  const GripperBrickHelper<double>* gripper_brick_;
+  Finger finger_;
+  BrickFace face_;
+  const systems::Context<double>* from_context_;
   systems::Context<double>* to_context_;
 };
 }  // namespace internal
