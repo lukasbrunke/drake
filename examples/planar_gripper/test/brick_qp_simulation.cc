@@ -59,8 +59,8 @@ int DoMain() {
   ConnectContactResultsToDrakeVisualizer(&builder, plant, &lcm);
 
   // QP controller
-  double Kp = 3;
-  double Kd = 3;
+  double Kp = 10;
+  double Kd = 10;
   double weight_thetaddot_error = 1;
   double weight_f_Cb_B = 1;
   double mu = 0.5;
@@ -128,12 +128,35 @@ int DoMain() {
 
   const Eigen::VectorXd sample_times = signal_logger->sample_times();
   const Eigen::Matrix2Xd brick_states = signal_logger->data();
+  Eigen::RowVectorXd theta_planned_samples(sample_times.rows());
+  const auto thetadot_planned_traj = theta_planned_traj.derivative(1);
+  Eigen::RowVectorXd thetadot_planned_samples(sample_times.rows());
+  for (int i = 0; i < sample_times.rows(); ++i) {
+    theta_planned_samples(i) = theta_planned_traj.value(sample_times(i))(0, 0);
+    // The derivative of FirstOrderHold piecewise polynomial is a ZeroOrderHold
+    // piecewise polynomial, but the thetadot computed after the end of the
+    // trajectory is wrong from thetadot_planned_traj.
+    if (sample_times(i) < theta_planned_traj.end_time()) {
+      thetadot_planned_samples(i) =
+          thetadot_planned_traj.value(sample_times(i))(0, 0);
+    } else {
+      thetadot_planned_samples(i) = 0.;
+    }
+  }
   common::CallPython("figure");
   auto ax1 = common::CallPython("subplot", 2, 1, 1);
   ax1.attr("set_ylabel")("theta (rad)");
-  common::CallPython("plot", sample_times, brick_states.row(0).transpose());
+  common::CallPython("plot", sample_times, brick_states.row(0).transpose(),
+                     common::ToPythonKwargs("label", "sim"));
+  common::CallPython("plot", sample_times, theta_planned_samples.transpose(),
+                     common::ToPythonKwargs("label", "plan"));
+  ax1.attr("legend")();
   auto ax2 = common::CallPython("subplot", 2, 1, 2);
-  common::CallPython("plot", sample_times, brick_states.row(1).transpose());
+  common::CallPython("plot", sample_times, brick_states.row(1).transpose(),
+                     common::ToPythonKwargs("label", "sim"));
+  common::CallPython("plot", sample_times, thetadot_planned_samples.transpose(),
+                     common::ToPythonKwargs("label", "plan"));
+  ax2.attr("legend")();
   ax2.attr("set_ylabel")("thetadot (rad/s)");
   ax2.attr("set_xlabel")("time (s)");
   common::CallPython("show");
