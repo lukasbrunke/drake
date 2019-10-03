@@ -25,7 +25,7 @@ template <typename T>
 void WeldGripperFrames(MultibodyPlant<T>* plant) {
   // The finger base links are all welded a fixed distance from the world
   // origin, on the Y-Z plane.
-  const double kOriginToBaseDistance = 0.19;
+  const double kOriginToBaseDistance = 0.205;
 
   // Before welding, all finger base links sit at the world origin with the
   // finger pointing along the -Z axis, with all joint angles being zero.

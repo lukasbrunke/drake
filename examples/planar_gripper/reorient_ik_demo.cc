@@ -6,7 +6,7 @@
 
 #include "drake/examples/planar_gripper/brick_static_equilibrium_constraint.h"
 #include "drake/examples/planar_gripper/gripper_brick.h"
-#include "drake/examples/planar_gripper/gripper_brick_planning_utils.h"
+#include "drake/examples/planar_gripper/gripper_brick_planning_constraint_helper.h"
 #include "drake/multibody/inverse_kinematics/distance_constraint.h"
 #include "drake/multibody/inverse_kinematics/inverse_kinematics.h"
 #include "drake/multibody/inverse_kinematics/kinematic_constraint_utilities.h"
@@ -35,7 +35,7 @@ void VisualizePostures(const GripperBrickHelper<double>& gripper_brick_system,
   for (int i = 0; i < q_move.cols(); ++i) {
     VisualizePosture(gripper_brick_system, q_move.col(i), plant_mutable_context,
                      diagram_context);
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
   }
 }
 
@@ -45,7 +45,7 @@ void FixFingerPositionInBrickFrame(
     solvers::MathematicalProgram* prog,
     systems::Context<double>* plant_mutable_context,
     const VectorX<symbolic::Variable>& q) {
-  const Eigen::Vector3d p_L2Tip = gripper_brick_system.p_L2Tip();
+  const Eigen::Vector3d p_L2Tip = gripper_brick_system.p_L2Fingertip();
   const multibody::Frame<double>& finger_link2 =
       gripper_brick_system.finger_link2_frame(finger);
   const multibody::Frame<double>& brick = gripper_brick_system.brick_frame();
@@ -112,12 +112,8 @@ Eigen::MatrixXd InterpolateTrajectory(
       if (moving_finger_index.has_value() &&
           moving_finger_index.value() == finger) {
         SortedPair<geometry::GeometryId> geometry_pair(
-            plant.GetCollisionGeometriesForBody(
-                gripper_brick_system.brick_frame().body())[0],
-            plant.GetCollisionGeometriesForBody(
-                gripper_brick_system
-                    .finger_link2_frame(moving_finger_index.value())
-                    .body())[0]);
+            gripper_brick_system.brick_geometry_id(),
+            gripper_brick_system.finger_tip_sphere_geometry_id(finger));
         if (i >= 1) {
           prog.AddConstraint(
               std::make_shared<multibody::DistanceConstraint>(
@@ -205,15 +201,15 @@ Eigen::VectorXd FindInitialPosture(
   finger_face_contacts.emplace_back(Finger::kFinger2, BrickFace::kNegZ);
   finger_face_contacts.emplace_back(Finger::kFinger3, BrickFace::kPosY);
   for (int i = 0; i < 3; ++i) {
-    AddFingerTipInContactWithBrickFace(
+    AddFingerTipInContactWithBrickFaceConstraint(
         gripper_brick_system, finger_face_contacts[i].first,
         finger_face_contacts[i].second, ik0.get_mutable_prog(), ik0.q(),
-        ik0.get_mutable_context(), 0.84);
+        ik0.get_mutable_context(), 0.84, 0);
   }
   // Add force equilibrium constraint.
-  AddBrickStaticEquilibriumConstraint(
-      gripper_brick_system, finger_face_contacts, ik0.q(),
-      plant_mutable_context, ik0.get_mutable_prog());
+  // AddBrickStaticEquilibriumConstraint(
+  //    gripper_brick_system, finger_face_contacts, ik0.q(),
+  //    plant_mutable_context, ik0.get_mutable_prog());
 
   ik0.get_mutable_prog()->AddBoundingBoxConstraint(
       Eigen::Vector3d(-0.02, -0.02, -30.0 / 180 * M_PI),
@@ -248,9 +244,9 @@ Eigen::VectorXd FindPosture(
                                   fixed_finger, &ik);
   }
   for (const auto& moving_finger : moving_fingers) {
-    AddFingerTipInContactWithBrickFace(
+    AddFingerTipInContactWithBrickFaceConstraint(
         gripper_brick_system, moving_finger.first, moving_finger.second,
-        ik.get_mutable_prog(), ik.q(), ik.get_mutable_context(), 0.84);
+        ik.get_mutable_prog(), ik.q(), ik.get_mutable_context(), 0.82, 0);
   }
   auto result = solvers::Solve(
       ik.prog(),
@@ -320,8 +316,24 @@ Eigen::VectorXd FindPosture2(
   return q2;
 }
 
+template <int kIncreaseFactor>
+Eigen::MatrixXd IncreaseSamplingRate(const Eigen::MatrixXd& q_in) {
+  Eigen::MatrixXd q_out(q_in.rows(), (q_in.cols() - 1) * kIncreaseFactor + 1);
+  for (int j = 0; j < q_in.cols() - 1; ++j) {
+    for (int i = 0; i < q_in.rows(); ++i) {
+      q_out.block<1, kIncreaseFactor>(i, j * kIncreaseFactor) =
+          Eigen::Matrix<double, 1, kIncreaseFactor + 1>::LinSpaced(
+              q_in(i, j), q_in(i, j + 1))
+              .template block<1, kIncreaseFactor>(0, 0);
+    }
+  }
+  q_out.col(q_out.cols() - 1) = q_in.col(q_in.cols() - 1);
+  return q_out;
+}
+
 int DoMain() {
   GripperBrickHelper<double> gripper_brick_system;
+
   auto print_joint_start_index = [&gripper_brick_system](
                                      const std::string& joint_name) {
     const int position_start_index = gripper_brick_system.plant()
@@ -352,15 +364,15 @@ int DoMain() {
   do {
     std::cout << "Type y to continue.\n";
   } while (std::cin.get() != 'y');
-  // Now rotate the brick by certain degrees.
+  //// Now rotate the brick by certain degrees.
   Eigen::VectorXd delta_q_max = 0.3 * Eigen::VectorXd::Ones(q0.rows());
-  const Eigen::MatrixXd q_move0 = RotateBlockToPosture(
-      gripper_brick_system, q0, 20.0 / 180 * M_PI, 40.0 / 180 * M_PI,
-      delta_q_max, 7, plant_mutable_context);
-  VisualizePostures(gripper_brick_system, q_move0, plant_mutable_context,
-                    diagram_context.get());
-  gripper_brick_system.plant().SetPositions(plant_mutable_context,
-                                            q_move0.col(q_move0.cols() - 1));
+  // const Eigen::MatrixXd q_move0 = RotateBlockToPosture(
+  //    gripper_brick_system, q0, 20.0 / 180 * M_PI, 40.0 / 180 * M_PI,
+  //    delta_q_max, 7, plant_mutable_context);
+  // VisualizePostures(gripper_brick_system, q_move0, plant_mutable_context,
+  //                  diagram_context.get());
+  // gripper_brick_system.plant().SetPositions(plant_mutable_context,
+  //                                          q_move0.col(q_move0.cols() - 1));
 
   // Now move finger 1 to +Z face.
   // Finger 2 sticks to -Z face, finger 3 sticks to +Y face.
@@ -368,18 +380,21 @@ int DoMain() {
       gripper_brick_system, {Finger::kFinger2, Finger::kFinger3},
       {{Finger::kFinger1, BrickFace::kPosZ}}, plant_mutable_context);
   gripper_brick_system.plant().SetPositions(plant_mutable_context, q1);
-  delta_q_max = 0.35 * Eigen::VectorXd::Ones(
-                           gripper_brick_system.plant().num_positions());
+  delta_q_max =
+      0.3 * Eigen::VectorXd::Ones(gripper_brick_system.plant().num_positions());
+  delta_q_max(
+      gripper_brick_system.finger_base_position_index(Finger::kFinger1)) = 0.1;
   const Eigen::MatrixXd q_move1 =
       InterpolateTrajectory(gripper_brick_system, 9, Finger::kFinger1, q0, q1,
                             *plant_mutable_context, delta_q_max);
   VisualizePostures(gripper_brick_system, q_move1, plant_mutable_context,
                     diagram_context.get());
-  gripper_brick_system.plant().SetPositions(plant_mutable_context, q1);
+  gripper_brick_system.plant().SetPositions(plant_mutable_context,
+                                            q_move1.col(q_move1.cols() - 1));
 
   // Now rotate the brick by certain degrees.
   const Eigen::MatrixXd q_move2 = RotateBlockToPosture(
-      gripper_brick_system, q1, 60.0 / 180 * M_PI, 70.0 / 180 * M_PI,
+      gripper_brick_system, q1, 40.0 / 180 * M_PI, 70.0 / 180 * M_PI,
       delta_q_max, 7, plant_mutable_context);
   VisualizePostures(gripper_brick_system, q_move2, plant_mutable_context,
                     diagram_context.get());
@@ -392,6 +407,10 @@ int DoMain() {
       gripper_brick_system, {Finger::kFinger1, Finger::kFinger2},
       {{Finger::kFinger3, BrickFace::kNegZ}}, plant_mutable_context);
 
+  delta_q_max =
+      0.3 * Eigen::VectorXd::Ones(gripper_brick_system.plant().num_positions());
+  delta_q_max(
+      gripper_brick_system.finger_base_position_index(Finger::kFinger3)) = 0.1;
   gripper_brick_system.plant().SetPositions(plant_mutable_context, q3);
   const Eigen::MatrixXd q_move3 = InterpolateTrajectory(
       gripper_brick_system, 8, Finger::kFinger3,
@@ -406,8 +425,10 @@ int DoMain() {
       gripper_brick_system, {Finger::kFinger1, Finger::kFinger3},
       {{Finger::kFinger2, BrickFace::kNegY}}, plant_mutable_context);
   gripper_brick_system.plant().SetPositions(plant_mutable_context, q4);
-  delta_q_max = 0.32 * Eigen::VectorXd::Ones(
-                           gripper_brick_system.plant().num_positions());
+  delta_q_max =
+      0.4 * Eigen::VectorXd::Ones(gripper_brick_system.plant().num_positions());
+  delta_q_max(
+      gripper_brick_system.finger_base_position_index(Finger::kFinger2)) = 0.13;
   const Eigen::MatrixXd q_move4 =
       InterpolateTrajectory(gripper_brick_system, 8, Finger::kFinger2, q3, q4,
                             *plant_mutable_context, delta_q_max);
@@ -416,19 +437,32 @@ int DoMain() {
   // Now rotate the brick by certain degrees.
   gripper_brick_system.plant().SetPositions(plant_mutable_context, q4);
   const Eigen::MatrixXd q_move5 = RotateBlockToPosture(
-      gripper_brick_system, q4, 30.0 / 180 * M_PI, 40.0 / 180 * M_PI,
+      gripper_brick_system, q4, 20.0 / 180 * M_PI, 40.0 / 180 * M_PI,
       delta_q_max, 9, plant_mutable_context);
   VisualizePostures(gripper_brick_system, q_move5, plant_mutable_context,
                     diagram_context.get());
 
-  // std::stringstream ss;
-  // ss << std::setprecision(20);
-  // ss << q_move1.transpose() << "\n";
-  // ss << q_move2.transpose() << "\n";
-  // ss << q_move3.transpose() << "\n";
-  // ss << q_move4.transpose() << "\n";
-  // ss << q_move5.transpose() << "\n";
-  // std::cout << ss.str() << "\n";
+  std::stringstream ss;
+  ss << std::setprecision(20);
+  ss << "finger 1 shoulder, finger 1 elbow, finger 2 shoulder, finger 2 elbow, "
+        "finger 3 shoulder, finger 3 elbow\n";
+  for (const Eigen::MatrixXd& q_move :
+       {q_move1, q_move2, q_move3, q_move4, q_move5}) {
+    const Eigen::MatrixXd q_move_fine_sampled = IncreaseSamplingRate<5>(q_move);
+    for (int j = 0; j < q_move_fine_sampled.cols(); ++j) {
+      for (const Finger finger :
+           {Finger::kFinger1, Finger::kFinger2, Finger::kFinger3}) {
+        ss << q_move_fine_sampled(
+                  gripper_brick_system.finger_base_position_index(finger), j)
+           << " ";
+        ss << q_move_fine_sampled(
+                  gripper_brick_system.finger_mid_position_index(finger), j)
+           << " ";
+      }
+      ss << "\n";
+    }
+  }
+  std::cout << ss.str() << "\n";
 
   return 0;
 }
