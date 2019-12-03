@@ -299,6 +299,14 @@ drake_lcm_cc_library(
     ],
 )
 
+drake_lcm_cc_library(
+    name = "plant_state",
+    lcm_package = "drake",
+    lcm_srcs = [
+        "lcmt_plant_state.lcm",
+    ],
+)
+
 # TODO(jwnimmer-tri) Many more C++ messages are missing ...
 
 drake_lcm_py_library(
@@ -342,6 +350,7 @@ LCMTYPES_CC = [
     ":manipulator_plan_move_end_effector",
     ":piecewise_polynomial",
     ":plan_eval_debug_info",
+    ":plant_state",
     ":point_pair_contact_info_for_viz",
     ":polynomial",
     ":polynomial_matrix",

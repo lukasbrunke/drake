@@ -28,6 +28,18 @@ void WeldFingerFrame(multibody::MultibodyPlant<T>* plant, double z_offset) {
 template void WeldFingerFrame(multibody::MultibodyPlant<double>* plant,
                               double x_offset);
 
+multibody::CoulombFriction<double> GetFingerBrickFriction(
+    const multibody::MultibodyPlant<double>& plant,
+    const geometry::SceneGraph<double>& scene_graph) {
+  const multibody::CoulombFriction<double>& finger_friction =
+      plant.default_coulomb_friction(
+          GetFingerTipGeometryId(plant, scene_graph));
+  const multibody::CoulombFriction<double>& brick_friction =
+      plant.default_coulomb_friction(GetBrickGeometryId(plant, scene_graph));
+  return multibody::CalcContactFrictionFromSurfaceProperties(finger_friction,
+                                                             brick_friction);
+}
+
 geometry::GeometryId GetBrickGeometryId(
     const multibody::MultibodyPlant<double>& plant,
     const geometry::SceneGraph<double>& scene_graph) {

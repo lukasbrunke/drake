@@ -387,6 +387,31 @@ drake_cc_binary(
     ],
 )
 
+drake_cc_binary(
+    name="run_finger_brick_planner",
+    srcs = ["run_finger_brick_planner.cc"],
+    add_test_rule = 1,
+    data = [
+        "//examples/planar_gripper:1dof_brick.sdf",
+        "//examples/planar_gripper:planar_finger.sdf",
+    ],
+    deps = [
+        ":planar_finger_qp",
+        ":finger_brick",
+        ":finger_brick_control",
+        "//common:find_resource",
+        "//geometry:scene_graph",
+        "//multibody/parsing",
+        "//multibody/plant",
+        "//multibody/plant:contact_results_to_lcm",
+        "//multibody/plant:spatial_forces_to_lcm",
+        "//systems/analysis:simulator",
+        "//systems/framework:diagram",
+        "@gflags",
+    ],
+)
+
+
 install_data()
 
 add_lint_tests()

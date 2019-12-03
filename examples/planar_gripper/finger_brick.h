@@ -11,6 +11,10 @@ namespace planar_gripper {
 template <typename T>
 void WeldFingerFrame(multibody::MultibodyPlant<T>* plant, double x_offset = 0);
 
+multibody::CoulombFriction<double> GetFingerBrickFriction(
+    const multibody::MultibodyPlant<double>& plant,
+    const geometry::SceneGraph<double>& scene_graph);
+
 Eigen::Vector3d GetFingerTipSpherePositionInLt(
     const multibody::MultibodyPlant<double>& plant,
     const geometry::SceneGraph<double>& scene_graph);
@@ -39,7 +43,7 @@ class ContactPointInBrickFrame final : public systems::LeafSystem<double> {
                            const geometry::SceneGraph<double>& scene_graph);
 
   void CalcOutput(const systems::Context<double>& context,
-                  systems::BasicVector<double> *output) const;
+                  systems::BasicVector<double>* output) const;
 
   const systems::InputPort<double>& get_geometry_query_input_port() const {
     return this->get_input_port(geometry_query_input_port_);
@@ -62,11 +66,10 @@ class ForceDemuxer final : public systems::LeafSystem<double> {
   ForceDemuxer(const multibody::MultibodyPlant<double>& plant);
 
   void SetContactResultsForceOutput(const systems::Context<double>& context,
-                  systems::BasicVector<double> *output) const;
+                                    systems::BasicVector<double>* output) const;
 
   void SetReactionForcesOutput(const systems::Context<double>& context,
-                               systems::BasicVector<double> *output) const;
-
+                               systems::BasicVector<double>* output) const;
 
   const systems::InputPort<double>& get_contact_results_input_port() const {
     return this->get_input_port(contact_results_input_port_);
@@ -89,7 +92,7 @@ class ForceDemuxer final : public systems::LeafSystem<double> {
   }
 
  private:
-  const multibody::MultibodyPlant<double> &plant_;
+  const multibody::MultibodyPlant<double>& plant_;
   std::unique_ptr<systems::Context<double>> plant_context_;
   systems::InputPortIndex contact_results_input_port_{};
   systems::InputPortIndex reaction_forces_input_port_{};

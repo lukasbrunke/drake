@@ -1,0 +1,15 @@
+package drake;
+
+struct lcmt_plant_state {
+  // The timestamp in milliseconds.
+  int64_t timestamp;
+
+  int32_t num_positions;
+  int32_t num_velocities;
+
+  string position_name[num_positions];
+  string velocity_name[num_velocities];
+
+  float position[num_positions];  // q
+  float velocity[num_velocities];  // v
+}
