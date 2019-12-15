@@ -53,6 +53,16 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "planar_gripper_udp_utils",
+    srcs = ["planar_gripper_udp_utils.cc"],
+    hdrs = ["planar_gripper_udp_utils.h"],
+    deps = [
+        "//systems/framework:event_collection",
+        "//systems/framework:leaf_system",
+    ],
+)
+
+drake_cc_library(
     name = "brick_static_equilibrium_constraint",
     srcs = ["brick_static_equilibrium_constraint.cc"],
     hdrs = ["brick_static_equilibrium_constraint.h"],
@@ -84,6 +94,17 @@ drake_cc_library(
         "//multibody/plant",
         "//systems/analysis:simulator",
         "//systems/framework:diagram",
+    ],
+)
+
+drake_cc_binary(
+    name = "desired_contact_force_udp_publisher_demo",
+    srcs = ["test/desired_contact_force_udp_publisher_demo.cc"],
+    deps = [
+        ":planar_gripper_udp_utils",
+        "//systems/analysis:simulator",
+        "//systems/framework:diagram",
+        "//systems/primitives:constant_vector_source",
     ],
 )
 
