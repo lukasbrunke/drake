@@ -34,6 +34,7 @@ int DoMain() {
   servaddr.sin_addr.s_addr = htonl(server_address);
 
   SpeedgoatToDrakeUdpMessage udp_msg(9, 9, 3);
+  udp_msg.utime = 10;
   udp_msg.q = Eigen::Matrix<double, 9, 1>::LinSpaced(0.1, 0.9);
   udp_msg.v = Eigen::Matrix<double, 9, 1>::LinSpaced(-0.9, -0.1);
   udp_msg.p_BC << 1.1, 1.2, 1.3, 1.4, 1.5, 1.6;

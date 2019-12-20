@@ -92,14 +92,14 @@ DesiredContactForceUdpPublisherSystem::
 }
 
 int SpeedgoatToDrakeUdpMessage::message_size() const {
-  return sizeof(unsigned long) +
+  return sizeof(uint32_t) +
          sizeof(double) * (q.rows() + v.rows() + p_BC.cols() * 2) +
          sizeof(bool) * in_contact.size();
 }
 void SpeedgoatToDrakeUdpMessage::Deserialize(uint8_t* msg, int msg_size) {
   DRAKE_DEMAND(this->message_size() == msg_size);
-  memcpy(&(this->utime), msg, sizeof(unsigned long));
-  int start = sizeof(unsigned long);
+  memcpy(&(this->utime), msg, sizeof(uint32_t));
+  int start = sizeof(uint32_t);
   memcpy(this->q.data(), msg + start, sizeof(double) * q.rows());
   start += sizeof(double) * q.rows();
   memcpy(this->v.data(), msg + start, sizeof(double) * v.rows());
@@ -117,7 +117,7 @@ void SpeedgoatToDrakeUdpMessage::Deserialize(uint8_t* msg, int msg_size) {
 void SpeedgoatToDrakeUdpMessage::Serialize(std::vector<uint8_t>* msg) const {
   msg->resize(this->message_size());
   memcpy(msg->data(), &this->utime, sizeof(this->utime));
-  int start = sizeof(unsigned long);
+  int start = sizeof(uint32_t);
   memcpy(msg->data() + start, q.data(), sizeof(double) * q.rows());
   start += sizeof(double) * q.rows();
   memcpy(msg->data() + start, v.data(), sizeof(double) * v.rows());

@@ -71,7 +71,7 @@ struct SpeedgoatToDrakeUdpMessage {
   void Serialize(std::vector<uint8_t>* msg) const;
 
   // Time in microseconds.
-  unsigned long utime;
+  uint32_t utime;
   // Generalized position (including the finger and the manipuland).
   Eigen::VectorXd q;
   // Generalized velocity.
