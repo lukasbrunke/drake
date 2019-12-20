@@ -203,6 +203,10 @@ SpeedgoatUdpReceiverSystem::ProcessMessageAndStoreToAbstractState(
     abstract_state.get_mutable_value(0)
         .get_mutable_value<SpeedgoatToDrakeUdpMessage>()
         .Deserialize(buffer.data(), buffer.size());
+    std::cout << abstract_state.get_value(0)
+                     .get_value<SpeedgoatToDrakeUdpMessage>()
+                     .q.transpose()
+              << "\n";
   }
   return systems::EventStatus::Succeeded();
 }

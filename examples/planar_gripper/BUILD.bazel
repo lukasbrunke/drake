@@ -203,6 +203,25 @@ drake_cc_googletest(
     ],
 )
 
+drake_cc_binary(
+    name = "speedgoat_udp_receiver_demo",
+    srcs = ["test/speedgoat_udp_receiver_demo.cc"],
+    deps = [
+        ":planar_gripper_udp_utils",
+        "//systems/analysis:simulator",
+        "//systems/framework:diagram",
+        "//systems/framework:diagram_builder",
+    ],
+)
+
+drake_cc_binary(
+    name = "speedgoat_udp_publish_demo",
+    srcs = ["test/speedgoat_udp_publish_demo.cc"],
+    deps = [
+        ":planar_gripper_udp_utils",
+    ],
+)
+
 install_data()
 
 add_lint_tests()
