@@ -4,6 +4,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "drake/systems/framework/abstract_values.h"
+
 namespace drake {
 namespace examples {
 namespace planar_gripper {
@@ -87,6 +89,152 @@ void DesiredContactForceUdpPublisherSystem::Output(
 DesiredContactForceUdpPublisherSystem::
     ~DesiredContactForceUdpPublisherSystem() {
   close(file_descriptor_);
+}
+
+int SpeedgoatToDrakeUdpMessage::message_size() const {
+  return sizeof(unsigned long) +
+         sizeof(double) * (q.rows() + v.rows() + p_BC.cols() * 2) +
+         sizeof(bool) * in_contact.size();
+}
+void SpeedgoatToDrakeUdpMessage::Deserialize(uint8_t* msg, int msg_size) {
+  DRAKE_DEMAND(this->message_size() == msg_size);
+  memcpy(&(this->utime), msg, sizeof(unsigned long));
+  int start = sizeof(unsigned long);
+  memcpy(this->q.data(), msg + start, sizeof(double) * q.rows());
+  start += sizeof(double) * q.rows();
+  memcpy(this->v.data(), msg + start, sizeof(double) * v.rows());
+  start += sizeof(double) * v.rows();
+  memcpy(this->p_BC.data(), msg + start, sizeof(double) * 2 * p_BC.cols());
+  start += sizeof(double) * 2 * p_BC.cols();
+  for (int i = 0; i < static_cast<int>(in_contact.size()); ++i) {
+    bool flag;
+    memcpy(&flag, msg + start, sizeof(bool));
+    in_contact[i] = flag;
+    start += sizeof(bool);
+  }
+}
+
+void SpeedgoatToDrakeUdpMessage::Serialize(std::vector<uint8_t>* msg) const {
+  msg->resize(this->message_size());
+  memcpy(msg->data(), &this->utime, sizeof(this->utime));
+  int start = sizeof(unsigned long);
+  memcpy(msg->data() + start, q.data(), sizeof(double) * q.rows());
+  start += sizeof(double) * q.rows();
+  memcpy(msg->data() + start, v.data(), sizeof(double) * v.rows());
+  start += sizeof(double) * v.rows();
+  memcpy(msg->data() + start, p_BC.data(), sizeof(double) * 2 * p_BC.cols());
+  start += sizeof(double) * p_BC.cols() * 2;
+  for (int i = 0; i < static_cast<int>(in_contact.size()); ++i) {
+    bool flag = in_contact[i];
+    memcpy(msg->data() + start, &flag, sizeof(bool));
+    start += sizeof(bool);
+  }
+}
+
+SpeedgoatUdpReceiverSystem::SpeedgoatUdpReceiverSystem(int num_positions,
+                                                       int num_velocities,
+                                                       int num_fingers,
+                                                       int local_port)
+    : num_positions_{num_positions},
+      num_velocities_{num_velocities},
+      num_fingers_{num_fingers},
+      file_descriptor_{socket(AF_INET, SOCK_DGRAM, 0)} {
+  // The implementation of this class follows
+  // https://www.cs.rutgers.edu/~pxk/417/notes/sockets/udp.html
+  if (file_descriptor_ < 0) {
+    throw std::runtime_error(
+        " SpeedgoatUdpReceiverSystem: cannot create a socket.");
+  }
+  struct sockaddr_in myaddr;
+  myaddr.sin_family = AF_INET;
+  // bind the socket to any valid IP address
+  myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+  myaddr.sin_port = htons(local_port);
+  if (bind(file_descriptor_, reinterpret_cast<struct sockaddr*>(&myaddr),
+           sizeof(myaddr)) < 0) {
+    throw std::runtime_error(
+        "SpeedgoatUdpReceiverSystem: cannot bind the socket");
+  }
+
+  this->DeclareAbstractState(
+      std::make_unique<Value<SpeedgoatToDrakeUdpMessage>>(
+          num_positions_, num_velocities_, num_fingers_));
+  this->DeclarePeriodicUnrestrictedUpdateEvent(
+      kGripperUdpStatusPeriod, 0.,
+      &SpeedgoatUdpReceiverSystem::ProcessMessageAndStoreToAbstractState);
+
+  state_output_port_ = &this->DeclareVectorOutputPort(
+      "state", systems::BasicVector<double>(num_positions_ + num_velocities_),
+      &SpeedgoatUdpReceiverSystem::OutputStateStatus);
+
+  witness_points_output_port_ = &this->DeclareVectorOutputPort(
+      "witness point", systems::BasicVector<double>(2 * num_fingers_),
+      &SpeedgoatUdpReceiverSystem::OutputWitnessPointsStatus);
+
+  in_contact_output_port_ = &this->DeclareAbstractOutputPort(
+      "in_contact_status",
+      &SpeedgoatUdpReceiverSystem::MakeInContactOutputStatus,
+      &SpeedgoatUdpReceiverSystem::OutputInContactStatus);
+}
+
+std::vector<bool> SpeedgoatUdpReceiverSystem::MakeInContactOutputStatus()
+    const {
+  std::vector<bool> in_contact(num_fingers_);
+  return in_contact;
+}
+
+SpeedgoatUdpReceiverSystem::~SpeedgoatUdpReceiverSystem() {
+  close(file_descriptor_);
+}
+
+systems::EventStatus
+SpeedgoatUdpReceiverSystem::ProcessMessageAndStoreToAbstractState(
+    const systems::Context<double>&, systems::State<double>* state) const {
+  systems::AbstractValues& abstract_state = state->get_mutable_abstract_state();
+  std::vector<uint8_t> buffer(abstract_state.get_value(0)
+                                  .get_value<SpeedgoatToDrakeUdpMessage>()
+                                  .message_size());
+  struct sockaddr_in remaddr;
+  socklen_t addrlen = sizeof(remaddr);
+  const int recvlen =
+      recvfrom(file_descriptor_, buffer.data(), buffer.size(), 0,
+               reinterpret_cast<struct sockaddr*>(&remaddr), &addrlen);
+  if (recvlen > 0) {
+    abstract_state.get_mutable_value(0)
+        .get_mutable_value<SpeedgoatToDrakeUdpMessage>()
+        .Deserialize(buffer.data(), buffer.size());
+  }
+  return systems::EventStatus::Succeeded();
+}
+
+void SpeedgoatUdpReceiverSystem::OutputStateStatus(
+    const systems::Context<double>& context,
+    systems::BasicVector<double>* output) const {
+  Eigen::VectorBlock<VectorX<double>> output_vec = output->get_mutable_value();
+  output_vec.head(num_positions_) = context.get_abstract_state()
+                                        .get_value(0)
+                                        .get_value<SpeedgoatToDrakeUdpMessage>()
+                                        .q;
+}
+
+void SpeedgoatUdpReceiverSystem::OutputWitnessPointsStatus(
+    const systems::Context<double>& context,
+    systems::BasicVector<double>* output) const {
+  Eigen::VectorBlock<VectorX<double>> output_vec = output->get_mutable_value();
+  for (int i = 0; i < num_fingers_; ++i) {
+    output_vec.segment<2>(2 * i) = context.get_abstract_state()
+                                       .get_value(0)
+                                       .get_value<SpeedgoatToDrakeUdpMessage>()
+                                       .p_BC.col(i);
+  }
+}
+
+void SpeedgoatUdpReceiverSystem::OutputInContactStatus(
+    const systems::Context<double>& context, std::vector<bool>* output) const {
+  *output = context.get_abstract_state()
+                .get_value(0)
+                .get_value<SpeedgoatToDrakeUdpMessage>()
+                .in_contact;
 }
 }  // namespace planar_gripper
 }  // namespace examples

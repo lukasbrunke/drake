@@ -195,6 +195,14 @@ drake_cc_googletest(
     ],
 )
 
+drake_cc_googletest(
+    name = "planar_gripper_udp_utils_test",
+    deps = [
+        ":planar_gripper_udp_utils",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
 install_data()
 
 add_lint_tests()
