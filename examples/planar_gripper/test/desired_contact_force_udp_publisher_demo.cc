@@ -12,8 +12,8 @@ int DoMain() {
   systems::DiagramBuilder<double> builder;
   const double publish_period = 0.01;
   int num_fingers = 3;
-  int client_port = 1;
-  int server_port = 100;
+  int client_port = 1100;
+  int server_port = 1101;
   // This corresponds to 192.168.0.1
   unsigned long server_address = 174986663;
   auto publisher = builder.AddSystem<DesiredContactForceUdpPublisherSystem>(

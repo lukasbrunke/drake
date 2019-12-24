@@ -10,6 +10,25 @@ namespace planar_gripper {
 // This is rather arbitrary, for now.
 constexpr double kGripperUdpStatusPeriod = 0.010;
 
+struct DrakeToSpeedgoatUdpMessage {
+  DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(DrakeToSpeedgoatUdpMessage)
+
+  DrakeToSpeedgoatUdpMessage(int num_fingers);
+
+  ~DrakeToSpeedgoatUdpMessage() {}
+
+  int message_size() const;
+
+  static int message_size(int num_fingers);
+
+  void Deserialize(uint8_t* msg, int msg_size);
+
+  void Serialize(std::vector<uint8_t>* msg) const;
+
+  uint32_t utime{};
+  Eigen::Matrix2Xd f_BC;
+};
+
 /**
  * This system takes the vector-valued finger tip contact force (fy, fz),
  * serialize the vector to binary data, and then publish the binary data to
@@ -37,12 +56,12 @@ class DesiredContactForceUdpPublisherSystem
   systems::EventStatus PublishInputAsUdpMessage(
       const systems::Context<double>& context) const;
 
-  std::string MakeOutput() const;
+  std::vector<uint8_t> MakeOutput() const;
 
   void Output(const systems::Context<double>& context,
-              std::string* output) const;
+              std::vector<uint8_t>* output) const;
 
-  std::string Serialize(const systems::Context<double>& context) const;
+  std::vector<uint8_t> Serialize(const systems::Context<double>& context) const;
 
   int num_fingers_{};
   int file_descriptor_{};

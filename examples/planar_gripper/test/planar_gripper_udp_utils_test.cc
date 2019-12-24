@@ -7,6 +7,20 @@
 namespace drake {
 namespace examples {
 namespace planar_gripper {
+GTEST_TEST(DrakeToSpeedgoatUdpMessageTest, Test) {
+  DrakeToSpeedgoatUdpMessage dut(3);
+  EXPECT_EQ(dut.message_size(), sizeof(uint32_t) + sizeof(double) * 6);
+  dut.utime = 1000;
+  dut.f_BC << 0.1, 0.2, 0.3, -0.1, -0.2, -0.3;
+  std::vector<uint8_t> msg;
+  dut.Serialize(&msg);
+  EXPECT_EQ(msg.size(), dut.message_size());
+  DrakeToSpeedgoatUdpMessage recovered_msg(3);
+  recovered_msg.Deserialize(msg.data(), msg.size());
+  EXPECT_EQ(recovered_msg.utime, dut.utime);
+  EXPECT_TRUE(CompareMatrices(recovered_msg.f_BC, dut.f_BC));
+}
+
 GTEST_TEST(SpeedgoatToDrakeUdpMessageTest, Test) {
   SpeedgoatToDrakeUdpMessage dut(9, 9, 3);
   EXPECT_EQ(dut.q.rows(), 9);

@@ -10,6 +10,33 @@ namespace drake {
 namespace examples {
 namespace planar_gripper {
 
+DrakeToSpeedgoatUdpMessage::DrakeToSpeedgoatUdpMessage(int num_fingers)
+    : f_BC(2, num_fingers) {}
+
+int DrakeToSpeedgoatUdpMessage::message_size() const {
+  return sizeof(uint32_t) + f_BC.cols() * 2 * sizeof(double);
+}
+
+int DrakeToSpeedgoatUdpMessage::message_size(int num_fingers) {
+  return sizeof(uint32_t) + num_fingers * 2 * sizeof(double);
+}
+
+void DrakeToSpeedgoatUdpMessage::Deserialize(uint8_t* msg, int msg_size) {
+  DRAKE_DEMAND(this->message_size() == msg_size);
+  memcpy(&(this->utime), msg, sizeof(uint32_t));
+  int start = sizeof(uint32_t);
+  memcpy(this->f_BC.data(), msg + start, sizeof(double) * f_BC.cols() * 2);
+  start += sizeof(double) * f_BC.cols() * 2;
+}
+
+void DrakeToSpeedgoatUdpMessage::Serialize(std::vector<uint8_t>* msg) const {
+  msg->resize(this->message_size());
+  memcpy(msg->data(), &this->utime, sizeof(this->utime));
+  int start = sizeof(uint32_t);
+  memcpy(msg->data() + start, f_BC.data(), sizeof(double) * f_BC.cols() * 2);
+  start += sizeof(double) * f_BC.cols() * 2;
+}
+
 DesiredContactForceUdpPublisherSystem::DesiredContactForceUdpPublisherSystem(
     double publish_period, int num_fingers, int client_port, int server_port,
     unsigned long server_address)
@@ -44,45 +71,48 @@ DesiredContactForceUdpPublisherSystem::DesiredContactForceUdpPublisherSystem(
       &DesiredContactForceUdpPublisherSystem::Output);
 }
 
-std::string DesiredContactForceUdpPublisherSystem::Serialize(
+std::vector<uint8_t> DesiredContactForceUdpPublisherSystem::Serialize(
     const systems::Context<double>& context) const {
-  std::stringstream ss;
-  int utime = context.get_time() * 1e6;
-  ss << std::to_string(utime) << " ";
+  DrakeToSpeedgoatUdpMessage msg(num_fingers_);
+
+  msg.utime = context.get_time() * 1e6;
   const systems::BasicVector<double>* input = this->EvalVectorInput(context, 0);
   for (int i = 0; i < num_fingers_; ++i) {
-    ss << input->GetAtIndex(2 * i) << " ";
-    ss << input->GetAtIndex(2 * i + 1) << " ";
+    msg.f_BC(0, i) = input->GetAtIndex(2 * i);
+    msg.f_BC(1, i) = input->GetAtIndex(2 * i + 1);
   }
-  return ss.str();
+  std::vector<uint8_t> serialized_msg(msg.message_size());
+  msg.Serialize(&serialized_msg);
+  return serialized_msg;
 }
 
 systems::EventStatus
 DesiredContactForceUdpPublisherSystem::PublishInputAsUdpMessage(
     const systems::Context<double>& context) const {
-  const std::string output_msg = this->Serialize(context);
+  const std::vector<uint8_t> output_msg = this->Serialize(context);
 
   struct sockaddr_in servaddr;
   servaddr.sin_family = AF_INET;
   servaddr.sin_port = htons(server_port_);
   servaddr.sin_addr.s_addr = htonl(server_address_);
   int status =
-      sendto(file_descriptor_, output_msg.c_str(), output_msg.length(), 0,
+      sendto(file_descriptor_, output_msg.data(), output_msg.size(), 0,
              reinterpret_cast<struct sockaddr*>(&servaddr), sizeof(servaddr));
   if (status < 0) {
     throw std::runtime_error("Cannot send the UDP message.");
   }
-  std::cout << "send UDP message\n";
   return systems::EventStatus::Succeeded();
 }
 
-std::string DesiredContactForceUdpPublisherSystem::MakeOutput() const {
-  std::string output;
-  return output;
+std::vector<uint8_t> DesiredContactForceUdpPublisherSystem::MakeOutput() const {
+  std::vector<uint8_t> msg(
+      DrakeToSpeedgoatUdpMessage::message_size(num_fingers_));
+  return msg;
 }
 
 void DesiredContactForceUdpPublisherSystem::Output(
-    const systems::Context<double>& context, std::string* output) const {
+    const systems::Context<double>& context,
+    std::vector<uint8_t>* output) const {
   *output = this->Serialize(context);
 }
 
