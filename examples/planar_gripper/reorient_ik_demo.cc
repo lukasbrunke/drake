@@ -69,7 +69,7 @@ void FixFingerPositionInBrickFrame(
 
 Eigen::MatrixXd InterpolateTrajectory(
     const GripperBrickHelper<double>& gripper_brick_system, int num_samples,
-    const optional<Finger>& moving_finger_index,
+    const std::optional<Finger>& moving_finger_index,
     const Eigen::Ref<const Eigen::VectorXd>& q_start,
     const Eigen::Ref<const Eigen::VectorXd>& q_end,
     const systems::Context<double>& plant_fixed_context,
@@ -115,6 +115,9 @@ Eigen::MatrixXd InterpolateTrajectory(
         SortedPair<geometry::GeometryId> geometry_pair(
             gripper_brick_system.brick_geometry_id(),
             gripper_brick_system.finger_tip_sphere_geometry_id(finger));
+        SortedPair<geometry::GeometryId> link2_brick_pair(
+            gripper_brick_system.brick_geometry_id(),
+            gripper_brick_system.finger_link2_cylinder_geometry_id(finger));
         if (i >= 1) {
           double min_distance = 0.01;
           auto it = knot_min_distance.find(i);
@@ -125,6 +128,10 @@ Eigen::MatrixXd InterpolateTrajectory(
               std::make_shared<multibody::DistanceConstraint>(
                   &plant, geometry_pair, plant_contexts[i], min_distance, kInf),
               q.col(i));
+          prog.AddConstraint(std::make_shared<multibody::DistanceConstraint>(
+                                 &plant, link2_brick_pair, plant_contexts[i],
+                                 min_distance, kInf),
+                             q.col(i));
         }
         prog.AddConstraint(std::make_shared<multibody::DistanceConstraint>(
                                &plant, geometry_pair,
@@ -180,19 +187,6 @@ void RotateBoxByCertainDegree(
           rotate_angle_upper,
       ik->q()(gripper_brick_system.brick_revolute_x_position_index()));
 }
-
-//
-// void AddStaticEquilibriumConstraint(
-//    const GripperBrickHelper<double>& gripper_brick_system,
-//    const std::vector<std::pair<int, BrickFace>>& finger_face_contacts,
-//    double static_friction, systems::Context<double>* plant_mutable_context,
-//    solvers::MathematicalProgram* prog) {
-//  // force in the body frame.
-//  auto f = prog->NewContinuousVariables<2, Eigen::Dynamic>(
-//      2, finger_face_contacts.size());
-//  // The total force on the brick should be 0.
-//  // The total wrench on the brick should be 0.
-//}
 
 Eigen::VectorXd FindInitialPosture(
     const GripperBrickHelper<double>& gripper_brick_system,
@@ -253,6 +247,14 @@ Eigen::VectorXd FindPosture(
     AddFingerTipInContactWithBrickFaceConstraint(
         gripper_brick_system, moving_finger.first, moving_finger.second,
         ik.get_mutable_prog(), ik.q(), ik.get_mutable_context(), 0.82, 0);
+  }
+  // For all fingers, the link2 of the finger should not contact the manipuland.
+  for (Finger finger : {Finger::kFinger1, Finger::kFinger2, Finger::kFinger3}) {
+    ik.AddDistanceConstraint(
+        SortedPair<geometry::GeometryId>(
+            gripper_brick_system.brick_geometry_id(),
+            gripper_brick_system.finger_link2_cylinder_geometry_id(finger)),
+        0.01, kInf);
   }
   auto result = solvers::Solve(
       ik.prog(),
@@ -393,7 +395,7 @@ int DoMain() {
   delta_q_max(
       gripper_brick_system.finger_mid_position_index(Finger::kFinger1)) = 0.25;
   const Eigen::MatrixXd q_move1 =
-      InterpolateTrajectory(gripper_brick_system, 9, Finger::kFinger1, q0, q1,
+      InterpolateTrajectory(gripper_brick_system, 10, Finger::kFinger1, q0, q1,
                             *plant_mutable_context, delta_q_max);
   VisualizePostures(gripper_brick_system, q_move1, plant_mutable_context,
                     diagram_context.get());
@@ -402,7 +404,7 @@ int DoMain() {
 
   // Now rotate the brick by certain degrees.
   const Eigen::MatrixXd q_move2 = RotateBlockToPosture(
-      gripper_brick_system, q1, 40.0 / 180 * M_PI, 70.0 / 180 * M_PI,
+      gripper_brick_system, q1, 30.0 / 180 * M_PI, 70.0 / 180 * M_PI,
       delta_q_max, 7, plant_mutable_context);
   VisualizePostures(gripper_brick_system, q_move2, plant_mutable_context,
                     diagram_context.get());

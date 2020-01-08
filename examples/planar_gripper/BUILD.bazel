@@ -14,24 +14,6 @@ load(
     "drake_cc_vector_gen_library",
 )
 
-drake_py_binary(
-    name = "planar_gripper_simulation_py",
-    srcs = ["planar_gripper_simulation.py"],
-    add_test_rule = 1,
-    data = [
-        "//examples/planar_gripper:planar_brick.sdf",
-        "//examples/planar_gripper:planar_gripper.sdf",
-    ],
-    test_rule_args = [
-        "--target_realtime_rate=0",
-        "--simulation_time=0.1",
-    ],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//bindings/pydrake",
-    ],
-)
-
 drake_cc_library(
     name = "planar_gripper_common",
     srcs = ["planar_gripper_common.cc"],
@@ -77,24 +59,6 @@ drake_cc_library(
         "//multibody/plant",
         "//solvers:constraint",
         "//solvers:mathematical_program",
-    ],
-)
-
-drake_py_binary(
-    name = "planar_finger_simulation_py",
-    srcs = ["planar_finger_simulation.py"],
-    add_test_rule = 1,
-    data = [
-        "//examples/planar_gripper:1dof_brick.sdf",
-        "//examples/planar_gripper:planar_finger.sdf",
-    ],
-    test_rule_args = [
-        "--target_realtime_rate=0",
-        "--simulation_time=0.1",
-    ],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//bindings/pydrake",
     ],
 )
 

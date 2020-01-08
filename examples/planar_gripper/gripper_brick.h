@@ -91,6 +91,8 @@ class GripperBrickHelper {
 
   geometry::GeometryId finger_tip_sphere_geometry_id(Finger finger) const;
 
+  geometry::GeometryId finger_link2_cylinder_geometry_id(Finger finger) const;
+
   geometry::GeometryId brick_geometry_id() const {
     return plant_->GetCollisionGeometriesForBody(brick_frame().body())[0];
   }
@@ -114,6 +116,8 @@ class GripperBrickHelper {
       finger_link2_frames_;
   std::array<geometry::GeometryId, kNumFingers>
       finger_tip_sphere_geometry_ids_;
+  std::array<geometry::GeometryId, kNumFingers>
+      finger_link2_cylinder_geometry_ids_;
 
   Eigen::Vector3d p_L2Fingertip_;
   double finger_tip_radius_;

@@ -72,6 +72,11 @@ GripperBrickHelper<T>::GripperBrickHelper() {
                 ->GetBodyByName("finger" + std::to_string(i + 1) + "_tip_link")
                 .index()),
         geometry::Role::kProximity, "gripper::tip_sphere_collision");
+    finger_link2_cylinder_geometry_ids_[i] = inspector.GetGeometryIdByName(
+        plant_->GetBodyFrameIdOrThrow(
+            plant_->GetBodyByName("finger" + std::to_string(i + 1) + "_link2")
+                .index()),
+        geometry::Role::kProximity, "gripper::link2_collision");
   }
   const geometry::Shape& fingertip_shape =
       inspector.GetShape(finger_tip_sphere_geometry_ids_[0]);
@@ -176,6 +181,26 @@ geometry::GeometryId GripperBrickHelper<T>::finger_tip_sphere_geometry_id(
     default: {
       throw std::invalid_argument(
           "finger_tip_sphere_geometry_id(): unknown finger.");
+    }
+  }
+}
+
+template <typename T>
+geometry::GeometryId GripperBrickHelper<T>::finger_link2_cylinder_geometry_id(
+    Finger finger) const {
+  switch (finger) {
+    case Finger::kFinger1: {
+      return finger_link2_cylinder_geometry_ids_[0];
+    }
+    case Finger::kFinger2: {
+      return finger_link2_cylinder_geometry_ids_[1];
+    }
+    case Finger::kFinger3: {
+      return finger_link2_cylinder_geometry_ids_[2];
+    }
+    default: {
+      throw std::invalid_argument(
+          "finger_link2_cylinder_geometry_id(): unknown finger.");
     }
   }
 }
