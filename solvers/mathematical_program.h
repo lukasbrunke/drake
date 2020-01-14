@@ -1164,6 +1164,24 @@ class MathematicalProgram {
     return AddLinearConstraint(A, lb, ub, ConcatenateVariableRefList(vars));
   }
 
+  template <typename DerivedA, typename DerivedLB, typename DerivedUB,
+            typename DerivedX>
+  std::enable_if<is_eigen_nonvector_of<DerivedA, double>::value &&
+                     is_eigen_nonvector_of<DerivedLB, double>::value &&
+                     is_eigen_nonvector_of<DerivedUB, double> &&
+                     is_eigen_nonvector_of<DerivedX, symbolic::Variable>::value,
+                 Binding<LinearConstraint>>::type
+  AddLinearConstraint(const Eigen::MatrixBase<DerivedA>& A,
+                      const Eigen::MatrixBase<DerivedLB>& LB,
+                      const Eigen::MatrixBase<DerivedUB>& UB,
+                      const Eigen::MatrixBase<DerivedX>& X) {
+    DRAKE_DEMAND(A.rows() == LB.rows());
+    DRAKE_DEMAND(A.rows() == UB.rows());
+    DRAKE_DEMAND(A.cols() == X.rows());
+    DRAKE_DEMAND(X.cols() == LB.cols())
+    DRAKE_DEMAND(X.cols() == UB.cols())
+  }
+
   /**
    * Adds linear constraints referencing potentially a subset
    * of the decision variables (defined in the vars parameter).
