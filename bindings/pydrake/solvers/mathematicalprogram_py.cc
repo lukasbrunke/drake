@@ -554,6 +554,20 @@ top-level documentation for :py:mod:`pydrake.math`.
           py::arg("formulas"),
           doc.MathematicalProgram.AddLinearConstraint
               .doc_1args_constEigenArrayBase)
+      .def("AddMatrixLinearConstraint",
+          [](MathematicalProgram* self,
+              const Eigen::Ref<const Eigen::MatrixXd>& A,
+              const Eigen::Ref<const Eigen::MatrixXd>& LB,
+              const Eigen::Ref<const Eigen::MatrixXd>& UB,
+              const Eigen::Ref<const MatrixX<symbolic::Variable>>& X) {
+            return self->AddLinearConstraint<Eigen::MatrixXd, Eigen::MatrixXd,
+                Eigen::MatrixXd, MatrixX<symbolic::Variable>>(
+                Eigen::MatrixXd(A), Eigen::MatrixXd(LB), Eigen::MatrixXd(UB),
+                MatrixX<symbolic::Variable>(X));
+          },
+          py::arg("A"), py::arg("LB"), py::arg("UB"), py::arg("X"),
+          doc.MathematicalProgram.AddLinearConstraint
+              .doc_4args_constEigenMatrixBase_constEigenMatrixBase_constEigenMatrixBase_constEigenMatrixBase)
       .def("AddLinearEqualityConstraint",
           static_cast<Binding<LinearEqualityConstraint> (
               MathematicalProgram::*)(const Eigen::Ref<const Eigen::MatrixXd>&,

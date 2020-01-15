@@ -1578,6 +1578,34 @@ GTEST_TEST(TestMathematicalProgram,
   EXPECT_THROW(prog.AddLinearConstraint(M_f.array()), runtime_error);
 }
 
+GTEST_TEST(TestMathematicalProgram, AddLinearConstraintInMatrixForm) {
+  MathematicalProgram prog;
+  auto X = prog.NewContinuousVariables<2, 3>("X");
+  Eigen::Matrix2d A;
+  A << 1, 2, 0, -1;
+  Eigen::Matrix<double, 2, 3> LB, UB;
+  LB << 0, 1, 2, 3, 4, 5;
+  UB << 1, 2, 3, 4, 5, 6;
+  auto binding = prog.AddLinearConstraint(A, LB, UB, X);
+  EXPECT_EQ(binding.GetNumElements(), 6);
+  Vector6<symbolic::Variable> flat_vars;
+  flat_vars << X(0, 0), X(1, 0), X(0, 1), X(1, 1), X(0, 2), X(1, 2);
+  for (int i = 0; i < 6; ++i) {
+    EXPECT_EQ(binding.variables()(i), flat_vars(i));
+  }
+  Eigen::Matrix<double, 6, 6> A_flat;
+  A_flat.setZero();
+  A_flat.block<2, 2>(0, 0) = A;
+  A_flat.block<2, 2>(2, 2) = A;
+  A_flat.block<2, 2>(4, 4) = A;
+  EXPECT_TRUE(CompareMatrices(binding.evaluator()->A(), A_flat));
+  Eigen::Matrix<double, 6, 1> lb_flat, ub_flat;
+  lb_flat << 0, 3, 1, 4, 2, 5;
+  ub_flat << 1, 4, 2, 5, 3, 6;
+  EXPECT_TRUE(CompareMatrices(binding.evaluator()->lower_bound(), lb_flat));
+  EXPECT_TRUE(CompareMatrices(binding.evaluator()->upper_bound(), ub_flat));
+}
+
 namespace {
 void CheckAddedLinearEqualityConstraintCommon(
     const Binding<LinearEqualityConstraint>& binding,
