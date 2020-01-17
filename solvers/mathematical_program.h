@@ -1175,7 +1175,7 @@ class MathematicalProgram {
           is_eigen_nonvector_of<DerivedLB, double>::value &&
           is_eigen_nonvector_of<DerivedUB, double>::value &&
           is_eigen_nonvector_of<DerivedX, symbolic::Variable>::value,
-      Binding<LinearConstraint>>::type
+      std::vector<Binding<LinearConstraint>>>::type
   AddLinearConstraint(const Eigen::MatrixBase<DerivedA>& A,
                       const Eigen::MatrixBase<DerivedLB>& LB,
                       const Eigen::MatrixBase<DerivedUB>& UB,
@@ -1185,18 +1185,12 @@ class MathematicalProgram {
     DRAKE_DEMAND(A.cols() == X.rows());
     DRAKE_DEMAND(X.cols() == LB.cols());
     DRAKE_DEMAND(X.cols() == UB.cols());
-    Eigen::MatrixXd A_blk_diag(A.rows() * X.cols(), A.cols() * X.cols());
-    A_blk_diag.setZero();
-    Eigen::VectorXd lb_flat(LB.rows() * LB.cols());
-    Eigen::VectorXd ub_flat(UB.rows() * UB.cols());
-    VectorX<symbolic::Variable> X_flat(X.rows() * X.cols());
+    std::vector<Binding<LinearConstraint>> bindings;
+    bindings.reserve(X.cols());
     for (int i = 0; i < X.cols(); ++i) {
-      A_blk_diag.block(i * A.rows(), i * A.cols(), A.rows(), A.cols()) = A;
-      lb_flat.segment(i * LB.rows(), LB.rows()) = LB.col(i);
-      ub_flat.segment(i * UB.rows(), UB.rows()) = UB.col(i);
-      X_flat.segment(i * X.rows(), X.rows()) = X.col(i);
+      bindings.push_back(AddLinearConstraint(A, LB.col(i), UB.col(i), X.col(i)));
     }
-    return AddLinearConstraint(A_blk_diag, lb_flat, ub_flat, X_flat);
+    return bindings;
   }
 
   /**
