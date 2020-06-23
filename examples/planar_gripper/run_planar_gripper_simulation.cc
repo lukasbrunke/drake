@@ -122,6 +122,10 @@ DEFINE_string(keyframes_filename, "postures.txt",
               "The name of the file containing the keyframes.");
 DEFINE_bool(zero_gravity, true, "Set MBP gravity vector to zero?");
 DEFINE_bool(add_floor, true, "Adds a floor to the simulation");
+DEFINE_double(goal_theta, 0., "brick goal theta angle.");
+DEFINE_double(goal_brick_y, 0., "brick goal y position.");
+DEFINE_double(goal_brick_z, 0., "brick goal z position.");
+
 
 int DoMain() {
   systems::DiagramBuilder<double> builder;
@@ -130,6 +134,14 @@ int DoMain() {
       FLAGS_use_position_control ? ControlType::kPosition
                                  : ControlType::kTorque,
       FLAGS_add_floor);
+  Eigen::VectorXd Kp(kNumGripperJoints);
+  Eigen::VectorXd Ki(kNumGripperJoints);
+  Eigen::VectorXd Kd(kNumGripperJoints);
+  planar_gripper->GetInverseDynamicsControlGains(&Kp, &Ki, &Kd);
+  std::cout << "Kp: " << Kp.transpose() << "\n";
+  std::cout << "Ki: " << Ki.transpose() << "\n";
+  std::cout << "Kd: " << Kd.transpose() << "\n";
+  planar_gripper->SetInverseDynamicsControlGains(2 * Kp, 2 * Ki, 2 * Kd);
 
   // Set some plant parameters.
   planar_gripper->set_floor_coef_static_friction(
@@ -197,6 +209,11 @@ int DoMain() {
       planar_gripper->get_multibody_plant(), &drake_lcm, 1.0 / 60.0, false);
   builder.Connect(planar_gripper->GetOutputPort("plant_state"),
                   frame_viz->get_input_port(0));
+  math::RigidTransformd goal_frame;
+  goal_frame.set_rotation(math::RollPitchYaw<double>(FLAGS_goal_theta, 0, 0));
+  goal_frame.set_translation(Eigen::Vector3d(0, FLAGS_goal_brick_y, FLAGS_goal_brick_z));
+  PublishFramesToLcm("GOAL_FRAME", {goal_frame}, {"goal"}, &drake_lcm);
+
 
   geometry::ConnectDrakeVisualizer(&builder,
                                    planar_gripper->get_mutable_scene_graph(),
