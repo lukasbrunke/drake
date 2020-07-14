@@ -233,6 +233,7 @@ drake_cc_binary(
     add_test_rule = 1,
     data = [
         ":keyframe_files",
+        "//examples/planar_gripper:planar_postures.txt",
     ],
     test_rule_args = [
         "--simulation_time=0.1",

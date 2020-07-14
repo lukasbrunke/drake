@@ -89,6 +89,7 @@ systems::EventStatus GripperCommandDecoder::UpdateDiscreteState(
     torques(st_index) = fcommand.joint_torque[0];
     torques(st_index + 1) = fcommand.joint_torque[1];
   }
+  std::cout << "context time: " << context.get_time() << "command time: " << command.utime/1e6 << " finger 3 mid joint velocity " << velocities[5] << "\n";
 
   return systems::EventStatus::Succeeded();
 }
