@@ -1,6 +1,8 @@
 #include "drake/examples/planar_gripper/planar_gripper_lcm.h"
 
 #include <algorithm>
+#include <chrono>
+#include <iomanip>
 #include <string>
 #include <utility>
 #include <vector>
@@ -89,7 +91,13 @@ systems::EventStatus GripperCommandDecoder::UpdateDiscreteState(
     torques(st_index) = fcommand.joint_torque[0];
     torques(st_index + 1) = fcommand.joint_torque[1];
   }
-  std::cout << "context time: " << context.get_time() << "command time: " << command.utime/1e6 << " finger 3 mid joint velocity " << velocities[5] << "\n";
+
+  double time_since_epoch = (std::chrono::duration_cast<std::chrono::milliseconds>(
+                   std::chrono::system_clock::now().time_since_epoch()).count()) / 1e3;
+  std::cout << "receiver context time: " << context.get_time()
+            << " command.time in s : " << command.utime / 1e6
+            << " finger 3 mid joint velocity " << velocities[5]
+            << " time since epoch " << std::fixed << std::setprecision(5) << time_since_epoch << "\n";
 
   return systems::EventStatus::Succeeded();
 }
@@ -537,6 +545,13 @@ void QPEstimatedStateEncoder::EncodeEstimatedState(
     drake::lcmt_planar_plant_state* planar_plant_state_lcm) const {
   planar_plant_state_lcm->utime =
       static_cast<int64_t>(context.get_time() * 1e6);
+  std::cout << "state encoder time in s " << context.get_time()
+            << " time since epoch "
+            << (std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::system_clock::now().time_since_epoch())
+                    .count()) /
+                   1e3
+            << "\n";
   planar_plant_state_lcm->num_states = num_plant_states_;
   VectorX<double> estimated_plant_state =
       this->EvalVectorInput(
