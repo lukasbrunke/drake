@@ -132,4 +132,14 @@ if __name__ == "__main__":
     context.FixInputPort(0, [0])
 
     simulator.set_publish_every_time_step(True)
-    simulator.AdvanceTo(4.)
+    x_initials = [np.array([0.4 * np.pi, 0.5]),
+                  np.array([-0.3*np.pi, 0.1]), np.array([0.2*np.pi, 1.5])]
+    for x0 in x_initials:
+        context.SetTime(0.)
+        simulator.Initialize()
+        pendulum_context = diagram.GetMutableSubsystemContext(
+            pendulum, context)
+        pendulum_context.get_mutable_continuous_state_vector().SetFromVector(
+            [x0[0], x0[1]])
+        visualizer.pendulum_states_energy = np.empty((3,0))
+        simulator.AdvanceTo(3)
