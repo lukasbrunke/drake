@@ -19,6 +19,7 @@
 #include "drake/multibody/benchmarks/inclined_plane/inclined_plane_plant.h"
 #include "drake/multibody/contact_solvers/mp_convex_solver.h"
 #include "drake/multibody/plant/contact_results_to_lcm.h"
+#include "drake/solvers/conex_solver.h"
 #include "drake/solvers/gurobi_solver.h"
 #include "drake/solvers/ipopt_solver.h"
 #include "drake/solvers/nlopt_solver.h"
@@ -74,7 +75,7 @@ DEFINE_double(viz_period, 1.0 / 60.0, "Viz period.");
 // Discrete contact solver.
 DEFINE_bool(tamsi, false, "Use TAMSI (true) or MpConvexSolver (false).");
 // If using Gurobi, compile with: bazel run --config gurobi ....
-DEFINE_string(solver, "gurobi", "Underlying solver. 'gurobi', 'scs'");
+DEFINE_string(solver, "gurobi", "Underlying solver. 'gurobi', 'scs', 'conex'");
 
 using drake::math::RigidTransform;
 using drake::math::RigidTransformd;
@@ -378,7 +379,9 @@ int do_main() {
     // Nlopt: "converges", but analytical ID errors are large.
     // params.solver_id = solvers::NloptSolver::id();
 
-    if (FLAGS_solver == "scs") {
+    if (FLAGS_solver == "conex") {
+      params.solver_id = solvers::ConexSolver::id();
+    } else if (FLAGS_solver == "scs") {
       // ScsSolver: Shows good performance/convergence.
       params.solver_id = solvers::ScsSolver::id();
     } else if (FLAGS_solver == "gurobi") {
