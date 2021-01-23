@@ -86,6 +86,8 @@ void ParseLinearCost(const MathematicalProgram& prog, Eigen::VectorXd* c,
 }
 
 void ParseLinearConstraint(const MathematicalProgram& prog, conex::Program* conex_prog) {
+    static const logging::Warn log_once(
+      "Temporary Conex build disables these constraints.");
   for (const auto& linear_constraint : prog.linear_constraints()) {
     const Eigen::VectorXd& ub = linear_constraint.evaluator()->upper_bound();
     const Eigen::VectorXd& lb = linear_constraint.evaluator()->lower_bound();
@@ -118,6 +120,8 @@ void ParseLinearConstraint(const MathematicalProgram& prog, conex::Program* cone
 
 void ParseBoundingBoxConstraint(const MathematicalProgram& prog,
                                      conex::Program* conex_prog) {
+    static const logging::Warn log_once(
+      "Temporary Conex build disables these constraints.");
   for (const auto& bounding_box_constraint : prog.bounding_box_constraints()) {
     std::vector<double> lower_bounds;
     std::vector<double> upper_bounds;
@@ -161,6 +165,8 @@ void ParseSecondOrderConeConstraints(const MathematicalProgram& prog,
 
   for (const auto& constraint :
        prog.rotated_lorentz_cone_constraints()) {
+    static const logging::Warn log_once(
+      "Temporary Conex build disables these constraints.");
     const VectorXDecisionVariable& x = constraint.variables();
     const std::vector<int> x_indices = prog.FindDecisionVariableIndices(x);
     MatrixXd Atemp = constraint.evaluator()->A();
@@ -178,6 +184,8 @@ void ParseSecondOrderConeConstraints(const MathematicalProgram& prog,
 void ParseLinearEqualityConstraint(const MathematicalProgram& prog,
                                      conex::Program* conex_prog) {
 
+    static const logging::Warn log_once(
+      "Temporary Conex build disables these constraints.");
   for (const auto& constraint : prog.linear_equality_constraints()) {
     const VectorXDecisionVariable& x = constraint.variables();
     const std::vector<int> x_indices = prog.FindDecisionVariableIndices(x);
@@ -189,6 +197,8 @@ void ParseLinearEqualityConstraint(const MathematicalProgram& prog,
 
 void ParsePositiveSemidefiniteConstraint(const MathematicalProgram& prog,
                                      conex::Program* conex_prog) {
+    static const logging::Warn log_once(
+      "Temporary Conex build disables these constraints.");
   DRAKE_DEMAND(prog.positive_semidefinite_constraints().size() == 0);
   // TODO(FrankPermenter): Add support for these constraints.
   //  for (const auto& psd_constraint : prog.positive_semidefinite_constraints()) {
@@ -281,11 +291,15 @@ void ConexSolver::DoSolve(
   ParseSecondOrderConeConstraints(prog, &conex_prog);
 
   conex::SolverConfiguration config;
-  config.prepare_dual_variables = 1;
-  config.max_iterations = 25;
-  config.divergence_upper_bound = 1000;
-  config.final_centering_steps = 0;
+
+  config.prepare_dual_variables = 0;
+  config.max_iterations = 35;
+  config.maximum_mu = 1;
+  config.divergence_upper_bound = 100;
+  config.final_centering_steps = 3;
   config.inv_sqrt_mu_max = 100000;
+  config.maximum_dinf = 5*std::sqrt(2);
+
   SolutionResult solution_result{SolutionResult::kSolutionFound};
   if (!conex::Solve(-c, conex_prog, config, x.data())) {
     solution_result = SolutionResult::kInfeasibleConstraints;
