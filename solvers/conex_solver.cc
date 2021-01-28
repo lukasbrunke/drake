@@ -86,8 +86,6 @@ void ParseLinearCost(const MathematicalProgram& prog, Eigen::VectorXd* c,
 }
 
 void ParseLinearConstraint(const MathematicalProgram& prog, conex::Program* conex_prog) {
-    static const logging::Warn log_once(
-      "Temporary Conex build disables these constraints.");
   for (const auto& linear_constraint : prog.linear_constraints()) {
     const Eigen::VectorXd& ub = linear_constraint.evaluator()->upper_bound();
     const Eigen::VectorXd& lb = linear_constraint.evaluator()->lower_bound();
@@ -120,8 +118,6 @@ void ParseLinearConstraint(const MathematicalProgram& prog, conex::Program* cone
 
 void ParseBoundingBoxConstraint(const MathematicalProgram& prog,
                                      conex::Program* conex_prog) {
-    static const logging::Warn log_once(
-      "Temporary Conex build disables these constraints.");
   for (const auto& bounding_box_constraint : prog.bounding_box_constraints()) {
     std::vector<double> lower_bounds;
     std::vector<double> upper_bounds;
@@ -139,14 +135,10 @@ void ParseBoundingBoxConstraint(const MathematicalProgram& prog,
       }
     }
     if (upper_bounds.size() > 0) {
-      //DRAKE_DEMAND(conex_prog->AddConstraint(conex::UpperBound(Eigen::Map<VectorXd>(upper_bounds.data(), upper_bounds.size())), 
-      //                          upper_bounded_variables));
       conex_prog->AddConstraint(conex::UpperBound(Eigen::Map<VectorXd>(upper_bounds.data(), upper_bounds.size())), 
                                 upper_bounded_variables);
     }
     if (lower_bounds.size() > 0) {
-      //DRAKE_DEMAND(conex_prog->AddConstraint(conex::LowerBound(Eigen::Map<VectorXd>(lower_bounds.data(), lower_bounds.size())), 
-      //                          lower_bounded_variables));
       conex_prog->AddConstraint(conex::LowerBound(Eigen::Map<VectorXd>(lower_bounds.data(), lower_bounds.size())), 
                                 lower_bounded_variables);
     }
@@ -165,8 +157,6 @@ void ParseSecondOrderConeConstraints(const MathematicalProgram& prog,
 
   for (const auto& constraint :
        prog.rotated_lorentz_cone_constraints()) {
-    static const logging::Warn log_once(
-      "Temporary Conex build disables these constraints.");
     const VectorXDecisionVariable& x = constraint.variables();
     const std::vector<int> x_indices = prog.FindDecisionVariableIndices(x);
     MatrixXd Atemp = constraint.evaluator()->A();
@@ -184,8 +174,6 @@ void ParseSecondOrderConeConstraints(const MathematicalProgram& prog,
 void ParseLinearEqualityConstraint(const MathematicalProgram& prog,
                                      conex::Program* conex_prog) {
 
-    static const logging::Warn log_once(
-      "Temporary Conex build disables these constraints.");
   for (const auto& constraint : prog.linear_equality_constraints()) {
     const VectorXDecisionVariable& x = constraint.variables();
     const std::vector<int> x_indices = prog.FindDecisionVariableIndices(x);
@@ -197,13 +185,10 @@ void ParseLinearEqualityConstraint(const MathematicalProgram& prog,
 
 void ParsePositiveSemidefiniteConstraint(const MathematicalProgram& prog,
                                      conex::Program* conex_prog) {
-    static const logging::Warn log_once(
-      "Temporary Conex build disables these constraints.");
   DRAKE_DEMAND(prog.positive_semidefinite_constraints().size() == 0);
   // TODO(FrankPermenter): Add support for these constraints.
   //  for (const auto& psd_constraint : prog.positive_semidefinite_constraints()) {
   //  }
-
 
   for (const auto& lmi_constraint :
        prog.linear_matrix_inequality_constraints()) {
@@ -234,25 +219,8 @@ void ParseQuadraticCost(const MathematicalProgram& prog,
       (*linear_cost)(z_indices.at(i)) += cost.evaluator()->b()(i);
     }
 
-    // Set inner-product matrix Q of Lorentz cone L.
-    Eigen::MatrixXd Q(z.rows() + 1, z.rows() + 1);
-    Q.setZero(); Q(0, 0) = 1;
-    Q.bottomRightCorner(z.rows(), z.rows()) << cost.evaluator()->Q();
-
-    // Build (A, b) satisfying b - A(x, t) \in L <=> t >= 1/2 x^T Q x.
-    Eigen::MatrixXd A(z.rows() + 2, z.rows() + 1);
-    Eigen::MatrixXd b(z.rows() + 2, 1);
-    A.setZero(); b.setZero();
-    A.topRightCorner(2, 1) << -0.5, -0.5; 
-    A.bottomLeftCorner(z.rows(), z.rows()) = Eigen::MatrixXd::Identity(z.rows(), z.rows());
-    b(0) = 1; b(1) = -1;
-
-    // (.5 t+1)^2 >= (.5t-1)^2 + x^T Q x.
-    // .25 t^2 + t + 1  >= .25 t^2 - t + 1 + x^T Q x
-    // => 2t >= x^T Q x.
-
     z_indices.push_back(prog.num_vars() + count);
-    conex_prog->AddConstraint(conex::QuadraticConstraint(Q, A, b), z_indices);
+    conex_prog->AddConstraint(conex::QuadraticEpigraph(cost.evaluator()->Q()), z_indices);
     count++;
   }
 }
