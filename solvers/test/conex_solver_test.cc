@@ -21,7 +21,7 @@ constexpr double kTol = 1e-4;
 }  // namespace
 
 
-GTEST_TEST(TestConex, EqualityConstrainedQuadraticMinimization0) {
+GTEST_TEST(TestConex, QuadraticMinimization0) {
   MathematicalProgram prog;
   auto x = prog.NewContinuousVariables<2>();
 
@@ -32,8 +32,8 @@ GTEST_TEST(TestConex, EqualityConstrainedQuadraticMinimization0) {
       .1, 4;
   c << 1,
        2;
-
   // clang-format on
+
   prog.AddQuadraticCost(Q, c, x);
 
   ConexSolver solver;
@@ -43,7 +43,7 @@ GTEST_TEST(TestConex, EqualityConstrainedQuadraticMinimization0) {
   }
 }
 
-GTEST_TEST(TestConex, EqualityConstrainedQuadraticMinimization1) {
+GTEST_TEST(TestConex, QuadraticMinimization1) {
   MathematicalProgram prog;
   auto x = prog.NewContinuousVariables<2>();
   prog.AddQuadraticCost(x(0) * x(0) + x(1) * x(1) + x(0) + x(1));
@@ -57,7 +57,7 @@ GTEST_TEST(TestConex, EqualityConstrainedQuadraticMinimization1) {
   }
 }
 
-GTEST_TEST(TestConex, EqualityConstrainedQuadraticMinimization2) {
+GTEST_TEST(TestConex, QuadraticMinimization2) {
   MathematicalProgram prog;
   auto x = prog.NewContinuousVariables<2>();
   prog.AddQuadraticCost(x(0) * x(0) + x(1) * x(1) + x(0) + x(1));

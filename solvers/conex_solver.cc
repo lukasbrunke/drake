@@ -298,7 +298,6 @@ void ConexSolver::DoSolve(
   config.divergence_upper_bound = 100;
   config.final_centering_steps = 3;
   config.inv_sqrt_mu_max = 100000;
-  config.maximum_dinf = 5*std::sqrt(2);
 
   SolutionResult solution_result{SolutionResult::kSolutionFound};
   if (!conex::Solve(-c, conex_prog, config, x.data())) {
