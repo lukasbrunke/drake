@@ -14,6 +14,7 @@
 #include "drake/solvers/ipopt_solver.h"
 #include "drake/solvers/nlopt_solver.h"
 #include "drake/solvers/scs_solver.h"
+#include "drake/solvers/conex_solver.h"
 #include "drake/solvers/snopt_solver.h"
 #include "drake/systems/analysis/simulator.h"
 #include "drake/systems/analysis/simulator_gflags.h"
@@ -53,7 +54,7 @@ int do_main() {
       &builder, std::make_unique<MultibodyPlant<double>>(FLAGS_time_step));
 
   const std::string model_file_name =
-      "drake/examples/multibody/push_box/push_box.sdf";
+      "drake/examples/multibody/mp_convex_solver/push_box.sdf";
   const std::string full_name = FindResourceOrThrow(model_file_name);
 
   Parser parser(&plant);
@@ -102,7 +103,10 @@ int do_main() {
     // params.solver_id = solvers::NloptSolver::id();
 
     // ScsSolver: Shows good performance/convergence.
-    params.solver_id = solvers::ScsSolver::id();
+     params.solver_id = solvers::ScsSolver::id();
+
+
+//    params.solver_id = solvers::ConexSolver::id();
 
     // GurobiSolver.
     // Compile with: bazel run --config gurobi ....

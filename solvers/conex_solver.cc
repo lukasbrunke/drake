@@ -231,15 +231,19 @@ void ConexSolver::DoSolve(
     const Eigen::VectorXd& /*initial_guess*/,
     const SolverOptions& /*merged_options*/,
     MathematicalProgramResult* result) const {
+  static Eigen::VectorXd conex_workspace;
+  static bool do_warmstart = false;
   if (!prog.GetVariableScaling().empty()) {
     static const logging::Warn log_once(
       "ConexSolver doesn't support the feature of variable scaling.");
   }
 
+  static const logging::Warn log_once(
+      "Experimental Conex warmstart build. Do not change number of constraints or variables.");
   int num_vars = prog.num_vars();
   int num_epigraph_parameters = prog.quadratic_costs().size();
 
-  conex::Program conex_prog(num_vars + num_epigraph_parameters);
+  conex::Program conex_prog(num_vars + num_epigraph_parameters, &conex_workspace);
 
   // Our cost (LinearCost, QuadraticCost, etc) also allows a constant term, we
   // add these constant terms to `cost_constant`.
@@ -263,9 +267,13 @@ void ConexSolver::DoSolve(
   config.prepare_dual_variables = 0;
   config.max_iterations = 35;
   config.maximum_mu = 1;
-  config.divergence_upper_bound = 100;
-  config.final_centering_steps = 3;
-  config.inv_sqrt_mu_max = 100000;
+  config.divergence_upper_bound = 10000;
+  config.final_centering_steps = 1;
+  config.inv_sqrt_mu_max = 10000;
+  config.initialization_mode = do_warmstart;
+  
+
+  do_warmstart = true;
 
   SolutionResult solution_result{SolutionResult::kSolutionFound};
   if (!conex::Solve(-c, conex_prog, config, x.data())) {
