@@ -231,17 +231,19 @@ void ConexSolver::DoSolve(
     const Eigen::VectorXd& /*initial_guess*/,
     const SolverOptions& /*merged_options*/,
     MathematicalProgramResult* result) const {
-  static Eigen::VectorXd conex_workspace;
+  // Preallocate arbitrary amount of memory for internal conex workspace.
+  static Eigen::VectorXd conex_workspace(4000);
   static bool do_warmstart = false;
   if (!prog.GetVariableScaling().empty()) {
     static const logging::Warn log_once(
       "ConexSolver doesn't support the feature of variable scaling.");
   }
 
-  static const logging::Warn log_once(
-      "Experimental Conex warmstart build. Do not change number of constraints or variables.");
   int num_vars = prog.num_vars();
   int num_epigraph_parameters = prog.quadratic_costs().size();
+  static int num_vars_last = -1;
+  static int num_constraints_last = -1;
+  static int num_constraints;
 
   conex::Program conex_prog(num_vars + num_epigraph_parameters, &conex_workspace);
 
@@ -262,18 +264,22 @@ void ConexSolver::DoSolve(
   ParsePositiveSemidefiniteConstraint(prog, &conex_prog);
   ParseSecondOrderConeConstraints(prog, &conex_prog);
 
+  num_constraints = conex_prog.NumberOfConstraints();
   conex::SolverConfiguration config;
 
   config.prepare_dual_variables = 0;
-  config.max_iterations = 35;
-  config.maximum_mu = 1;
-  config.divergence_upper_bound = 10000;
-  config.final_centering_steps = 1;
-  config.inv_sqrt_mu_max = 10000;
-  config.initialization_mode = do_warmstart;
-  
+  config.maximum_mu = 1e7;
+  config.infeasibility_threshold = 1e8; 
+  config.divergence_upper_bound = 1;
+  config.final_centering_steps = 5;
+  config.max_iterations = 30;
+  config.inv_sqrt_mu_max = 1000;
+  config.initial_centering_steps_warmstart = 0;
+  config.initial_centering_steps_coldstart = 0;
+  config.initialization_mode = num_vars_last == num_vars && num_constraints == num_constraints_last;
 
-  do_warmstart = true;
+  num_vars_last = num_vars;
+  num_constraints_last = num_constraints;
 
   SolutionResult solution_result{SolutionResult::kSolutionFound};
   if (!conex::Solve(-c, conex_prog, config, x.data())) {

@@ -103,10 +103,10 @@ int do_main() {
     // params.solver_id = solvers::NloptSolver::id();
 
     // ScsSolver: Shows good performance/convergence.
-     params.solver_id = solvers::ScsSolver::id();
+    // params.solver_id = solvers::ScsSolver::id();
 
 
-//    params.solver_id = solvers::ConexSolver::id();
+    params.solver_id = solvers::ConexSolver::id();
 
     // GurobiSolver.
     // Compile with: bazel run --config gurobi ....
