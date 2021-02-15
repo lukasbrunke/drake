@@ -244,7 +244,6 @@ TEST_P(TestEllipsoidsSeparation, TestSOCP) {
   }
 }
 
-#if 0
 INSTANTIATE_TEST_SUITE_P(ConexTest, TestEllipsoidsSeparation,
                         ::testing::ValuesIn(GetEllipsoidsSeparationProblems()));
 
@@ -301,6 +300,7 @@ TEST_P(QuadraticProgramTest, TestQP) {
   }
 }
 
+#if 0
 INSTANTIATE_TEST_SUITE_P(
     ConexTest, QuadraticProgramTest,
     ::testing::Combine(::testing::ValuesIn(quadratic_cost_form()),
@@ -320,7 +320,6 @@ GTEST_TEST(TestSemidefiniteProgram, TrivialSDP) {
     TestTrivialSDP(scs_solver, kTol);
   }
 }
-
 GTEST_TEST(TestSemidefiniteProgram, CommonLyapunov) {
   ConexSolver scs_solver;
   if (scs_solver.available()) {

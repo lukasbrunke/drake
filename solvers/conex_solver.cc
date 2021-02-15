@@ -163,9 +163,9 @@ void ParseSecondOrderConeConstraints(const MathematicalProgram& prog,
     MatrixXd btemp = constraint.evaluator()->b();
     MatrixXd A = Atemp; MatrixXd b = btemp;
     A.row(0) = .5*(Atemp.row(0) + Atemp.row(1));
-    b.row(0) = .5*(b.row(0) + b.row(1));
     A.row(1) = .5*(Atemp.row(0) - Atemp.row(1));
-    b.row(1) = .5*(b.row(0) - b.row(1));
+    b.row(0) = .5*(btemp.row(0) + btemp.row(1));
+    b.row(1) = .5*(btemp.row(0) - btemp.row(1));
     A.array() *= -1;
     conex_prog->AddConstraint(conex::QuadraticConstraint(A, b), x_indices);
   }
