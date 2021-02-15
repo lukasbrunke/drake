@@ -269,25 +269,34 @@ void ConexSolver::DoSolve(
 
   config.prepare_dual_variables = 0;
   config.maximum_mu = 1e7;
-  config.infeasibility_threshold = 1e8; 
+  config.warmstart_abort_threshold = 1;
+  config.infeasibility_threshold = 9e6; 
   config.divergence_upper_bound = 1;
-  config.final_centering_steps = 5;
-  config.max_iterations = 30;
-  config.inv_sqrt_mu_max = 1000;
-  config.initial_centering_steps_warmstart = 0;
-  config.initial_centering_steps_coldstart = 0;
+  config.final_centering_steps = 10;
+  config.max_iterations = 35;
+  config.inv_sqrt_mu_max = 10000;
   config.initialization_mode = num_vars_last == num_vars && num_constraints == num_constraints_last;
 
   num_vars_last = num_vars;
   num_constraints_last = num_constraints;
 
   SolutionResult solution_result{SolutionResult::kSolutionFound};
+
   if (!conex::Solve(-c, conex_prog, config, x.data())) {
-    solution_result = SolutionResult::kInfeasibleConstraints;
+    if (conex_prog.Status().primal_infeasible) {
+      solution_result = SolutionResult::kInfeasibleConstraints;
+      result->set_optimal_cost(MathematicalProgram::kGlobalInfeasibleCost);
+    } else {
+      if (conex_prog.Status().dual_infeasible) {
+        solution_result = SolutionResult::kUnbounded;
+        result->set_optimal_cost(MathematicalProgram::kUnboundedCost);
+      }
+    }
+  } else {
+    result->set_optimal_cost(c.dot(x) + cost_constant);
   }
   result->set_x_val(x.head(num_vars));
   result->set_solution_result(solution_result);
-  result->set_optimal_cost(c.dot(x) + cost_constant);
 }
 
 }  // namespace solvers
