@@ -209,6 +209,7 @@ void ParsePositiveSemidefiniteConstraint(const MathematicalProgram& prog,
 
 void ParseQuadraticCost(const MathematicalProgram& prog,
                         Eigen::VectorXd* linear_cost,
+                        double* constant_term,
                         conex::Program* conex_prog) {
   int count = 0;
 
@@ -221,6 +222,7 @@ void ParseQuadraticCost(const MathematicalProgram& prog,
 
     z_indices.push_back(prog.num_vars() + count);
     conex_prog->AddConstraint(conex::QuadraticEpigraph(cost.evaluator()->Q()), z_indices);
+    *constant_term += cost.evaluator()->c();
     count++;
   }
 }
@@ -257,7 +259,7 @@ void ConexSolver::DoSolve(
   if (num_epigraph_parameters > 0) {
     c.tail(num_epigraph_parameters).array() = 1;
   }
-  ParseQuadraticCost(prog, &c, &conex_prog);
+  ParseQuadraticCost(prog, &c, &cost_constant, &conex_prog);
   ParseLinearEqualityConstraint(prog, &conex_prog);
   ParseBoundingBoxConstraint(prog, &conex_prog); 
   ParseLinearConstraint(prog, &conex_prog);
@@ -272,8 +274,8 @@ void ConexSolver::DoSolve(
   config.warmstart_abort_threshold = 1;
   config.infeasibility_threshold = 9e6; 
   config.divergence_upper_bound = 1;
-  config.final_centering_steps = 10;
-  config.max_iterations = 35;
+  config.final_centering_steps = 5;
+  config.max_iterations = 45;
   config.inv_sqrt_mu_max = 10000;
   config.initialization_mode = num_vars_last == num_vars && num_constraints == num_constraints_last;
 

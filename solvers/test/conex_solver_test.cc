@@ -300,7 +300,6 @@ TEST_P(QuadraticProgramTest, TestQP) {
   }
 }
 
-#if 0
 INSTANTIATE_TEST_SUITE_P(
     ConexTest, QuadraticProgramTest,
     ::testing::Combine(::testing::ValuesIn(quadratic_cost_form()),
@@ -314,6 +313,7 @@ GTEST_TEST(QPtest, TestUnitBallExample) {
   }
 }
 
+#if 0
 GTEST_TEST(TestSemidefiniteProgram, TrivialSDP) {
   ConexSolver scs_solver;
   if (scs_solver.available()) {
@@ -362,26 +362,6 @@ GTEST_TEST(TestSemidefiniteProgram, SolveSDPwithOverlappingVariables) {
   }
 }
 
-GTEST_TEST(TestExponentialConeProgram, ExponentialConeTrivialExample) {
-  ConexSolver solver;
-  if (solver.available()) {
-    ExponentialConeTrivialExample(solver, kTol);
-  }
-}
-
-GTEST_TEST(TestExponentialConeProgram, MinimizeKLDivengence) {
-  ConexSolver scs_solver;
-  if (scs_solver.available()) {
-    MinimizeKLDivergence(scs_solver, kTol);
-  }
-}
-
-GTEST_TEST(TestExponentialConeProgram, MinimalEllipsoidConveringPoints) {
-  ConexSolver scs_solver;
-  if (scs_solver.available()) {
-    MinimalEllipsoidCoveringPoints(scs_solver, kTol);
-  }
-}
 
 GTEST_TEST(TestConex, SetOptions) {
   MathematicalProgram prog;
