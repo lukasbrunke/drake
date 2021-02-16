@@ -183,12 +183,39 @@ void ParseLinearEqualityConstraint(const MathematicalProgram& prog,
   }
 }
 
+
+std::vector<Eigen::MatrixXd> SymmetricBasis(int n) {
+  int dim = .5*(n*n + n);
+  std::vector<Eigen::MatrixXd> y(dim);
+  int count = 0;
+  for (int i = 0; i < n; i++) {
+    for (int j = i; j < n; j++) {
+      y.at(count).resize(n, n);
+      y.at(count).setZero();
+      y.at(count)(i, j) = -1;
+      y.at(count)(j, i) = -1;
+      count++;
+    }
+  }
+  return y;
+}
+
 void ParsePositiveSemidefiniteConstraint(const MathematicalProgram& prog,
                                      conex::Program* conex_prog) {
-  DRAKE_DEMAND(prog.positive_semidefinite_constraints().size() == 0);
-  // TODO(FrankPermenter): Add support for these constraints.
-  //  for (const auto& psd_constraint : prog.positive_semidefinite_constraints()) {
-  //  }
+  for (const auto& psd_constraint : prog.positive_semidefinite_constraints()) {
+    const int X_rows = psd_constraint.evaluator()->matrix_rows();
+    const VectorXDecisionVariable& flat_X = psd_constraint.variables();
+    DRAKE_DEMAND(flat_X.rows() == X_rows * X_rows);
+    std::vector<int> psd_vars;
+    for (int j = 0; j < X_rows; ++j) {
+      for (int i = j; i < X_rows; ++i) {
+        int xii = prog.FindDecisionVariableIndex(flat_X(j * X_rows + i));
+        psd_vars.push_back(xii);
+      }
+    }
+    Eigen::MatrixXd C = Eigen::MatrixXd::Zero(X_rows, X_rows);
+    conex_prog->AddConstraint(conex::DenseLMIConstraint(SymmetricBasis(X_rows), C), psd_vars);
+  }
 
   for (const auto& lmi_constraint :
        prog.linear_matrix_inequality_constraints()) {
@@ -269,6 +296,7 @@ void ConexSolver::DoSolve(
   num_constraints = conex_prog.NumberOfConstraints();
   conex::SolverConfiguration config;
 
+  config.initial_centering_steps_coldstart = 10;
   config.prepare_dual_variables = 0;
   config.maximum_mu = 1e7;
   config.warmstart_abort_threshold = 1;
@@ -276,7 +304,7 @@ void ConexSolver::DoSolve(
   config.divergence_upper_bound = 1;
   config.final_centering_steps = 5;
   config.max_iterations = 45;
-  config.inv_sqrt_mu_max = 10000;
+  config.inv_sqrt_mu_max = 12000;
   config.initialization_mode = num_vars_last == num_vars && num_constraints == num_constraints_last;
 
   num_vars_last = num_vars;

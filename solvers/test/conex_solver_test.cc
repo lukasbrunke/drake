@@ -26,7 +26,7 @@ constexpr double kTol = 1e-4;
 
 }  // namespace
 
-
+#if 1
 GTEST_TEST(TestConex, QuadraticMinimization0) {
   MathematicalProgram prog;
   auto x = prog.NewContinuousVariables<2>();
@@ -257,16 +257,6 @@ TEST_P(TestQPasSOCP, TestSOCP) {
 INSTANTIATE_TEST_SUITE_P(ConexTest, TestQPasSOCP,
                         ::testing::ValuesIn(GetQPasSOCPProblems()));
 
-TEST_P(TestFindSpringEquilibrium, TestSOCP) {
-  ConexSolver scs_solver;
-  if (scs_solver.available()) {
-    SolveAndCheckSolution(scs_solver, kTol);
-  }
-}
-
-INSTANTIATE_TEST_SUITE_P(
-    ConexTest, TestFindSpringEquilibrium,
-    ::testing::ValuesIn(GetFindSpringEquilibriumProblems()));
 
 GTEST_TEST(TestSOCP, MaximizeGeometricMeanTrivialProblem1) {
   MaximizeGeometricMeanTrivialProblem1 prob;
@@ -313,13 +303,22 @@ GTEST_TEST(QPtest, TestUnitBallExample) {
   }
 }
 
-#if 0
+
+GTEST_TEST(TestSemidefiniteProgram, EigenvalueProblem) {
+  ConexSolver scs_solver;
+  if (scs_solver.available()) {
+    SolveEigenvalueProblem(scs_solver, kTol);
+  }
+}
+#endif
+
 GTEST_TEST(TestSemidefiniteProgram, TrivialSDP) {
   ConexSolver scs_solver;
   if (scs_solver.available()) {
     TestTrivialSDP(scs_solver, kTol);
   }
 }
+#if 1
 GTEST_TEST(TestSemidefiniteProgram, CommonLyapunov) {
   ConexSolver scs_solver;
   if (scs_solver.available()) {
@@ -331,13 +330,6 @@ GTEST_TEST(TestSemidefiniteProgram, OuterEllipsoid) {
   ConexSolver scs_solver;
   if (scs_solver.available()) {
     FindOuterEllipsoid(scs_solver, kTol);
-  }
-}
-
-GTEST_TEST(TestSemidefiniteProgram, EigenvalueProblem) {
-  ConexSolver scs_solver;
-  if (scs_solver.available()) {
-    SolveEigenvalueProblem(scs_solver, kTol);
   }
 }
 
@@ -354,7 +346,9 @@ GTEST_TEST(TestSemidefiniteProgram, SolveSDPwithSecondOrderConeExample2) {
     SolveSDPwithSecondOrderConeExample2(scs_solver, kTol);
   }
 }
-
+#endif
+#if 0
+// Exception?
 GTEST_TEST(TestSemidefiniteProgram, SolveSDPwithOverlappingVariables) {
   ConexSolver scs_solver;
   if (scs_solver.available()) {
@@ -362,7 +356,13 @@ GTEST_TEST(TestSemidefiniteProgram, SolveSDPwithOverlappingVariables) {
   }
 }
 
+#endif
 
+
+
+
+#if 0
+// Update this to use proper options.
 GTEST_TEST(TestConex, SetOptions) {
   MathematicalProgram prog;
   auto x = prog.NewContinuousVariables<2>();
@@ -385,7 +385,9 @@ GTEST_TEST(TestConex, SetOptions) {
               solved_status);
   }
 }
+#endif
 
+#if 0
 GTEST_TEST(TestConex, UnivariateQuarticSos) {
   UnivariateQuarticSos dut;
   ConexSolver solver;
@@ -430,11 +432,19 @@ GTEST_TEST(TestConex, UnivariateNonnegative1) {
     dut.CheckResult(result, 1E-6);
   }
 }
+
+TEST_P(TestFindSpringEquilibrium, TestSOCP) {
+  ConexSolver scs_solver;
+  if (scs_solver.available()) {
+    SolveAndCheckSolution(scs_solver, kTol);
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ConexTest, TestFindSpringEquilibrium,
+    ::testing::ValuesIn(GetFindSpringEquilibriumProblems()));
+
 #endif
-
-
-
-
 
 }  // namespace test
 }  // namespace solvers
