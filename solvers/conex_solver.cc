@@ -173,13 +173,37 @@ void ParseSecondOrderConeConstraints(const MathematicalProgram& prog,
 
 void ParseLinearEqualityConstraint(const MathematicalProgram& prog,
                                      conex::Program* conex_prog) {
+  bool aggregate = false;
+  if (aggregate) {
+    Eigen::MatrixXd A(100, prog.num_vars());
+    Eigen::MatrixXd b(100, 1);
+    int row_count = 0;
+    for (const auto& constraint : prog.linear_equality_constraints()) {
+      const VectorXDecisionVariable& x = constraint.variables();
+      const std::vector<int> x_indices = prog.FindDecisionVariableIndices(x);
+      const MatrixXd Atemp = constraint.evaluator()->A();
+      const MatrixXd btemp = constraint.evaluator()->lower_bound();
 
-  for (const auto& constraint : prog.linear_equality_constraints()) {
-    const VectorXDecisionVariable& x = constraint.variables();
-    const std::vector<int> x_indices = prog.FindDecisionVariableIndices(x);
-    const MatrixXd Atemp = constraint.evaluator()->A();
-    const MatrixXd btemp = constraint.evaluator()->lower_bound();
-    conex_prog->AddConstraint(conex::EqualityConstraints(Atemp, btemp), x_indices);
+      for (int i = 0; i < Atemp.rows(); i++) {
+        b(row_count) = btemp(i, 0);
+        A.row(row_count).setZero();
+        for (int j = 0; j < Atemp.cols(); j++) {
+          A(row_count, x_indices.at(j)) = Atemp(i, j);
+        }
+        row_count++;
+      }
+    }
+    MatrixXd Af = A.topRows(row_count);
+    MatrixXd bf = b.topRows(row_count);
+    conex_prog->AddConstraint(conex::EqualityConstraints(Af, bf));
+  } else {
+    for (const auto& constraint : prog.linear_equality_constraints()) {
+      const VectorXDecisionVariable& x = constraint.variables();
+      const std::vector<int> x_indices = prog.FindDecisionVariableIndices(x);
+      const MatrixXd Atemp = constraint.evaluator()->A();
+      const MatrixXd btemp = constraint.evaluator()->lower_bound();
+      conex_prog->AddConstraint(conex::EqualityConstraints(Atemp, btemp), x_indices);
+    }
   }
 }
 
@@ -200,25 +224,51 @@ std::vector<Eigen::MatrixXd> SymmetricBasis(int n) {
   return y;
 }
 
-void ParsePositiveSemidefiniteConstraint(const MathematicalProgram& prog,
+std::vector<int> GetUnique(const std::vector<int>& x, std::vector<int>* found, int max) {
+  found->resize(max);
+  std::vector<int> y;
+  for (auto& xi : *found) {
+    xi = -1;
+  }
+  for (const auto& xi : x) {
+    if (found->at(xi) == -1) {
+      found->at(xi) = y.size();
+      y.push_back(xi);
+    }
+  }
+  return y;
+}
+bool ParsePositiveSemidefiniteConstraint(const MathematicalProgram& prog,
                                      conex::Program* conex_prog) {
+  bool constraints_found = false;
   for (const auto& psd_constraint : prog.positive_semidefinite_constraints()) {
+    constraints_found = true;
     const int X_rows = psd_constraint.evaluator()->matrix_rows();
     const VectorXDecisionVariable& flat_X = psd_constraint.variables();
+    std::vector<int> table;
+    std::vector<int> psd_vars = GetUnique(prog.FindDecisionVariableIndices(flat_X),
+                                          &table, prog.num_vars());
+
+    std::vector<Eigen::MatrixXd> A(psd_vars.size());
+    for (int i = 0; i < psd_vars.size(); i++) {
+      A.at(i) = Eigen::MatrixXd::Zero(X_rows, X_rows); 
+    }
+
     DRAKE_DEMAND(flat_X.rows() == X_rows * X_rows);
-    std::vector<int> psd_vars;
     for (int j = 0; j < X_rows; ++j) {
       for (int i = j; i < X_rows; ++i) {
         int xii = prog.FindDecisionVariableIndex(flat_X(j * X_rows + i));
-        psd_vars.push_back(xii);
+        A.at(table.at(xii))(i, j) = -1;
+        A.at(table.at(xii))(j, i) = -1;
       }
     }
     Eigen::MatrixXd C = Eigen::MatrixXd::Zero(X_rows, X_rows);
-    conex_prog->AddConstraint(conex::DenseLMIConstraint(SymmetricBasis(X_rows), C), psd_vars);
+    conex_prog->AddConstraint(conex::DenseLMIConstraint(A, C), psd_vars);
   }
 
   for (const auto& lmi_constraint :
        prog.linear_matrix_inequality_constraints()) {
+    constraints_found = true;
     const std::vector<Eigen::MatrixXd>& F = lmi_constraint.evaluator()->F();
     const VectorXDecisionVariable& x = lmi_constraint.variables();
     std::vector<int> x_indices = prog.FindDecisionVariableIndices(x);
@@ -232,6 +282,7 @@ void ParsePositiveSemidefiniteConstraint(const MathematicalProgram& prog,
     sort(x_indices.begin(), x_indices.end());
     conex_prog->AddConstraint(conex::DenseLMIConstraint(A, C), x_indices);
   }
+  return constraints_found;
 }
 
 void ParseQuadraticCost(const MathematicalProgram& prog,
@@ -274,7 +325,8 @@ void ConexSolver::DoSolve(
   static int num_constraints_last = -1;
   static int num_constraints;
 
-  conex::Program conex_prog(num_vars + num_epigraph_parameters, &conex_workspace);
+  // conex::Program conex_prog(num_vars + num_epigraph_parameters, &conex_workspace);
+  conex::Program conex_prog(num_vars + num_epigraph_parameters);
 
   // Our cost (LinearCost, QuadraticCost, etc) also allows a constant term, we
   // add these constant terms to `cost_constant`.
@@ -290,13 +342,13 @@ void ConexSolver::DoSolve(
   ParseLinearEqualityConstraint(prog, &conex_prog);
   ParseBoundingBoxConstraint(prog, &conex_prog); 
   ParseLinearConstraint(prog, &conex_prog);
-  ParsePositiveSemidefiniteConstraint(prog, &conex_prog);
+  bool psd_constraints_found = ParsePositiveSemidefiniteConstraint(prog, &conex_prog);
   ParseSecondOrderConeConstraints(prog, &conex_prog);
 
   num_constraints = conex_prog.NumberOfConstraints();
   conex::SolverConfiguration config;
 
-  config.initial_centering_steps_coldstart = 10;
+  config.initial_centering_steps_coldstart = 0;
   config.prepare_dual_variables = 0;
   config.maximum_mu = 1e7;
   config.warmstart_abort_threshold = 1;
@@ -305,7 +357,11 @@ void ConexSolver::DoSolve(
   config.final_centering_steps = 5;
   config.max_iterations = 45;
   config.inv_sqrt_mu_max = 12000;
-  config.initialization_mode = num_vars_last == num_vars && num_constraints == num_constraints_last;
+  if (psd_constraints_found) {
+    config.inv_sqrt_mu_max = 800;
+  }
+  // config.initialization_mode = num_vars_last == num_vars && num_constraints == num_constraints_last;
+  config.initialization_mode = 0;
 
   num_vars_last = num_vars;
   num_constraints_last = num_constraints;

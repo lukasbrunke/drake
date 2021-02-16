@@ -310,7 +310,6 @@ GTEST_TEST(TestSemidefiniteProgram, EigenvalueProblem) {
     SolveEigenvalueProblem(scs_solver, kTol);
   }
 }
-#endif
 
 GTEST_TEST(TestSemidefiniteProgram, TrivialSDP) {
   ConexSolver scs_solver;
@@ -318,7 +317,6 @@ GTEST_TEST(TestSemidefiniteProgram, TrivialSDP) {
     TestTrivialSDP(scs_solver, kTol);
   }
 }
-#if 1
 GTEST_TEST(TestSemidefiniteProgram, CommonLyapunov) {
   ConexSolver scs_solver;
   if (scs_solver.available()) {
@@ -346,9 +344,7 @@ GTEST_TEST(TestSemidefiniteProgram, SolveSDPwithSecondOrderConeExample2) {
     SolveSDPwithSecondOrderConeExample2(scs_solver, kTol);
   }
 }
-#endif
-#if 0
-// Exception?
+
 GTEST_TEST(TestSemidefiniteProgram, SolveSDPwithOverlappingVariables) {
   ConexSolver scs_solver;
   if (scs_solver.available()) {
@@ -356,9 +352,75 @@ GTEST_TEST(TestSemidefiniteProgram, SolveSDPwithOverlappingVariables) {
   }
 }
 
+
+
+
+
+
+
+GTEST_TEST(TestConex, UnivariateQuarticSos) {
+  UnivariateQuarticSos dut;
+  ConexSolver solver;
+  if (solver.available()) {
+    const auto result = solver.Solve(dut.prog());
+    dut.CheckResult(result, 1E-6);
+  }
+}
+
+GTEST_TEST(TestConex, BivariateQuarticSos) {
+  BivariateQuarticSos dut;
+  ConexSolver solver;
+  if (solver.available()) {
+    const auto result = solver.Solve(dut.prog());
+    dut.CheckResult(result, 1E-6);
+  }
+}
+
+
 #endif
 
+GTEST_TEST(TestConex, SimpleSos1) {
+  SimpleSos1 dut;
+  ConexSolver solver;
+  if (solver.available()) {
+    const auto result = solver.Solve(dut.prog());
+    dut.CheckResult(result, 1E-6);
+  }
+}
 
+
+
+#if 0
+GTEST_TEST(TestConex, UnivariateNonnegative1) {
+  UnivariateNonnegative1 dut;
+  ConexSolver solver;
+  if (solver.is_available()) {
+    const auto result = solver.Solve(dut.prog());
+    dut.CheckResult(result, 1E-6);
+  }
+}
+
+GTEST_TEST(TestConex, MotzkinPolynomial) {
+  MotzkinPolynomial dut;
+  ConexSolver solver;
+  if (solver.is_available()) {
+    const auto result = solver.Solve(dut.prog());
+    dut.CheckResult(result, 1E-6);
+  }
+}
+
+
+TEST_P(TestFindSpringEquilibrium, TestSOCP) {
+  ConexSolver scs_solver;
+  if (scs_solver.available()) {
+    SolveAndCheckSolution(scs_solver, kTol);
+  }
+}
+INSTANTIATE_TEST_SUITE_P(
+    ConexTest, TestFindSpringEquilibrium,
+    ::testing::ValuesIn(GetFindSpringEquilibriumProblems()));
+
+#endif
 
 
 #if 0
@@ -388,61 +450,6 @@ GTEST_TEST(TestConex, SetOptions) {
 #endif
 
 #if 0
-GTEST_TEST(TestConex, UnivariateQuarticSos) {
-  UnivariateQuarticSos dut;
-  ConexSolver solver;
-  if (solver.available()) {
-    const auto result = solver.Solve(dut.prog());
-    dut.CheckResult(result, 1E-6);
-  }
-}
-
-GTEST_TEST(TestConex, BivariateQuarticSos) {
-  BivariateQuarticSos dut;
-  ConexSolver solver;
-  if (solver.available()) {
-    const auto result = solver.Solve(dut.prog());
-    dut.CheckResult(result, 1E-6);
-  }
-}
-
-GTEST_TEST(TestConex, SimpleSos1) {
-  SimpleSos1 dut;
-  ConexSolver solver;
-  if (solver.available()) {
-    const auto result = solver.Solve(dut.prog());
-    dut.CheckResult(result, 1E-6);
-  }
-}
-
-GTEST_TEST(TestConex, MotzkinPolynomial) {
-  MotzkinPolynomial dut;
-  ConexSolver solver;
-  if (solver.is_available()) {
-    const auto result = solver.Solve(dut.prog());
-    dut.CheckResult(result, 1E-6);
-  }
-}
-
-GTEST_TEST(TestConex, UnivariateNonnegative1) {
-  UnivariateNonnegative1 dut;
-  ConexSolver solver;
-  if (solver.is_available()) {
-    const auto result = solver.Solve(dut.prog());
-    dut.CheckResult(result, 1E-6);
-  }
-}
-
-TEST_P(TestFindSpringEquilibrium, TestSOCP) {
-  ConexSolver scs_solver;
-  if (scs_solver.available()) {
-    SolveAndCheckSolution(scs_solver, kTol);
-  }
-}
-
-INSTANTIATE_TEST_SUITE_P(
-    ConexTest, TestFindSpringEquilibrium,
-    ::testing::ValuesIn(GetFindSpringEquilibriumProblems()));
 
 #endif
 

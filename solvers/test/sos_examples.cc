@@ -11,6 +11,8 @@ void CheckSymmetricMatrixPSD(const Eigen::Ref<const Eigen::MatrixXd>& mat,
                              double tol) {
   Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigen_solver;
   eigen_solver.compute(mat);
+  std::cout << "\n" << eigen_solver.eigenvalues() << "\n";
+  std::cout << "\n" << mat << "\n";
   EXPECT_TRUE((eigen_solver.eigenvalues().array() >=
                Eigen::ArrayXd::Constant(mat.rows(), -tol))
                   .all());
