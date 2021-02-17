@@ -266,8 +266,6 @@ void SolveSDPwithOverlappingVariables(const SolverInterface& solver,
   prog.AddPositiveSemidefiniteConstraint(
       (Matrix2<symbolic::Variable>() << x(0), x(2), x(2), x(0)).finished());
   prog.AddBoundingBoxConstraint(1, 1, x(1));
-  //prog.AddConstraint(x(1) <= 1);
-
   prog.AddLinearCost(2 * x(0) + x(2));
 
   MathematicalProgramResult result;

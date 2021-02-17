@@ -173,7 +173,7 @@ void ParseSecondOrderConeConstraints(const MathematicalProgram& prog,
 
 void ParseLinearEqualityConstraint(const MathematicalProgram& prog,
                                      conex::Program* conex_prog) {
-  bool aggregate = false;
+  bool aggregate = true;
   if (aggregate) {
     Eigen::MatrixXd A(100, prog.num_vars());
     Eigen::MatrixXd b(100, 1);
@@ -325,8 +325,7 @@ void ConexSolver::DoSolve(
   static int num_constraints_last = -1;
   static int num_constraints;
 
-  // conex::Program conex_prog(num_vars + num_epigraph_parameters, &conex_workspace);
-  conex::Program conex_prog(num_vars + num_epigraph_parameters);
+  conex::Program conex_prog(num_vars + num_epigraph_parameters, &conex_workspace);
 
   // Our cost (LinearCost, QuadraticCost, etc) also allows a constant term, we
   // add these constant terms to `cost_constant`.
@@ -360,8 +359,7 @@ void ConexSolver::DoSolve(
   if (psd_constraints_found) {
     config.inv_sqrt_mu_max = 800;
   }
-  // config.initialization_mode = num_vars_last == num_vars && num_constraints == num_constraints_last;
-  config.initialization_mode = 0;
+  config.initialization_mode = num_vars_last == num_vars && num_constraints == num_constraints_last;
 
   num_vars_last = num_vars;
   num_constraints_last = num_constraints;
