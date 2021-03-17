@@ -207,23 +207,6 @@ void ParseLinearEqualityConstraint(const MathematicalProgram& prog,
   }
 }
 
-
-std::vector<Eigen::MatrixXd> SymmetricBasis(int n) {
-  int dim = .5*(n*n + n);
-  std::vector<Eigen::MatrixXd> y(dim);
-  int count = 0;
-  for (int i = 0; i < n; i++) {
-    for (int j = i; j < n; j++) {
-      y.at(count).resize(n, n);
-      y.at(count).setZero();
-      y.at(count)(i, j) = -1;
-      y.at(count)(j, i) = -1;
-      count++;
-    }
-  }
-  return y;
-}
-
 std::vector<int> GetUnique(const std::vector<int>& x, std::vector<int>* found, int max) {
   found->resize(max);
   std::vector<int> y;
@@ -250,7 +233,7 @@ bool ParsePositiveSemidefiniteConstraint(const MathematicalProgram& prog,
                                           &table, prog.num_vars());
 
     std::vector<Eigen::MatrixXd> A(psd_vars.size());
-    for (int i = 0; i < psd_vars.size(); i++) {
+    for (size_t i = 0; i < psd_vars.size(); i++) {
       A.at(i) = Eigen::MatrixXd::Zero(X_rows, X_rows); 
     }
 
@@ -355,7 +338,7 @@ void ConexSolver::DoSolve(
   config.divergence_upper_bound = 1;
   config.final_centering_steps = 5;
   config.max_iterations = 45;
-  config.inv_sqrt_mu_max = 12000;
+  config.inv_sqrt_mu_max = 1000;
   if (psd_constraints_found) {
     config.inv_sqrt_mu_max = 800;
   }
