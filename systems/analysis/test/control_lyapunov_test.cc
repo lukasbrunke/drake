@@ -7,6 +7,7 @@
 #include "drake/common/symbolic_monomial_util.h"
 #include "drake/common/test_utilities/symbolic_test_util.h"
 #include "drake/solvers/csdp_solver.h"
+#include "drake/solvers/conex_solver.h"
 #include "drake/solvers/mosek_solver.h"
 #include "drake/solvers/scs_solver.h"
 #include "drake/solvers/solve.h"
@@ -225,8 +226,9 @@ TEST_F(SimpleLinearSystemTest, SearchLagrangianAndBGivenVBoxInputBound) {
 
   solvers::MosekSolver mosek_solver;
   solvers::CsdpSolver csdp_solver;
+  solvers::ConexSolver conex_solver;
   mosek_solver.set_stream_logging(true, "");
-  const auto result = mosek_solver.Solve(dut_search_l_b.prog());
+  const auto result = conex_solver.Solve(dut_search_l_b.prog());
   EXPECT_TRUE(result.is_success());
   CheckSearchLagrangianAndBResult(dut_search_l_b, result, V, f, G, x_, 1.3E-5);
 
@@ -249,7 +251,7 @@ TEST_F(SimpleLinearSystemTest, SearchLagrangianAndBGivenVBoxInputBound) {
   SearchLyapunovGivenLagrangianBoxInputBound dut_search_V(
       f, G, V_degree, positivity_eps, deriv_eps_sol, x_equilibrium, l_result,
       b_degrees, x_);
-  const auto result_search_V = mosek_solver.Solve(dut_search_V.prog());
+  const auto result_search_V = conex_solver.Solve(dut_search_V.prog());
   ASSERT_TRUE(result_search_V.is_success());
   const symbolic::Polynomial V_sol =
       result_search_V.GetSolution(dut_search_V.V());

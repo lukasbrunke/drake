@@ -705,6 +705,7 @@ drake_cc_googletest(
         ":control_lyapunov",
         "//common/test_utilities:symbolic_test_util",
         "//solvers:mosek_solver",
+        "//solvers:conex_solver",
         "//solvers:csdp_solver",
         "//solvers:scs_solver",
         "//solvers:solve",
