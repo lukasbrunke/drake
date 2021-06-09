@@ -34,6 +34,7 @@ using solvers::LinearComplementarityConstraint;
 using solvers::LinearConstraint;
 using solvers::LinearCost;
 using solvers::LinearEqualityConstraint;
+using solvers::LinearMatrixInequalityConstraint;
 using solvers::LorentzConeConstraint;
 using solvers::MathematicalProgram;
 using solvers::MathematicalProgramResult;
@@ -980,6 +981,37 @@ top-level documentation for :py:mod:`pydrake.math`.
           },
           doc.MathematicalProgram.AddPositiveSemidefiniteConstraint
               .doc_1args_constEigenMatrixBase)
+      .def("AddLinearMatrixInequalityConstraint",
+          static_cast<Binding<LinearMatrixInequalityConstraint> (
+              MathematicalProgram::*)(
+              const std::vector<Eigen::Ref<const Eigen::MatrixXd>>&,
+              const Eigen::Ref<const VectorXDecisionVariable>&)>(
+              &MathematicalProgram::AddLinearMatrixInequalityConstraint),
+          py::arg("F"), py::arg("vars"),
+          doc.MathematicalProgram.AddLinearMatrixInequalityConstraint.doc)
+      .def("AddPositiveDiagonallyDominantMatrixConstraint",
+          &MathematicalProgram::AddPositiveDiagonallyDominantMatrixConstraint,
+          py::arg("X"),
+          doc.MathematicalProgram.AddPositiveDiagonallyDominantMatrixConstraint
+              .doc)
+      .def("AddScaledDiagonallyDominantMatrixConstraint",
+          static_cast<std::vector<std::vector<Matrix2<symbolic::Expression>>> (
+              MathematicalProgram::*)(
+              const Eigen::Ref<const MatrixX<symbolic::Expression>>&)>(
+              &MathematicalProgram::
+                  AddScaledDiagonallyDominantMatrixConstraint),
+          py::arg("X"),
+          doc.MathematicalProgram.AddScaledDiagonallyDominantMatrixConstraint
+              .doc_expression)
+      .def("AddScaledDiagonallyDominantMatrixConstraint",
+          static_cast<std::vector<std::vector<Matrix2<symbolic::Variable>>> (
+              MathematicalProgram::*)(
+              const Eigen::Ref<const MatrixX<symbolic::Variable>>&)>(
+              &MathematicalProgram::
+                  AddScaledDiagonallyDominantMatrixConstraint),
+          py::arg("X"),
+          doc.MathematicalProgram.AddScaledDiagonallyDominantMatrixConstraint
+              .doc_variable)
       .def("AddSosConstraint",
           static_cast<MatrixXDecisionVariable (MathematicalProgram::*)(
               const Polynomial&, const Eigen::Ref<const VectorX<Monomial>>&)>(
@@ -1467,6 +1499,8 @@ for every column of ``prog_var_vals``. )""")
   RegisterBinding<BoundingBoxConstraint>(&m, "BoundingBoxConstraint");
   RegisterBinding<PositiveSemidefiniteConstraint>(
       &m, "PositiveSemidefiniteConstraint");
+  RegisterBinding<LinearMatrixInequalityConstraint>(
+      &m, "LinearMatrixInequalityConstraint");
   RegisterBinding<LinearComplementarityConstraint>(
       &m, "LinearComplementarityConstraint");
   RegisterBinding<ExponentialConeConstraint>(&m, "ExponentialConeConstraint");

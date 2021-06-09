@@ -443,6 +443,13 @@ class TestMathematicalProgram(unittest.TestCase):
         prog.AddLinearConstraint(S[0, 1] >= 1)
         prog.AddPositiveSemidefiniteConstraint(S)
         prog.AddPositiveSemidefiniteConstraint(S+S)
+        prog.AddPositiveDiagonallyDominantMatrixConstraint(X=S)
+        prog.AddScaledDiagonallyDominantMatrixConstraint(X=S)
+        prog.AddScaledDiagonallyDominantMatrixConstraint(X=S+S)
+        x = prog.NewContinuousVariables(2, "x")
+        prog.AddLinearMatrixInequalityConstraint(
+            F=[np.eye(2), np.ones((2, 2)), 2*np.ones((2, 2))],
+            vars=x)
         prog.AddLinearCost(np.trace(S))
         result = mp.Solve(prog)
         self.assertTrue(result.is_success())
