@@ -1481,6 +1481,15 @@ for every column of ``prog_var_vals``. )""")
       std::shared_ptr<PositiveSemidefiniteConstraint>>(m,
       "PositiveSemidefiniteConstraint", doc.PositiveSemidefiniteConstraint.doc);
 
+  py::class_<LinearMatrixInequalityConstraint, Constraint,
+      std::shared_ptr<LinearMatrixInequalityConstraint>>(m,
+      "LinearMatrixInequalityConstraint",
+      doc.LinearMatrixInequalityConstraint.doc)
+      .def("F", &LinearMatrixInequalityConstraint::F,
+          doc.LinearMatrixInequalityConstraint.F.doc)
+      .def("matrix_rows", &LinearMatrixInequalityConstraint::matrix_rows,
+          doc.LinearMatrixInequalityConstraint.matrix_rows.doc);
+
   py::class_<LinearComplementarityConstraint, Constraint,
       std::shared_ptr<LinearComplementarityConstraint>>(m,
       "LinearComplementarityConstraint",

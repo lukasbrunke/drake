@@ -447,9 +447,19 @@ class TestMathematicalProgram(unittest.TestCase):
         prog.AddScaledDiagonallyDominantMatrixConstraint(X=S)
         prog.AddScaledDiagonallyDominantMatrixConstraint(X=S+S)
         x = prog.NewContinuousVariables(2, "x")
-        prog.AddLinearMatrixInequalityConstraint(
+        lmi_cnstr = prog.AddLinearMatrixInequalityConstraint(
             F=[np.eye(2), np.ones((2, 2)), 2*np.ones((2, 2))],
             vars=x)
+        self.assertIsInstance(
+            lmi_cnstr.evaluator(), mp.AddLinearMatrixInequalityConstraint)
+        self.assertEqual(lmi_cnstr.evaluator().matrix_rows(), 2)
+        self.assertEqual(len(lmi_cnstr.evaluator().F()), 3)
+        np.testing.assert_array_equal(
+            lmi_cnstr.evaluator().F()[0], np.eye(2))
+        np.testing.assert_array_equal(
+            lmi_cnstr.evaluator().F()[1], np.ones((2, 2)))
+        np.testing.assert_array_equal(
+            lmi_cnstr.evaluator().F()[2], 2*np.ones((2, 2)))
         prog.AddLinearCost(np.trace(S))
         result = mp.Solve(prog)
         self.assertTrue(result.is_success())

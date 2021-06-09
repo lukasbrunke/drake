@@ -2347,7 +2347,7 @@ class MathematicalProgram {
 
   /**
    * Adds a linear matrix inequality constraint to the program.
-   * 
+   *
    * @exclude_from_pydrake_mkdoc{Not bound in pydrake.}
    */
   Binding<LinearMatrixInequalityConstraint> AddLinearMatrixInequalityConstraint(
@@ -2439,7 +2439,7 @@ class MathematicalProgram {
    * @return M For i < j M[i][j] contains the slack variables, mentioned in
    * @ref addsdd "scaled diagonally dominant matrix constraint". For i >= j,
    * M[i][j] contains dummy variables.
-   * 
+   *
    * @pydrake_mkdoc_identifier{variable}
    */
   std::vector<std::vector<Matrix2<symbolic::Variable>>>
