@@ -161,6 +161,14 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
+    name = "rational_forward_kin_test",
+    deps = [
+        ":rational_forward_kinematics_core",
+        ":rational_forward_kinematics_test_utilities",
+    ],
+)
+
+drake_cc_googletest(
     name = "rational_forward_kinematics_internal_test",
     deps = [
         ":rational_forward_kinematics_core",

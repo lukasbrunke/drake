@@ -12,6 +12,7 @@ load("//tools/jupyter:jupyter_py.bzl", "drake_jupyter_py_binary")
 load(
     "//tools/skylark:drake_py.bzl",
     "drake_py_library",
+    "drake_py_binary",
     "drake_py_unittest",
 )
 
@@ -48,6 +49,17 @@ drake_py_library(
         "symbolic_parsing_helpers.py",
     ],
     visibility = ["//visibility:public"],
+)
+
+drake_py_unittest(
+    name = "rational_forward_kin_test",
+    data = [
+        "//manipulation/models/iiwa_description:models",
+        "//sandbox:models",
+    ],
+    deps = [
+        "//bindings/pydrake",
+    ],
 )
 
 drake_jupyter_py_binary(
