@@ -25,7 +25,7 @@ class IiwaDiagram {
     multibody::Parser parser(plant_);
     const std::string iiwa_file_path = FindResourceOrThrow(
         "drake/manipulation/models/iiwa_description/sdf/"
-        "iiwa14_no_collision.sdf");
+        "iiwa14_coarse_collision.sdf");
     const auto iiwa_instance = parser.AddModelFromFile(iiwa_file_path, "iiwa");
     plant_->WeldFrames(plant_->world_frame(),
                        plant_->GetFrameByName("iiwa_link_0"));
@@ -44,20 +44,31 @@ class IiwaDiagram {
     const auto& schunk_frame = plant_->GetFrameByName("body", wsg_instance);
     plant_->WeldFrames(link7, schunk_frame, X_7G);
     // SceneGraph should ignore the collision between any geometries on the
-    // gripper.
-    geometry::GeometrySet gripper_geometries;
-    auto add_gripper_geometries = [this, wsg_instance, &gripper_geometries](
-                                      const std::string& body_name) {
-      const geometry::FrameId frame_id = plant_->GetBodyFrameIdOrThrow(
-          plant_->GetBodyByName(body_name, wsg_instance).index());
-      gripper_geometries.Add(frame_id);
-    };
+    // gripper, and between the gripper and link 6
+    geometry::GeometrySet gripper_link6_geometries;
+    auto add_gripper_geometries =
+        [this, wsg_instance,
+         &gripper_link6_geometries](const std::string& body_name) {
+          const geometry::FrameId frame_id = plant_->GetBodyFrameIdOrThrow(
+              plant_->GetBodyByName(body_name, wsg_instance).index());
+          gripper_link6_geometries.Add(frame_id);
+        };
     add_gripper_geometries("body");
     add_gripper_geometries("left_finger");
     add_gripper_geometries("right_finger");
+
+    const geometry::FrameId link_6_frame_id = plant_->GetBodyFrameIdOrThrow(
+        plant_->GetBodyByName("iiwa_link_6", iiwa_instance).index());
+    const auto& inspector = scene_graph_->model_inspector();
+    const std::vector<geometry::GeometryId> link_6_geometries =
+        inspector.GetGeometries(link_6_frame_id, geometry::Role::kProximity);
+    for (const auto geometry : link_6_geometries) {
+      gripper_link6_geometries.Add(geometry);
+    }
+
     scene_graph_->collision_filter_manager().Apply(
         geometry::CollisionFilterDeclaration().ExcludeWithin(
-            gripper_geometries));
+            gripper_link6_geometries));
 
     const std::string shelf_file_path =
         FindResourceOrThrow("drake/sos_iris_certifier/shelves.sdf");
@@ -70,8 +81,10 @@ class IiwaDiagram {
 
     plant_->Finalize();
 
+    geometry::MeshcatVisualizerParams meshcat_params{};
+    meshcat_params.role = geometry::Role::kProximity;
     visualizer_ = &geometry::MeshcatVisualizer<double>::AddToBuilder(
-        &builder, *scene_graph_, meshcat_);
+        &builder, *scene_graph_, meshcat_, meshcat_params);
     diagram_ = builder.Build();
   }
 
