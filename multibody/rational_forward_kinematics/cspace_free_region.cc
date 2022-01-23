@@ -139,12 +139,15 @@ CspaceFreeRegion::CspaceFreeRegion(
     const systems::Diagram<double>& diagram,
     const multibody::MultibodyPlant<double>* plant,
     const geometry::SceneGraph<double>* scene_graph,
-    SeparatingPlaneOrder plane_order, CspaceRegionType cspace_region_type)
+    SeparatingPlaneOrder plane_order, CspaceRegionType cspace_region_type,
+    double separating_delta)
     : rational_forward_kinematics_(*plant),
       scene_graph_{scene_graph},
       polytope_geometries_{GetConvexPolytopes(diagram, plant, scene_graph)},
       plane_order_{plane_order},
-      cspace_region_type_{cspace_region_type} {
+      cspace_region_type_{cspace_region_type},
+      separating_delta_{separating_delta} {
+  DRAKE_DEMAND(separating_delta_ > 0);
   // Now create the separating planes.
   std::map<SortedPair<BodyIndex>,
            std::vector<std::pair<const ConvexPolytope*, const ConvexPolytope*>>>
@@ -323,7 +326,7 @@ CspaceFreeRegion::GenerateLinkOnOneSideOfPlaneRationals(
                 GenerateLinkOnOneSideOfPlaneRationalFunction(
                     rational_forward_kinematics_, polytope, other_side_polytope,
                     X_AB_multilinear, separating_plane.a, separating_plane.b,
-                    plane_side, separating_plane.order);
+                    plane_side, separating_plane.order, separating_delta_);
         // I cannot use "insert" function to append vectors, since
         // LinkVertexOnPlaneSideRational contains const members, hence it does
         // not have an assignment operator.
@@ -1273,7 +1276,7 @@ GenerateLinkOnOneSideOfPlaneRationalFunction(
         X_AB_multilinear,
     const drake::Vector3<symbolic::Expression>& a_A,
     const symbolic::Expression& b, PlaneSide plane_side,
-    SeparatingPlaneOrder plane_order) {
+    SeparatingPlaneOrder plane_order, double separating_delta) {
   std::vector<LinkVertexOnPlaneSideRational> rational_fun;
   rational_fun.reserve(polytope->p_BV().cols());
   const symbolic::Monomial monomial_one{};
@@ -1297,8 +1300,8 @@ GenerateLinkOnOneSideOfPlaneRationalFunction(
         rational_forward_kinematics
             .ConvertMultilinearPolynomialToRationalFunction(
                 plane_side == PlaneSide::kPositive
-                    ? point_on_hyperplane_side - 1
-                    : -1 - point_on_hyperplane_side),
+                    ? point_on_hyperplane_side - separating_delta
+                    : -separating_delta - point_on_hyperplane_side),
         polytope, X_AB_multilinear.frame_A_index, other_side_polytope, a_A, b,
         plane_side, plane_order);
   }
