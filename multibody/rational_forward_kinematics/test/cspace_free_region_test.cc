@@ -131,9 +131,10 @@ void TestCspaceFreeRegionConstructor(
     const systems::Diagram<double>& diagram,
     const multibody::MultibodyPlant<double>* plant,
     const geometry::SceneGraph<double>* scene_graph,
-    SeparatingPlaneOrder plane_order, CspaceRegionType cspace_region_type) {
+    SeparatingPlaneOrder plane_order, CspaceRegionType cspace_region_type,
+    double separating_delta) {
   const CspaceFreeRegion dut(diagram, plant, scene_graph, plane_order,
-                             cspace_region_type);
+                             cspace_region_type, separating_delta);
   const auto& model_inspector = scene_graph->model_inspector();
   const auto collision_pairs = model_inspector.GetCollisionCandidates();
   EXPECT_EQ(dut.separating_planes().size(), collision_pairs.size());
@@ -185,27 +186,28 @@ void TestCspaceFreeRegionConstructor(
 }
 
 TEST_F(IiwaCspaceTest, TestConstructor) {
-  TestCspaceFreeRegionConstructor(*diagram_, plant_, scene_graph_,
-                                  SeparatingPlaneOrder::kConstant,
-                                  CspaceRegionType::kGenericPolytope);
+  const double separating_delta = 0.1;
+  TestCspaceFreeRegionConstructor(
+      *diagram_, plant_, scene_graph_, SeparatingPlaneOrder::kConstant,
+      CspaceRegionType::kGenericPolytope, separating_delta);
   // Add some collision filters.
   const auto filter_ids = ApplyFilter();
-  TestCspaceFreeRegionConstructor(*diagram_, plant_, scene_graph_,
-                                  SeparatingPlaneOrder::kConstant,
-                                  CspaceRegionType::kGenericPolytope);
+  TestCspaceFreeRegionConstructor(
+      *diagram_, plant_, scene_graph_, SeparatingPlaneOrder::kConstant,
+      CspaceRegionType::kGenericPolytope, separating_delta);
   for (const auto filter_id : filter_ids) {
     scene_graph_->collision_filter_manager().RemoveDeclaration(filter_id);
   }
   // Test with as axis-aligned bounding box
-  TestCspaceFreeRegionConstructor(*diagram_, plant_, scene_graph_,
-                                  SeparatingPlaneOrder::kConstant,
-                                  CspaceRegionType::kAxisAlignedBoundingBox);
+  TestCspaceFreeRegionConstructor(
+      *diagram_, plant_, scene_graph_, SeparatingPlaneOrder::kConstant,
+      CspaceRegionType::kAxisAlignedBoundingBox, separating_delta);
 }
 
 void TestGenerateLinkOnOneSideOfPlaneRationalFunction(
     const RationalForwardKinematics& rational_forward_kinematics,
     const SeparatingPlane& separating_plane, PlaneSide plane_side,
-    const Eigen::Ref<const Eigen::VectorXd>& q_star) {
+    const Eigen::Ref<const Eigen::VectorXd>& q_star, double separating_delta) {
   const ConvexPolytope* link_polytope;
   const ConvexPolytope* other_side_polytope;
   if (plane_side == PlaneSide::kPositive) {
@@ -222,14 +224,14 @@ void TestGenerateLinkOnOneSideOfPlaneRationalFunction(
   const auto rationals = GenerateLinkOnOneSideOfPlaneRationalFunction(
       rational_forward_kinematics, link_polytope, other_side_polytope,
       X_AB_multilinear, separating_plane.a, separating_plane.b, plane_side,
-      separating_plane.order);
+      separating_plane.order, separating_delta);
   EXPECT_EQ(rationals.size(), link_polytope->p_BV().cols());
   for (const auto& rational : rationals) {
     EXPECT_EQ(rational.link_polytope->get_id(), link_polytope->get_id());
     EXPECT_EQ(rational.other_side_link_polytope->get_id(),
               other_side_polytope->get_id());
   }
-  // Now take many samples of q, evaluate a.dot(x) + b - 1 or -1 - a.dot(x) - b
+  // Now take many samples of q, evaluate a.dot(x) + b - δ or -δ - a.dot(x) - b
   // for these sampled q.
   std::vector<Eigen::VectorXd> q_samples;
   q_samples.push_back(
@@ -275,8 +277,8 @@ void TestGenerateLinkOnOneSideOfPlaneRationalFunction(
       const double b_val = separating_plane.b.Evaluate(env);
       const double rational_val_expected =
           plane_side == PlaneSide::kPositive
-              ? a_val.dot(p_AV.col(i)) + b_val - 1
-              : -1 - a_val.dot(p_AV.col(i)) - b_val;
+              ? a_val.dot(p_AV.col(i)) + b_val - separating_delta
+              : -separating_delta - a_val.dot(p_AV.col(i)) - b_val;
       EXPECT_NEAR(rational_val, rational_val_expected, 1E-12);
     }
   }
@@ -286,9 +288,10 @@ TEST_F(IiwaCspaceTest, GenerateLinkOnOneSideOfPlaneRationalFunction1) {
   scene_graph_->collision_filter_manager().ApplyTransient(
       geometry::CollisionFilterDeclaration().AllowWithin(
           geometry::GeometrySet({link7_polytopes_id_[0], obstacles_id_[0]})));
-  const CspaceFreeRegion dut(*diagram_, plant_, scene_graph_,
-                             SeparatingPlaneOrder::kAffine,
-                             CspaceRegionType::kGenericPolytope);
+  const double separating_delta = 0.1;
+  const CspaceFreeRegion dut(
+      *diagram_, plant_, scene_graph_, SeparatingPlaneOrder::kAffine,
+      CspaceRegionType::kGenericPolytope, separating_delta);
   const Eigen::VectorXd q_star1 = Eigen::VectorXd::Zero(7);
   const Eigen::VectorXd q_star2 =
       (Eigen::VectorXd(7) << 0.1, 0.2, -0.1, 0.3, 0.2, 0.4, 0.2).finished();
@@ -297,10 +300,10 @@ TEST_F(IiwaCspaceTest, GenerateLinkOnOneSideOfPlaneRationalFunction1) {
   for (const auto plane_side : {PlaneSide::kPositive, PlaneSide::kNegative}) {
     TestGenerateLinkOnOneSideOfPlaneRationalFunction(
         dut.rational_forward_kinematics(), separating_plane, plane_side,
-        q_star1);
+        q_star1, separating_delta);
     TestGenerateLinkOnOneSideOfPlaneRationalFunction(
         dut.rational_forward_kinematics(), separating_plane, plane_side,
-        q_star2);
+        q_star2, separating_delta);
   }
 }
 
@@ -334,17 +337,18 @@ TEST_F(IiwaCspaceTest, GenerateLinkOnOneSideOfPlaneRationals) {
               geometry::GeometrySet({link7_polytopes_id_[1],
                                      link5_polytopes_id_[0], obstacles_id_[0],
                                      obstacles_id_[1]})));
-  const CspaceFreeRegion dut1(*diagram_, plant_, scene_graph_,
-                              SeparatingPlaneOrder::kAffine,
-                              CspaceRegionType::kGenericPolytope);
+  const double separating_delta{0.1};
+  const CspaceFreeRegion dut1(
+      *diagram_, plant_, scene_graph_, SeparatingPlaneOrder::kAffine,
+      CspaceRegionType::kGenericPolytope, separating_delta);
   const Eigen::VectorXd q_star = Eigen::VectorXd::Zero(7);
   TestGenerateLinkOnOneSideOfPlaneRationals(dut1, q_star, {});
 
   // Multiple pairs of polytopes.
   scene_graph_->collision_filter_manager().RemoveDeclaration(filter_id);
-  const CspaceFreeRegion dut2(*diagram_, plant_, scene_graph_,
-                              SeparatingPlaneOrder::kAffine,
-                              CspaceRegionType::kGenericPolytope);
+  const CspaceFreeRegion dut2(
+      *diagram_, plant_, scene_graph_, SeparatingPlaneOrder::kAffine,
+      CspaceRegionType::kGenericPolytope, separating_delta);
   TestGenerateLinkOnOneSideOfPlaneRationals(dut2, q_star, {});
   // Now test with filtered collision pairs.
   const CspaceFreeRegion::FilteredCollisionPairs filtered_collision_pairs{
@@ -440,10 +444,12 @@ TEST_F(IiwaCspaceTest, ConstructProgramForCspacePolytope) {
       geometry::CollisionFilterDeclaration().ExcludeWithin(
           geometry::GeometrySet({link7_polytopes_id_[1], link5_polytopes_id_[0],
                                  obstacles_id_[0], obstacles_id_[1]})));
+  const double separating_delta{0.1};
   const CspaceFreeRegion dut(*diagram_, plant_, scene_graph_,
 
                              SeparatingPlaneOrder::kAffine,
-                             CspaceRegionType::kGenericPolytope);
+                             CspaceRegionType::kGenericPolytope,
+                             separating_delta);
   const auto& plant = dut.rational_forward_kinematics().plant();
   auto context = plant.CreateDefaultContext();
 
@@ -543,9 +549,10 @@ TEST_F(IiwaCspaceTest, ConstructProgramForCspacePolytope) {
 }
 
 TEST_F(IiwaCspaceTest, GenerateTuplesForBilinearAlternation) {
-  const CspaceFreeRegion dut(*diagram_, plant_, scene_graph_,
-                             SeparatingPlaneOrder::kAffine,
-                             CspaceRegionType::kGenericPolytope);
+  const double separating_delta{0.1};
+  const CspaceFreeRegion dut(
+      *diagram_, plant_, scene_graph_, SeparatingPlaneOrder::kAffine,
+      CspaceRegionType::kGenericPolytope, separating_delta);
   const Eigen::VectorXd q_star = Eigen::VectorXd::Zero(7);
   const int C_rows = 5;
   std::vector<CspaceFreeRegion::CspacePolytopeTuple> alternation_tuples;
@@ -717,9 +724,10 @@ TEST_F(IiwaCspaceTest, ConstructLagrangianAndPolytopeProgram) {
   // Test both ConstructLagrangianProgram and ConstructPolytopeProgram (the
   // latter needs the result from the former).
   ApplyFilter();
-  const CspaceFreeRegion dut(*diagram_, plant_, scene_graph_,
-                             SeparatingPlaneOrder::kAffine,
-                             CspaceRegionType::kGenericPolytope);
+  const double separating_delta{0.1};
+  const CspaceFreeRegion dut(
+      *diagram_, plant_, scene_graph_, SeparatingPlaneOrder::kAffine,
+      CspaceRegionType::kGenericPolytope, separating_delta);
   const auto& plant = dut.rational_forward_kinematics().plant();
   auto context = plant.CreateDefaultContext();
 
@@ -877,9 +885,10 @@ TEST_F(IiwaCspaceTest, ConstructLagrangianAndPolytopeProgram) {
 
 TEST_F(IiwaCspaceTest, CspacePolytopeBilinearAlternation) {
   ApplyFilter();
-  const CspaceFreeRegion dut(*diagram_, plant_, scene_graph_,
-                             SeparatingPlaneOrder::kAffine,
-                             CspaceRegionType::kGenericPolytope);
+  const double separating_delta{0.1};
+  const CspaceFreeRegion dut(
+      *diagram_, plant_, scene_graph_, SeparatingPlaneOrder::kAffine,
+      CspaceRegionType::kGenericPolytope, separating_delta);
   const auto& plant = dut.rational_forward_kinematics().plant();
   auto context = plant.CreateDefaultContext();
 
@@ -930,9 +939,10 @@ TEST_F(IiwaCspaceTest, CspacePolytopeBilinearAlternation) {
 
 TEST_F(IiwaCspaceTest, CspacePolytopeBinarySearch) {
   ApplyFilter();
-  const CspaceFreeRegion dut(*diagram_, plant_, scene_graph_,
-                             SeparatingPlaneOrder::kAffine,
-                             CspaceRegionType::kGenericPolytope);
+  const double separating_delta{0.1};
+  const CspaceFreeRegion dut(
+      *diagram_, plant_, scene_graph_, SeparatingPlaneOrder::kAffine,
+      CspaceRegionType::kGenericPolytope, separating_delta);
   const auto& plant = dut.rational_forward_kinematics().plant();
   auto context = plant.CreateDefaultContext();
 

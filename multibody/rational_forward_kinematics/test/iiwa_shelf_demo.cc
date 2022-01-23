@@ -183,10 +183,11 @@ int DoMain() {
   Eigen::VectorXd d_init;
   BuildCandidateCspacePolytope(q0, &C_init, &d_init);
 
-  const CspaceFreeRegion dut(iiwa_diagram.diagram(), &(iiwa_diagram.plant()),
-                             &(iiwa_diagram.scene_graph()),
-                             SeparatingPlaneOrder::kAffine,
-                             CspaceRegionType::kGenericPolytope);
+  const double separating_delta{1};
+  const CspaceFreeRegion dut(
+      iiwa_diagram.diagram(), &(iiwa_diagram.plant()),
+      &(iiwa_diagram.scene_graph()), SeparatingPlaneOrder::kAffine,
+      CspaceRegionType::kGenericPolytope, separating_delta);
 
   CspaceFreeRegion::FilteredCollisionPairs filtered_collision_pairs{};
 

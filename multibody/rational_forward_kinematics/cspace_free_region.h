@@ -19,7 +19,8 @@
 /**
  * This file is largely the same as configuration_space_collision_free_region.h.
  * The major differences are
- * 1. The separating hyperplane is parameterized as aᵀx + b ≥ 1 and aᵀx+b ≤ −1
+ * 1. The separating hyperplane is parameterized as aᵀx + b ≥ δ and aᵀx+b ≤ −δ,
+ * where δ is a small positive number.
  * 2. We first focus on the generic polytopic region C*t<=d in the configuration
  * space (we will add the special case for axis-aligned bounding box region
  * t_lower <= t <= t_upper later).
@@ -27,7 +28,7 @@
 
 namespace drake {
 namespace multibody {
-/* The separating plane aᵀx + b ≥ 1, aᵀx+b ≤ −1 has parameters a and b. These
+/* The separating plane aᵀx + b ≥ δ, aᵀx+b ≤ −δ has parameters a and b. These
  * parameters can be a constant of affine function of t.
  */
 enum class SeparatingPlaneOrder {
@@ -37,8 +38,8 @@ enum class SeparatingPlaneOrder {
 
 /**
  * One polytope is on the "positive" side of the separating plane, namely {x|
- * aᵀx + b ≥ 1}, and the other polytope is on the "negative" side of the
- * separating plane, namely {x|aᵀx+b ≤ −1}.
+ * aᵀx + b ≥ δ}, and the other polytope is on the "negative" side of the
+ * separating plane, namely {x|aᵀx+b ≤ −δ}.
  */
 struct SeparatingPlane {
  public:
@@ -72,7 +73,7 @@ struct SeparatingPlane {
 
 /**
  * We need to verify that C * t <= d implies p(t) >= 0, where p(t) is the
- * numerator of the rational function aᵀx + b - 1 or -1 - aᵀx-b. Namely we need
+ * numerator of the rational function aᵀx + b - δ or -1 - aᵀx-δ. Namely we need
  * to verify the non-negativity of the lagrangian polynomial l(t), together with
  * p(t) - l(t)ᵀ(d - C * t). We can choose the type of the non-negative
  * polynomials (sos, dsos, sdsos).
@@ -85,7 +86,7 @@ struct VerificationOption {
 /**
  * The rational function representing that a link vertex V is on the desired
  * side of the plane. If the link is on the positive side of the plane, then the
- * rational is aᵀx + b - 1, otherwise it is -1 - aᵀx - b
+ * rational is aᵀx + b - δ, otherwise it is -δ - aᵀx - b
  */
 struct LinkVertexOnPlaneSideRational {
   LinkVertexOnPlaneSideRational(
@@ -141,17 +142,18 @@ class CspaceFreeRegion {
   using FilteredCollisionPairs =
       std::unordered_set<drake::SortedPair<ConvexGeometry::Id>>;
 
+  /**
+   * @param diagram The diagram containing both the plant and the scene graph.
+   * @param separating_delta δ in the separating plane. It is better to choose
+   * this separating_delta to be a small number (like 1E-3) to avoid numerical
+   * issues.
+   */
   CspaceFreeRegion(const systems::Diagram<double>& diagram,
                    const multibody::MultibodyPlant<double>* plant,
                    const geometry::SceneGraph<double>* scene_graph,
                    SeparatingPlaneOrder plane_order,
-                   CspaceRegionType cspace_region_type);
-
-  CspaceFreeRegion(const multibody::MultibodyPlant<double>& plant,
-                   const std::vector<const ConvexPolytope*>& link_polytopes,
-                   const std::vector<const ConvexPolytope*>& obstacles,
-                   SeparatingPlaneOrder plane_order,
-                   CspaceRegionType cspace_region_type);
+                   CspaceRegionType cspace_region_type,
+                   double separating_delta);
 
   /** separating_planes()[map_polytopes_to_separating_planes.at(geometry1_id,
    * geometry2_id)] is the separating plane that separates geometry1 and
@@ -163,13 +165,12 @@ class CspaceFreeRegion {
   }
 
   /**
-   * Generate all the rational functions in the form aᵀx + b -1 or -1-aᵀx-b
+   * Generate all the rational functions in the form aᵀx + b -δ or -δ-aᵀx-b
    * whose non-negativity implies that the separating plane aᵀx + b =0 separates
    * a pair of polytopes.
    * This function loops over all pair of polytopes between a link and an
    * obstacle that are not in filtered_collision_pair.
    */
-  // TODO(hongkai.dai): also consider the self-collision pairs.
   std::vector<LinkVertexOnPlaneSideRational>
   GenerateLinkOnOneSideOfPlaneRationals(
       const Eigen::Ref<const Eigen::VectorXd>& q_star,
@@ -218,7 +219,7 @@ class CspaceFreeRegion {
 
   bool IsPostureInCollision(const systems::Context<double>& context) const;
 
-  /** Each tuple corresponds to one rational aᵀx + b - 1 or -1 - aᵀx - b.
+  /** Each tuple corresponds to one rational aᵀx + b - δ or -δ - aᵀx - b.
    * This tuple should be used with GenerateTuplesForBilinearAlternation. To
    * save computation time, this class minimizes using dynamic memory
    * allocation.
@@ -242,7 +243,7 @@ class CspaceFreeRegion {
           monomial_basis{std::move(m_monomial_basis)} {}
 
     // This is the numerator of the rational
-    // aᵀx+b-1 or -1-aᵀx-b
+    // aᵀx+b-δ or -δ-aᵀx-b
     symbolic::Polynomial rational_numerator;
     // lagrangian_gram_var.segment(polytope_lagrangian_gram_lower_start,
     // n(n+1)/2) is the low diagonal entries of the gram matrix in
@@ -317,9 +318,9 @@ class CspaceFreeRegion {
    * @param t_lower The lower bounds of t computed from joint limits.
    * @param t_upper The upper bounds of t computed from joint limits.
    * @param redundant_tighten. We aggregate the constraint {C*t<=d, t_lower <= t
-   * <= t_upper} as C̅t ≤ d̅. A row of C̅t ≤ d̅is regarded as redundant, if the C̅ᵢt
-   * ≤ d̅ᵢ − δ is implied by the rest of the constraint, where
-   * δ=redundant_tighten. If redundant_tighten=std::nullopt, then we don't try
+   * <= t_upper} as C̅t ≤ d̅. A row of C̅t ≤ d̅ is regarded as redundant, if the C̅ᵢt
+   * ≤ d̅ᵢ − Δ is implied by the rest of the constraint, where
+   * Δ=redundant_tighten. If redundant_tighten=std::nullopt, then we don't try
    * to identify the redundant constraints.
    * @param[out] P The inscribed ellipsoid is parameterized as {Py+q | |y|₂ ≤
    * 1}. Set P=nullptr if you don't want the inscribed ellipsoid.
@@ -510,6 +511,8 @@ class CspaceFreeRegion {
     return polytope_geometries_;
   }
 
+  double separating_delta() const { return separating_delta_; }
+
  private:
   RationalForwardKinematics rational_forward_kinematics_;
   const geometry::SceneGraph<double>* scene_graph_;
@@ -518,6 +521,7 @@ class CspaceFreeRegion {
 
   SeparatingPlaneOrder plane_order_;
   CspaceRegionType cspace_region_type_;
+  double separating_delta_;
   std::vector<SeparatingPlane> separating_planes_;
 
   // separating_planes_[(geometry1_id, geometry2_id)] is the separating plane
@@ -527,7 +531,7 @@ class CspaceFreeRegion {
 };
 
 /**
- * Generate the rational functions a_A.dot(p_AVi(t)) + b(i) - 1 or -1 -
+ * Generate the rational functions a_A.dot(p_AVi(t)) + b(i) - δ or -δ -
  * a_A.dot(p_AVi(t)) - b(i). Which represents that the link (whose vertex Vi has
  * position p_AVi in the frame A) is on the positive (or negative) side of the
  * plane a_A * x + b = 0
@@ -542,7 +546,7 @@ GenerateLinkOnOneSideOfPlaneRationalFunction(
         X_AB_multilinear,
     const drake::Vector3<symbolic::Expression>& a_A,
     const symbolic::Expression& b, PlaneSide plane_side,
-    SeparatingPlaneOrder plane_order);
+    SeparatingPlaneOrder plane_order, double separating_delta);
 
 bool IsGeometryPairCollisionIgnored(
     ConvexGeometry::Id id1, ConvexGeometry::Id id2,
