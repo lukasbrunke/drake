@@ -5,11 +5,14 @@
 
 #include <gtest/gtest.h>
 
+#include "drake/common/find_resource.h"
 #include "drake/common/test_utilities/eigen_matrix_compare.h"
 #include "drake/common/test_utilities/symbolic_test_util.h"
 #include "drake/geometry/collision_filter_declaration.h"
+#include "drake/geometry/optimization/vpolytope.h"
 #include "drake/multibody/inverse_kinematics/inverse_kinematics.h"
 #include "drake/multibody/plant/coulomb_friction.h"
+#include "drake/multibody/rational_forward_kinematics/collision_geometry.h"
 #include "drake/multibody/rational_forward_kinematics/rational_forward_kinematics.h"
 #include "drake/multibody/rational_forward_kinematics/rational_forward_kinematics_internal.h"
 #include "drake/multibody/rational_forward_kinematics/test/rational_forward_kinematics_test_utilities2.h"
@@ -138,20 +141,19 @@ void TestCspaceFreeRegionConstructor(
   const auto& model_inspector = scene_graph->model_inspector();
   const auto collision_pairs = model_inspector.GetCollisionCandidates();
   EXPECT_EQ(dut.separating_planes().size(), collision_pairs.size());
-  EXPECT_EQ(dut.map_polytopes_to_separating_planes().size(),
+  EXPECT_EQ(dut.map_collisions_to_separating_planes().size(),
             collision_pairs.size());
   // Check that each pair of geometry show up in
   // map_polytopes_to_separating_planes()
   for (const auto& collision_pair : collision_pairs) {
-    auto it = dut.map_polytopes_to_separating_planes().find(
+    auto it = dut.map_collisions_to_separating_planes().find(
         SortedPair<geometry::GeometryId>(collision_pair.first,
                                          collision_pair.second));
-    EXPECT_NE(it, dut.map_polytopes_to_separating_planes().end());
+    EXPECT_NE(it, dut.map_collisions_to_separating_planes().end());
     const SeparatingPlane* separating_plane = it->second;
-    EXPECT_EQ(it->first,
-              SortedPair<geometry::GeometryId>(
-                  separating_plane->positive_side_polytope->get_id(),
-                  separating_plane->negative_side_polytope->get_id()));
+    EXPECT_EQ(it->first, SortedPair<geometry::GeometryId>(
+                             separating_plane->positive_side_geometry->id(),
+                             separating_plane->negative_side_geometry->id()));
     const auto& a = separating_plane->a;
     const auto& b = separating_plane->b;
     const symbolic::Variables t_vars(dut.rational_forward_kinematics().t());
@@ -167,8 +169,8 @@ void TestCspaceFreeRegionConstructor(
         t_for_plane = dut.rational_forward_kinematics().t();
       } else {
         t_for_plane = dut.rational_forward_kinematics().FindTOnPath(
-            separating_plane->positive_side_polytope->body_index(),
-            separating_plane->negative_side_polytope->body_index());
+            separating_plane->positive_side_geometry->body_index(),
+            separating_plane->negative_side_geometry->body_index());
       }
       // Check if a, b are affine function of t_for_plane.
       const symbolic::Variables decision_vars(
@@ -207,79 +209,102 @@ void TestGenerateLinkOnOneSideOfPlaneRationalFunction(
     const RationalForwardKinematics& rational_forward_kinematics,
     const SeparatingPlane& separating_plane, PlaneSide plane_side,
     const Eigen::Ref<const Eigen::VectorXd>& q_star, double separating_delta) {
-  const ConvexPolytope* link_polytope;
-  const ConvexPolytope* other_side_polytope;
+  const CollisionGeometry* link_geometry;
+  const CollisionGeometry* other_side_geometry;
   if (plane_side == PlaneSide::kPositive) {
-    link_polytope = separating_plane.positive_side_polytope;
-    other_side_polytope = separating_plane.negative_side_polytope;
+    link_geometry = separating_plane.positive_side_geometry;
+    other_side_geometry = separating_plane.negative_side_geometry;
   } else {
-    link_polytope = separating_plane.negative_side_polytope;
-    other_side_polytope = separating_plane.positive_side_polytope;
+    link_geometry = separating_plane.negative_side_geometry;
+    other_side_geometry = separating_plane.positive_side_geometry;
   }
   const auto X_AB_multilinear =
       rational_forward_kinematics.CalcLinkPoseAsMultilinearPolynomial(
-          q_star, link_polytope->body_index(), separating_plane.expressed_link);
+          q_star, link_geometry->body_index(), separating_plane.expressed_link);
 
   const auto rationals = GenerateLinkOnOneSideOfPlaneRationalFunction(
-      rational_forward_kinematics, link_polytope, other_side_polytope,
+      rational_forward_kinematics, link_geometry, other_side_geometry,
       X_AB_multilinear, separating_plane.a, separating_plane.b, plane_side,
       separating_plane.order, separating_delta);
-  EXPECT_EQ(rationals.size(), link_polytope->p_BV().cols());
   for (const auto& rational : rationals) {
-    EXPECT_EQ(rational.link_polytope->get_id(), link_polytope->get_id());
-    EXPECT_EQ(rational.other_side_link_polytope->get_id(),
-              other_side_polytope->get_id());
+    EXPECT_EQ(rational.link_geometry->id(), link_geometry->id());
+    EXPECT_EQ(rational.other_side_link_geometry->id(),
+              other_side_geometry->id());
   }
-  // Now take many samples of q, evaluate a.dot(x) + b - δ or -δ - a.dot(x) - b
-  // for these sampled q.
-  std::vector<Eigen::VectorXd> q_samples;
-  q_samples.push_back(
-      q_star +
-      (Eigen::VectorXd(7) << 0.1, 0.2, -0.1, -0.3, 1.2, 0.5, 0.1).finished());
-  q_samples.push_back(
-      q_star +
-      (Eigen::VectorXd(7) << 0.3, -0.4, -0.8, -0.3, 1.1, -0.5, 0.4).finished());
-  q_samples.push_back(
-      q_star + (Eigen::VectorXd(7) << -0.3, -0.7, -1.2, -0.9, 1.3, -0.7, 0.3)
-                   .finished());
-  symbolic::Environment env;
-  // Set the plane decision variables to arbitrary values.
-  const Eigen::VectorXd plane_decision_var_vals = Eigen::VectorXd::LinSpaced(
-      separating_plane.decision_variables.rows(), -2, 3);
-  env.insert(separating_plane.decision_variables, plane_decision_var_vals);
-  const auto& plant = rational_forward_kinematics.plant();
-  auto context = plant.CreateDefaultContext();
-  for (const auto& q : q_samples) {
-    plant.SetPositions(context.get(), q);
-    Eigen::Matrix3Xd p_AV(3, link_polytope->p_BV().cols());
-    plant.CalcPointsPositions(
-        *context, plant.get_body(link_polytope->body_index()).body_frame(),
-        link_polytope->p_BV(),
-        plant.get_body(separating_plane.expressed_link).body_frame(), &p_AV);
-    const Eigen::VectorXd t_val = ((q - q_star) / 2).array().tan();
-    for (int i = 0; i < t_val.rows(); ++i) {
-      auto it = env.find(rational_forward_kinematics.t()(i));
-      if (it == env.end()) {
-        env.insert(rational_forward_kinematics.t()(i), t_val(i));
-      } else {
-        it->second = t_val(i);
-      }
+  const auto* link_polytope =
+      dynamic_cast<const geometry::optimization::VPolytope*>(
+          &link_geometry->geometry());
+  switch (link_geometry->type()) {
+    case CollisionGeometryType::kPolytope: {
+      EXPECT_EQ(rationals.size(), link_polytope->vertices().cols());
+      break;
+    }
+    case CollisionGeometryType::kEllipsoid: {
+      throw std::runtime_error("Not implemented yet");
     }
 
-    for (int i = 0; i < static_cast<int>(rationals.size()); ++i) {
-      const double rational_val = rationals[i].rational.Evaluate(env);
-      // Now evaluate this rational function.
-      Eigen::Vector3d a_val;
-      for (int j = 0; j < 3; ++j) {
-        a_val(j) = separating_plane.a(j).Evaluate(env);
+      // Now take many samples of q, evaluate a.dot(x) + b - δ or -δ - a.dot(x)
+      // - b for these sampled q.
+      std::vector<Eigen::VectorXd> q_samples;
+      q_samples.push_back(
+          q_star + (Eigen::VectorXd(7) << 0.1, 0.2, -0.1, -0.3, 1.2, 0.5, 0.1)
+                       .finished());
+      q_samples.push_back(
+          q_star + (Eigen::VectorXd(7) << 0.3, -0.4, -0.8, -0.3, 1.1, -0.5, 0.4)
+                       .finished());
+      q_samples.push_back(q_star + (Eigen::VectorXd(7) << -0.3, -0.7, -1.2,
+                                    -0.9, 1.3, -0.7, 0.3)
+                                       .finished());
+      symbolic::Environment env;
+      // Set the plane decision variables to arbitrary values.
+      const Eigen::VectorXd plane_decision_var_vals =
+          Eigen::VectorXd::LinSpaced(separating_plane.decision_variables.rows(),
+                                     -2, 3);
+      env.insert(separating_plane.decision_variables, plane_decision_var_vals);
+      const auto& plant = rational_forward_kinematics.plant();
+      auto context = plant.CreateDefaultContext();
+      for (const auto& q : q_samples) {
+        plant.SetPositions(context.get(), q);
+        const Eigen::VectorXd t_val = ((q - q_star) / 2).array().tan();
+        for (int i = 0; i < t_val.rows(); ++i) {
+          auto it = env.find(rational_forward_kinematics.t()(i));
+          if (it == env.end()) {
+            env.insert(rational_forward_kinematics.t()(i), t_val(i));
+          } else {
+            it->second = t_val(i);
+          }
+        }
+        switch (link_geometry->type()) {
+          case CollisionGeometryType::kPolytope: {
+            Eigen::Matrix3Xd p_AV(3, link_polytope->vertices().cols());
+            plant.CalcPointsPositions(
+                *context,
+                plant.get_body(link_geometry->body_index()).body_frame(),
+                link_polytope->vertices(),
+                plant.get_body(separating_plane.expressed_link).body_frame(),
+                &p_AV);
+
+            for (int i = 0; i < static_cast<int>(rationals.size()); ++i) {
+              const double rational_val = rationals[i].rational.Evaluate(env);
+              // Now evaluate this rational function.
+              Eigen::Vector3d a_val;
+              for (int j = 0; j < 3; ++j) {
+                a_val(j) = separating_plane.a(j).Evaluate(env);
+              }
+              const double b_val = separating_plane.b.Evaluate(env);
+              const double rational_val_expected =
+                  plane_side == PlaneSide::kPositive
+                      ? a_val.dot(p_AV.col(i)) + b_val - separating_delta
+                      : -separating_delta - a_val.dot(p_AV.col(i)) - b_val;
+              EXPECT_NEAR(rational_val, rational_val_expected, 1E-12);
+            }
+            break;
+          }
+          case CollisionGeometryType::kEllipsoid: {
+            throw std::runtime_error("Not implemented yet");
+          }
+        }
       }
-      const double b_val = separating_plane.b.Evaluate(env);
-      const double rational_val_expected =
-          plane_side == PlaneSide::kPositive
-              ? a_val.dot(p_AV.col(i)) + b_val - separating_delta
-              : -separating_delta - a_val.dot(p_AV.col(i)) - b_val;
-      EXPECT_NEAR(rational_val, rational_val_expected, 1E-12);
-    }
   }
 }
 
@@ -315,12 +340,25 @@ void TestGenerateLinkOnOneSideOfPlaneRationals(
   // Check the size of rationals.
   int rationals_size = 0;
   for (const auto& [link_pair, separating_plane] :
-       dut.map_polytopes_to_separating_planes()) {
+       dut.map_collisions_to_separating_planes()) {
     if (!IsGeometryPairCollisionIgnored(link_pair.first(), link_pair.second(),
                                         filtered_collision_pairs)) {
-      rationals_size +=
-          separating_plane->positive_side_polytope->p_BV().cols() +
-          separating_plane->negative_side_polytope->p_BV().cols();
+      for (const auto link_geometry :
+           {separating_plane->positive_side_geometry,
+            separating_plane->negative_side_geometry}) {
+        switch (link_geometry->type()) {
+          case CollisionGeometryType::kPolytope: {
+            rationals_size +=
+                dynamic_cast<const geometry::optimization::VPolytope*>(
+                    &link_geometry->geometry())
+                    ->vertices()
+                    .cols();
+            break;
+          }
+          default:
+            throw std::runtime_error("Not implemented");
+        }
+      }
     }
   }
   EXPECT_EQ(rationals.size(), rationals_size);
@@ -362,17 +400,20 @@ void CheckPolynomialDegree2(const symbolic::Polynomial& p,
 }
 
 void ConstructInitialCspacePolytope(const CspaceFreeRegion& dut,
+                                    const systems::Diagram<double>& diagram,
                                     Eigen::VectorXd* q_star, Eigen::MatrixXd* C,
                                     Eigen::VectorXd* d,
                                     Eigen::VectorXd* q_not_in_collision) {
   const auto& plant = dut.rational_forward_kinematics().plant();
-  auto context = plant.CreateDefaultContext();
+  auto diagram_context = diagram.CreateDefaultContext();
+  auto context =
+      &diagram.GetMutableSubsystemContext(plant, diagram_context.get());
   *q_star = Eigen::VectorXd::Zero(7);
 
   // I will build a small C-space polytope C*t<=d around q_not_in_collision;
   *q_not_in_collision =
       (Eigen::VectorXd(7) << 0.5, 0.3, -0.3, 0.1, 0.4, 0.2, 0.1).finished();
-  plant.SetPositions(context.get(), *q_not_in_collision);
+  plant.SetPositions(context, *q_not_in_collision);
   ASSERT_FALSE(dut.IsPostureInCollision(*context));
 
   // First generate a region C * t <= d.
@@ -453,7 +494,7 @@ TEST_F(IiwaCspaceTest, ConstructProgramForCspacePolytope) {
   Eigen::MatrixXd C;
   Eigen::VectorXd d;
   Eigen::VectorXd q_not_in_collision;
-  ConstructInitialCspacePolytope(dut, &q_star, &C, &d, &q_not_in_collision);
+  ConstructInitialCspacePolytope(dut, *diagram_, &q_star, &C, &d, &q_not_in_collision);
 
   CspaceFreeRegion::FilteredCollisionPairs filtered_collision_pairs{};
   auto clock_start = std::chrono::system_clock::now();
@@ -564,8 +605,22 @@ TEST_F(IiwaCspaceTest, GenerateTuplesForBilinearAlternation) {
       &verified_gram_vars, &separating_plane_vars);
   int rational_count = 0;
   for (const auto& separating_plane : dut.separating_planes()) {
-    rational_count += separating_plane.positive_side_polytope->p_BV().cols() +
-                      separating_plane.negative_side_polytope->p_BV().cols();
+    for (const CollisionGeometry* link_geometry :
+         {separating_plane.positive_side_geometry,
+          separating_plane.negative_side_geometry}) {
+      switch (link_geometry->type()) {
+        case CollisionGeometryType::kPolytope: {
+          const auto* link_polytope =
+              dynamic_cast<const geometry::optimization::VPolytope*>(
+                  &link_geometry->geometry());
+          rational_count += link_polytope->vertices().cols();
+          break;
+        }
+        default: {
+          throw std::runtime_error("Not implemented yet.");
+        }
+      }
+    }
   }
   EXPECT_EQ(alternation_tuples.size(), rational_count);
   // Now count the total number of lagrangian gram vars.
@@ -644,7 +699,7 @@ TEST_F(IiwaCspaceTest, ConstructLagrangianAndPolytopeProgram) {
   Eigen::MatrixXd C;
   Eigen::VectorXd d;
   Eigen::VectorXd q_not_in_collision;
-  ConstructInitialCspacePolytope(dut, &q_star, &C, &d, &q_not_in_collision);
+  ConstructInitialCspacePolytope(dut, *diagram_, &q_star, &C, &d, &q_not_in_collision);
 
   CspaceFreeRegion::FilteredCollisionPairs filtered_collision_pairs{};
   std::vector<CspaceFreeRegion::CspacePolytopeTuple> alternation_tuples;
@@ -857,7 +912,7 @@ TEST_F(IiwaCspaceTest, CspacePolytopeBilinearAlternation) {
   Eigen::MatrixXd C;
   Eigen::VectorXd d;
   Eigen::VectorXd q_not_in_collision;
-  ConstructInitialCspacePolytope(dut, &q_star, &C, &d, &q_not_in_collision);
+  ConstructInitialCspacePolytope(dut, *diagram_, &q_star, &C, &d, &q_not_in_collision);
 
   CspaceFreeRegion::FilteredCollisionPairs filtered_collision_pairs{};
   // Intentially multiplies a factor to make the rows of C unnormalized.
@@ -901,7 +956,7 @@ TEST_F(IiwaCspaceTest, CspacePolytopeBinarySearch) {
   Eigen::MatrixXd C;
   Eigen::VectorXd d;
   Eigen::VectorXd q_not_in_collision;
-  ConstructInitialCspacePolytope(dut, &q_star, &C, &d, &q_not_in_collision);
+  ConstructInitialCspacePolytope(dut, *diagram_, &q_star, &C, &d, &q_not_in_collision);
 
   CspaceFreeRegion::FilteredCollisionPairs filtered_collision_pairs{};
   // Intentially multiplies a factor to make the rows of C unnormalized.
@@ -1133,7 +1188,23 @@ GTEST_TEST(AddOuterPolytope, Test) {
   }
 }
 
-GTEST_TEST(GetConvexPolytopes, Test) {
+void CheckVertices(const Eigen::Ref<const Eigen::Matrix3Xd>& vert1,
+                   const Eigen::Ref<const Eigen::Matrix3Xd>& vert2,
+                   double tol) {
+  EXPECT_EQ(vert1.cols(), vert2.cols());
+  for (int i = 0; i < vert1.cols(); ++i) {
+    bool found_match = false;
+    for (int j = 0; j < vert2.cols(); ++j) {
+      if (CompareMatrices(vert1.col(i), vert2.col(j), tol)) {
+        found_match = true;
+        break;
+      }
+    }
+    EXPECT_TRUE(found_match);
+  }
+}
+
+GTEST_TEST(GetCollisionGeometry, Test) {
   systems::DiagramBuilder<double> builder;
   auto iiwa = builder.AddSystem<MultibodyPlant<double>>(
       ConstructIiwaPlant("iiwa14_no_collision.sdf", false));
@@ -1157,6 +1228,12 @@ GTEST_TEST(GetConvexPolytopes, Test) {
       iiwa->GetBodyByName("iiwa_link_7"), X_7P2,
       geometry::Box(box2_size(0), box2_size(1), box2_size(2)), "link7_box2",
       CoulombFriction<double>());
+  const math::RigidTransformd X_5O(Eigen::Vector3d(0.2, 0.3, 0.4));
+  const auto link5_octahedron_id = iiwa->RegisterCollisionGeometry(
+      iiwa->GetBodyByName("iiwa_link_5"), X_5O,
+      geometry::Convex(
+          FindResourceOrThrow("drake/geometry/test/octahedron.obj")),
+      "link5_octahedron", CoulombFriction<double>());
 
   const auto world_box_id = iiwa->RegisterCollisionGeometry(
       iiwa->world_body(), {}, geometry::Box(0.2, 0.1, 0.3), "world_box",
@@ -1164,42 +1241,59 @@ GTEST_TEST(GetConvexPolytopes, Test) {
   iiwa->Finalize();
   auto diagram = builder.Build();
 
-  const auto polytope_geometries = GetConvexPolytopes(*diagram, iiwa, sg);
-  EXPECT_EQ(polytope_geometries.size(), 2u);
-  const auto& link7_polytopes =
-      polytope_geometries.at(iiwa->GetBodyByName("iiwa_link_7").index());
-  EXPECT_EQ(link7_polytopes.size(), 2u);
-  const auto& obstacles = polytope_geometries.at(iiwa->world_body().index());
-  EXPECT_EQ(obstacles[0].body_index(), iiwa->world_body().index());
-  EXPECT_EQ(obstacles[0].get_id(), world_box_id);
+  const auto collision_geometries = GetCollisionGeometries(*diagram, iiwa, sg);
+  EXPECT_EQ(collision_geometries.size(), 3u);
+  const auto& link7_geometries =
+      collision_geometries.at(iiwa->GetBodyByName("iiwa_link_7").index());
+  EXPECT_EQ(link7_geometries.size(), 2u);
+  const auto& obstacles = collision_geometries.at(iiwa->world_body().index());
+  EXPECT_EQ(obstacles[0]->body_index(), iiwa->world_body().index());
+  EXPECT_EQ(obstacles[0]->id(), world_box_id);
 
-  std::unordered_map<ConvexGeometry::Id, const ConvexPolytope*>
-      link7_polytope_map;
-  for (const auto& link7_polytope : link7_polytopes) {
-    link7_polytope_map.emplace(link7_polytope.get_id(), &link7_polytope);
+  std::unordered_map<geometry::GeometryId, const CollisionGeometry*>
+      link7_geometry_map;
+  for (const auto& link7_geometry : link7_geometries) {
+    link7_geometry_map.emplace(link7_geometry->id(), link7_geometry.get());
   }
-  EXPECT_EQ(link7_polytope_map.size(), 2u);
-  const ConvexPolytope* link7_box1 = link7_polytope_map.at(link7_box1_id);
-  const ConvexPolytope* link7_box2 = link7_polytope_map.at(link7_box2_id);
-  EXPECT_EQ(link7_box1->body_index(),
+  EXPECT_EQ(link7_geometry_map.size(), 2u);
+  const CollisionGeometry* link7_geometry1 =
+      link7_geometry_map.at(link7_box1_id);
+  const CollisionGeometry* link7_geometry2 =
+      link7_geometry_map.at(link7_box2_id);
+  EXPECT_EQ(link7_geometry1->type(), CollisionGeometryType::kPolytope);
+  EXPECT_EQ(link7_geometry2->type(), CollisionGeometryType::kPolytope);
+  EXPECT_EQ(link7_geometry1->body_index(),
             iiwa->GetBodyByName("iiwa_link_7").index());
-  EXPECT_EQ(link7_box2->body_index(),
+  EXPECT_EQ(link7_geometry2->body_index(),
             iiwa->GetBodyByName("iiwa_link_7").index());
   // Now compute the geometry vertices manually and check with
   // link7_box1->p_BV().
+  const auto* link7_box2 =
+      dynamic_cast<const geometry::optimization::VPolytope*>(
+          &link7_geometry2->geometry());
   const Eigen::Matrix<double, 3, 8> link7_box2_vertices =
       GenerateBoxVertices(box2_size, X_7P2);
-  EXPECT_EQ(link7_box2->p_BV().cols(), 8);
-  for (int i = 0; i < 8; ++i) {
-    bool found_match = false;
-    for (int j = 0; j < 8; ++j) {
-      if ((link7_box2->p_BV().col(i) - link7_box2_vertices.col(j)).norm() <
-          1E-8) {
-        found_match = true;
-      }
-    }
-    EXPECT_TRUE(found_match);
-  }
+  CheckVertices(link7_box2->vertices(), link7_box2_vertices, 1E-8);
+
+  // Check the geometry of link5_octahedron.
+  const BodyIndex link5_index = iiwa->GetBodyByName("iiwa_link_5").index();
+  EXPECT_GT(collision_geometries.count(link5_index), 0);
+  EXPECT_EQ(collision_geometries.at(link5_index).size(), 1u);
+  const auto& link5_octahedron = collision_geometries.at(link5_index)[0];
+  EXPECT_EQ(link5_octahedron->body_index(), link5_index);
+  EXPECT_EQ(link5_octahedron->id(), link5_octahedron_id);
+  EXPECT_EQ(link5_octahedron->type(), CollisionGeometryType::kPolytope);
+  Eigen::Matrix<double, 3, 6> link5_octahedron_vertices;
+  // clang-format off
+  link5_octahedron_vertices << 1, 1, -1, -1, 0, 0,
+                               -1, 1, -1, 1, 0, 0,
+                               0, 0, 0, 0, std::sqrt(2), -std::sqrt(2);
+  // clang-format on
+  link5_octahedron_vertices = X_5O * link5_octahedron_vertices;
+  const geometry::optimization::VPolytope* octahedron =
+      dynamic_cast<const geometry::optimization::VPolytope*>(
+          &link5_octahedron->geometry());
+  CheckVertices(octahedron->vertices(), link5_octahedron_vertices, 1E-8);
 }
 
 GTEST_TEST(FindRedundantInequalities, Test) {

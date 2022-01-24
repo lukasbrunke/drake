@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "drake/common/drake_copyable.h"
-#include "drake/multibody/rational_forward_kinematics/convex_geometry.h"
+#include "drake/multibody/rational_forward_kinematics/collision_geometry.h"
 #include "drake/multibody/rational_forward_kinematics/plane_side.h"
 #include "drake/multibody/rational_forward_kinematics/rational_forward_kinematics.h"
 #include "drake/solvers/mathematical_program.h"
@@ -37,30 +37,30 @@ enum class SeparatingPlaneOrder {
 };
 
 /**
- * One polytope is on the "positive" side of the separating plane, namely {x|
- * aᵀx + b ≥ δ}, and the other polytope is on the "negative" side of the
- * separating plane, namely {x|aᵀx+b ≤ −δ}.
+ * One collision geometry is on the "positive" side of the separating plane,
+ * namely {x| aᵀx + b ≥ δ}, and the other collision geometry is on the
+ * "negative" side of the separating plane, namely {x|aᵀx+b ≤ −δ}.
  */
 struct SeparatingPlane {
   SeparatingPlane(
       drake::Vector3<symbolic::Expression> m_a, symbolic::Expression m_b,
-      const ConvexPolytope* m_positive_side_polytope,
-      const ConvexPolytope* m_negative_side_polytope,
+      const CollisionGeometry* m_positive_side_geometry,
+      const CollisionGeometry* m_negative_side_geometry,
       multibody::BodyIndex m_expressed_link, SeparatingPlaneOrder m_order,
       const Eigen::Ref<const drake::VectorX<drake::symbolic::Variable>>&
           m_decision_variables)
       : a{std::move(m_a)},
         b{std::move(m_b)},
-        positive_side_polytope{m_positive_side_polytope},
-        negative_side_polytope{m_negative_side_polytope},
+        positive_side_geometry{m_positive_side_geometry},
+        negative_side_geometry{m_negative_side_geometry},
         expressed_link{std::move(m_expressed_link)},
         order{m_order},
         decision_variables{m_decision_variables} {}
 
   const Vector3<symbolic::Expression> a;
   const symbolic::Expression b;
-  const ConvexPolytope* const positive_side_polytope;
-  const ConvexPolytope* const negative_side_polytope;
+  const CollisionGeometry* const positive_side_geometry;
+  const CollisionGeometry* const negative_side_geometry;
   const multibody::BodyIndex expressed_link;
   const SeparatingPlaneOrder order;
   const VectorX<symbolic::Variable> decision_variables;
@@ -86,23 +86,23 @@ struct VerificationOption {
 struct LinkVertexOnPlaneSideRational {
   LinkVertexOnPlaneSideRational(
       symbolic::RationalFunction m_rational,
-      const ConvexPolytope* m_link_polytope,
+      const CollisionGeometry* m_link_geometry,
       multibody::BodyIndex m_expressed_body_index,
-      const ConvexPolytope* m_other_side_link_polytope,
+      const CollisionGeometry* m_other_side_link_geometry,
       Vector3<symbolic::Expression> m_a_A, symbolic::Expression m_b,
       PlaneSide m_plane_side, SeparatingPlaneOrder m_plane_order)
       : rational{std::move(m_rational)},
-        link_polytope{m_link_polytope},
+        link_geometry{m_link_geometry},
         expressed_body_index{m_expressed_body_index},
-        other_side_link_polytope{m_other_side_link_polytope},
+        other_side_link_geometry{m_other_side_link_geometry},
         a_A{std::move(m_a_A)},
         b{std::move(m_b)},
         plane_side{m_plane_side},
         plane_order{m_plane_order} {}
   const symbolic::RationalFunction rational;
-  const ConvexPolytope* const link_polytope;
+  const CollisionGeometry* const link_geometry;
   const multibody::BodyIndex expressed_body_index;
-  const ConvexPolytope* const other_side_link_polytope;
+  const CollisionGeometry* const other_side_link_geometry;
   const Vector3<symbolic::Expression> a_A;
   const symbolic::Expression b;
   const PlaneSide plane_side;
@@ -114,19 +114,19 @@ enum class CspaceRegionType { kGenericPolytope, kAxisAlignedBoundingBox };
 /**
  * This class tries to find a large convex set in the configuration space, such
  * that this whole convex set is collision free. We assume that the obstacles
- * are unions of polytopes in the workspace, and the robot link poses
+ * are unions of convex geometries in the workspace, and the robot link poses
  * (position/orientation) can be written as rational functions of some
  * variables. Such robot can have only revolute (or prismatic joint). We also
  * suppose that the each link of the robot is represented as a union of
- * polytopes. We will find the convex collision free set in the configuration
- * space through convex optimization.
+ * convex geometries. We will find the convex collision free set in the
+ * configuration space through convex optimization.
  */
 class CspaceFreeRegion {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(CspaceFreeRegion)
 
   using FilteredCollisionPairs =
-      std::unordered_set<drake::SortedPair<ConvexGeometry::Id>>;
+      std::unordered_set<drake::SortedPair<geometry::GeometryId>>;
 
   /**
    * @param diagram The diagram containing both the plant and the scene graph.
@@ -141,18 +141,18 @@ class CspaceFreeRegion {
                    CspaceRegionType cspace_region_type,
                    double separating_delta);
 
-  const std::unordered_map<SortedPair<ConvexGeometry::Id>,
+  const std::unordered_map<SortedPair<geometry::GeometryId>,
                            const SeparatingPlane*>&
-  map_polytopes_to_separating_planes() const {
-    return map_polytopes_to_separating_planes_;
+  map_collisions_to_separating_planes() const {
+    return map_collisions_to_separating_planes_;
   }
 
   /**
    * Generate all the rational functions in the form aᵀx + b -δ or -δ-aᵀx-b
    * whose non-negativity implies that the separating plane aᵀx + b =0 separates
-   * a pair of polytopes.
-   * This function loops over all pair of polytopes between a link and an
-   * obstacle that are not in filtered_collision_pair.
+   * a pair of collision geometries.
+   * This function loops over all pair of collision geometries  that are not in
+   * filtered_collision_pair.
    */
   std::vector<LinkVertexOnPlaneSideRational>
   GenerateLinkOnOneSideOfPlaneRationals(
@@ -174,7 +174,7 @@ class CspaceFreeRegion {
 
     std::unique_ptr<solvers::MathematicalProgram> prog;
     // polytope_lagrangians has size rationals.size(), namely it is the number
-    // of (link_polytope, obstacle_polytope) pairs. lagrangians[i] has size
+    // of (link_geometry, obstacle_geometry) pairs. lagrangians[i] has size
     // C.rows()
     std::vector<VectorX<symbolic::Polynomial>> polytope_lagrangians;
     // t_lower_lagrangians[i][j] is the lagrangian for t(j) >= t_lower(j) to
@@ -468,9 +468,10 @@ class CspaceFreeRegion {
     return separating_planes_;
   }
 
-  const std::map<multibody::BodyIndex, std::vector<ConvexPolytope>>&
-  polytope_geometries() const {
-    return polytope_geometries_;
+  const std::map<multibody::BodyIndex,
+                 std::vector<std::unique_ptr<CollisionGeometry>>>&
+  link_geometries() const {
+    return link_geometries_;
   }
 
   double separating_delta() const { return separating_delta_; }
@@ -478,16 +479,17 @@ class CspaceFreeRegion {
  private:
   RationalForwardKinematics rational_forward_kinematics_;
   const geometry::SceneGraph<double>* scene_graph_;
-  std::map<multibody::BodyIndex, std::vector<ConvexPolytope>>
-      polytope_geometries_;
+  std::map<multibody::BodyIndex,
+           std::vector<std::unique_ptr<CollisionGeometry>>>
+      link_geometries_;
 
   SeparatingPlaneOrder plane_order_;
   CspaceRegionType cspace_region_type_;
   double separating_delta_;
   std::vector<SeparatingPlane> separating_planes_;
 
-  std::unordered_map<SortedPair<ConvexGeometry::Id>, const SeparatingPlane*>
-      map_polytopes_to_separating_planes_;
+  std::unordered_map<SortedPair<geometry::GeometryId>, const SeparatingPlane*>
+      map_collisions_to_separating_planes_;
 };
 
 /**
@@ -501,7 +503,8 @@ class CspaceFreeRegion {
 std::vector<LinkVertexOnPlaneSideRational>
 GenerateLinkOnOneSideOfPlaneRationalFunction(
     const RationalForwardKinematics& rational_forward_kinematics,
-    const ConvexPolytope* polytope, const ConvexPolytope* other_side_polytope,
+    const CollisionGeometry* link_geometry,
+    const CollisionGeometry* other_side_geometry,
     const RationalForwardKinematics::Pose<symbolic::Polynomial>&
         X_AB_multilinear,
     const drake::Vector3<symbolic::Expression>& a_A,
@@ -509,11 +512,11 @@ GenerateLinkOnOneSideOfPlaneRationalFunction(
     SeparatingPlaneOrder plane_order, double separating_delta);
 
 bool IsGeometryPairCollisionIgnored(
-    ConvexGeometry::Id id1, ConvexGeometry::Id id2,
+    geometry::GeometryId id1, geometry::GeometryId id2,
     const CspaceFreeRegion::FilteredCollisionPairs& filtered_collision_pairs);
 
 bool IsGeometryPairCollisionIgnored(
-    const SortedPair<ConvexGeometry::Id>& geometry_pair,
+    const SortedPair<geometry::GeometryId>& geometry_pair,
     const CspaceFreeRegion::FilteredCollisionPairs& filtered_collision_pairs);
 
 void ComputeBoundsOnT(const Eigen::Ref<const Eigen::VectorXd>& q_star,
@@ -621,12 +624,12 @@ void AddOuterPolytope(
 
 /**
  * Given a diagram (which contains the plant and the scene_graph), returns all
- * the convex polytopes.
+ * the collision geometries.
  */
-std::map<BodyIndex, std::vector<ConvexPolytope>> GetConvexPolytopes(
-    const systems::Diagram<double>& diagram,
-    const MultibodyPlant<double>* plant,
-    const geometry::SceneGraph<double>* scene_graph);
+std::map<BodyIndex, std::vector<std::unique_ptr<CollisionGeometry>>>
+GetCollisionGeometries(const systems::Diagram<double>& diagram,
+                       const MultibodyPlant<double>* plant,
+                       const geometry::SceneGraph<double>* scene_graph);
 
 /**
  * Find the redundant constraint in {C*t<=d, t_lower<=t<=t_upper}. We regard a

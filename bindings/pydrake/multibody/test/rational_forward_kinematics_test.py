@@ -49,15 +49,21 @@ class IiwaCspaceTest(unittest.TestCase):
         self.assertEqual(len(polytope_geometries), 3)
 
     def test_cspace_free_region_constructor(self):
-        dut = mut.CspaceFreeRegion(self.diagram, self.plant, self.scene_graph,
+        dut = mut.CspaceFreeRegion(self.diagram,
+                                   self.plant,
+                                   self.scene_graph,
                                    mut.SeparatingPlaneOrder.kAffine,
-                                   mut.CspaceRegionType.kGenericPolytope, separating_delta=1.)
+                                   mut.CspaceRegionType.kGenericPolytope,
+                                   separating_delta=1.)
         self.assertEqual(len(dut.separating_planes()), 3)
 
     def test_generate_tuples_for_bilinear_alternation(self):
-        dut = mut.CspaceFreeRegion(self.diagram, self.plant, self.scene_graph,
+        dut = mut.CspaceFreeRegion(self.diagram,
+                                   self.plant,
+                                   self.scene_graph,
                                    mut.SeparatingPlaneOrder.kAffine,
-                                   mut.CspaceRegionType.kGenericPolytope, separating_delta=1.)
+                                   mut.CspaceRegionType.kGenericPolytope,
+                                   separating_delta=1.)
         q_star = np.zeros(7)
         alternation_tuples, d_minus_Ct, t_lower, t_upper, t_minus_t_lower,\
             t_upper_minus_t, C, d, lagrangian_gram_vars, verified_gram_vars,\
@@ -115,9 +121,12 @@ class IiwaCspaceTest(unittest.TestCase):
         return q_star, C, d
 
     def test_construct_lagrangian_program(self):
-        dut = mut.CspaceFreeRegion(self.diagram, self.plant, self.scene_graph,
+        dut = mut.CspaceFreeRegion(self.diagram,
+                                   self.plant,
+                                   self.scene_graph,
                                    mut.SeparatingPlaneOrder.kAffine,
-                                   mut.CspaceRegionType.kGenericPolytope, separating_delta=1.)
+                                   mut.CspaceRegionType.kGenericPolytope,
+                                   separating_delta=1.)
         q_star = np.zeros(7)
         alternation_tuples, d_minus_Ct, t_lower, t_upper, t_minus_t_lower,\
             t_upper_minus_t, C_var, d_var, lagrangian_gram_vars,\
@@ -153,9 +162,12 @@ class IiwaCspaceTest(unittest.TestCase):
         self.assertTrue(result_polytope.is_success())
 
     def test_cspace_polytope_bilinear_alternation(self):
-        dut = mut.CspaceFreeRegion(self.diagram, self.plant, self.scene_graph,
+        dut = mut.CspaceFreeRegion(self.diagram,
+                                   self.plant,
+                                   self.scene_graph,
                                    mut.SeparatingPlaneOrder.kAffine,
-                                   mut.CspaceRegionType.kGenericPolytope, separating_delta=1.)
+                                   mut.CspaceRegionType.kGenericPolytope,
+                                   separating_delta=1.)
         q_star, C_init, d_init = self.construct_initial_cspace_polytope(dut)
         filtered_collision_pairs = set()
         bilinear_alternation_option = mut.BilinearAlternationOption()
@@ -170,9 +182,12 @@ class IiwaCspaceTest(unittest.TestCase):
                 q_inner_pts=None, inner_polytope=None)
 
     def test_cspace_polytope_binary_search(self):
-        dut = mut.CspaceFreeRegion(self.diagram, self.plant, self.scene_graph,
+        dut = mut.CspaceFreeRegion(self.diagram,
+                                   self.plant,
+                                   self.scene_graph,
                                    mut.SeparatingPlaneOrder.kAffine,
-                                   mut.CspaceRegionType.kGenericPolytope, separating_delta=1.)
+                                   mut.CspaceRegionType.kGenericPolytope,
+                                   separating_delta=1.)
         q_star, C_init, d_init = self.construct_initial_cspace_polytope(dut)
         filtered_collision_pairs = set()
         binary_search_option = mut.BinarySearchOption()
