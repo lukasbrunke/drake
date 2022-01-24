@@ -61,11 +61,11 @@ void FindMonomialBasisForPolytopicRegion(
   // First check if the monomial basis for this kinematics chain has been
   // computed.
   const SortedPair<multibody::BodyIndex> kinematics_chain(
-      rational.link_polytope->body_index(), rational.expressed_body_index);
+      rational.link_geometry->body_index(), rational.expressed_body_index);
   const auto it = map_chain_to_monomial_basis->find(kinematics_chain);
   if (it == map_chain_to_monomial_basis->end()) {
     const auto t_halfchain = rational_forward_kinematics.FindTOnPath(
-        rational.link_polytope->body_index(), rational.expressed_body_index);
+        rational.link_geometry->body_index(), rational.expressed_body_index);
     if (t_halfchain.rows() > 0) {
       *monomial_basis_halfchain = GenerateMonomialBasisWithOrderUpToOne(
           drake::symbolic::Variables(t_halfchain));
@@ -267,31 +267,33 @@ CspaceFreeRegion::CspaceFreeRegion(
     double separating_delta)
     : rational_forward_kinematics_(*plant),
       scene_graph_{scene_graph},
-      polytope_geometries_{GetConvexPolytopes(diagram, plant, scene_graph)},
+      link_geometries_{GetCollisionGeometries(diagram, plant, scene_graph)},
       plane_order_{plane_order},
       cspace_region_type_{cspace_region_type},
       separating_delta_{separating_delta} {
   DRAKE_DEMAND(separating_delta_ > 0);
   // Now create the separating planes.
   std::map<SortedPair<BodyIndex>,
-           std::vector<std::pair<const ConvexPolytope*, const ConvexPolytope*>>>
+           std::vector<
+               std::pair<const CollisionGeometry*, const CollisionGeometry*>>>
       collision_pairs;
   int num_collision_pairs = 0;
   const auto& model_inspector = scene_graph->model_inspector();
-  for (const auto& [link1, polytopes1] : polytope_geometries_) {
-    for (const auto& [link2, polytopes2] : polytope_geometries_) {
+  for (const auto& [link1, geometries1] : link_geometries_) {
+    for (const auto& [link2, geometries2] : link_geometries_) {
       if (link1 < link2) {
         // link_collision_pairs stores all the pair of collision geometry on
         // (link1, link2).
-        std::vector<std::pair<const ConvexPolytope*, const ConvexPolytope*>>
+        std::vector<
+            std::pair<const CollisionGeometry*, const CollisionGeometry*>>
             link_collision_pairs;
         // I need to check if the kinematics chain betwen link 1 and link 2 has
         // length 0.
         std::optional<bool> chain_has_length_zero;
-        for (const auto& polytope1 : polytopes1) {
-          for (const auto& polytope2 : polytopes2) {
-            if (!model_inspector.CollisionFiltered(polytope1.get_id(),
-                                                   polytope2.get_id())) {
+        for (const auto& geometry1: geometries1) {
+          for (const auto& geometry2: geometries2) {
+            if (!model_inspector.CollisionFiltered(geometry1->id(),
+                                                   geometry2->id())) {
               if (!chain_has_length_zero.has_value()) {
                 chain_has_length_zero =
                     rational_forward_kinematics_.FindTOnPath(link1, link2)
@@ -304,7 +306,8 @@ CspaceFreeRegion::CspaceFreeRegion(
                 }
               }
               num_collision_pairs++;
-              link_collision_pairs.emplace_back(&polytope1, &polytope2);
+              link_collision_pairs.emplace_back(geometry1.get(),
+                                                geometry2.get());
             }
           }
         }
@@ -322,8 +325,8 @@ CspaceFreeRegion::CspaceFreeRegion(
   // angles.
   std::unordered_map<SortedPair<BodyIndex>, VectorX<symbolic::Variable>>
       map_link_obstacle_to_t;
-  for (const auto& [link_pair, polytope_pairs] : collision_pairs) {
-    for (const auto& polytope_pair : polytope_pairs) {
+  for (const auto& [link_pair, geometry_pairs] : collision_pairs) {
+    for (const auto& geometry_pair : geometry_pairs) {
       Vector3<symbolic::Expression> a;
       symbolic::Expression b;
       const symbolic::Monomial monomial_one{};
@@ -393,13 +396,13 @@ CspaceFreeRegion::CspaceFreeRegion(
         var_count++;
       }
       separating_planes_.emplace_back(
-          a, b, polytope_pair.first, polytope_pair.second,
+          a, b, geometry_pair.first, geometry_pair.second,
           internal::FindBodyInTheMiddleOfChain(*plant, link_pair.first(),
                                                link_pair.second()),
           plane_order_, plane_decision_vars);
-      map_polytopes_to_separating_planes_.emplace(
-          SortedPair<ConvexGeometry::Id>(polytope_pair.first->get_id(),
-                                         polytope_pair.second->get_id()),
+      map_collisions_to_separating_planes_.emplace(
+          SortedPair<geometry::GeometryId>(geometry_pair.first->id(),
+                                           geometry_pair.second->id()),
           static_cast<int>(separating_planes_.size()) - 1);
     }
   }
@@ -417,29 +420,29 @@ CspaceFreeRegion::GenerateLinkOnOneSideOfPlaneRationals(
   std::vector<LinkVertexOnPlaneSideRational> rationals;
   for (const auto& separating_plane : separating_planes_) {
     if (!IsGeometryPairCollisionIgnored(
-            separating_plane.positive_side_polytope->get_id(),
-            separating_plane.negative_side_polytope->get_id(),
+            separating_plane.positive_side_geometry->id(),
+            separating_plane.negative_side_geometry->id(),
             filtered_collision_pairs)) {
-      // First compute X_AB for both side of the polytopes.
+      // First compute X_AB for both side of the geometries.
       for (const PlaneSide plane_side :
            {PlaneSide::kPositive, PlaneSide::kNegative}) {
-        const ConvexPolytope* polytope;
-        const ConvexPolytope* other_side_polytope;
+        const CollisionGeometry* link_geometry;
+        const CollisionGeometry* other_side_geometry;
         if (plane_side == PlaneSide::kPositive) {
-          polytope = separating_plane.positive_side_polytope;
-          other_side_polytope = separating_plane.negative_side_polytope;
+          link_geometry = separating_plane.positive_side_geometry;
+          other_side_geometry = separating_plane.negative_side_geometry;
         } else {
-          polytope = separating_plane.negative_side_polytope;
-          other_side_polytope = separating_plane.positive_side_polytope;
+          link_geometry = separating_plane.negative_side_geometry;
+          other_side_geometry = separating_plane.positive_side_geometry;
         }
         const DirectedKinematicsChain expressed_to_link(
-            separating_plane.expressed_link, polytope->body_index());
+            separating_plane.expressed_link, link_geometry->body_index());
         auto it = body_pair_to_X_AB_multilinear.find(expressed_to_link);
         if (it == body_pair_to_X_AB_multilinear.end()) {
           body_pair_to_X_AB_multilinear.emplace_hint(
               it, expressed_to_link,
               rational_forward_kinematics_.CalcLinkPoseAsMultilinearPolynomial(
-                  q_star, polytope->body_index(),
+                  q_star, link_geometry->body_index(),
                   separating_plane.expressed_link));
         }
         it = body_pair_to_X_AB_multilinear.find(expressed_to_link);
@@ -448,9 +451,10 @@ CspaceFreeRegion::GenerateLinkOnOneSideOfPlaneRationals(
         const std::vector<LinkVertexOnPlaneSideRational>
             rationals_expressed_to_link =
                 GenerateLinkOnOneSideOfPlaneRationalFunction(
-                    rational_forward_kinematics_, polytope, other_side_polytope,
-                    X_AB_multilinear, separating_plane.a, separating_plane.b,
-                    plane_side, separating_plane.order, separating_delta_);
+                    rational_forward_kinematics_, link_geometry,
+                    other_side_geometry, X_AB_multilinear, separating_plane.a,
+                    separating_plane.b, plane_side, separating_plane.order,
+                    separating_delta_);
         // I cannot use "insert" function to append vectors, since
         // LinkVertexOnPlaneSideRational contains const members, hence it does
         // not have an assignment operator.
@@ -506,7 +510,7 @@ void ConstructTBoundsPolynomial(
  * @param[out] verified_polynomial p(t) - l_polytope(t)ᵀ(d - C*t) -
  * l_lower(t)ᵀ(t-t_lower) - l_upper(t)ᵀ(t_upper-t)
  */
-void AddNonnegativeConstraintForPolytopeOnOneSideOfPlane(
+void AddNonnegativeConstraintForGeometryOnOneSideOfPlane(
     solvers::MathematicalProgram* prog,
     const symbolic::RationalFunction& polytope_on_one_side_rational,
     const VectorX<symbolic::Polynomial>& d_minus_Ct,
@@ -582,8 +586,8 @@ CspaceFreeRegion::ConstructProgramForCspacePolytope(
   // Add separating planes as decision variables.
   for (const auto& separating_plane : separating_planes_) {
     if (!IsGeometryPairCollisionIgnored(
-            separating_plane.positive_side_polytope->get_id(),
-            separating_plane.negative_side_polytope->get_id(),
+            separating_plane.positive_side_geometry->id(),
+            separating_plane.negative_side_geometry->id(),
             filtered_collision_pairs)) {
       ret.prog->AddDecisionVariables(separating_plane.decision_variables);
     }
@@ -634,7 +638,7 @@ CspaceFreeRegion::ConstructProgramForCspacePolytope(
         &map_chain_to_monomial_basis, &monomial_basis_chain);
     // Now add the constraint that C*t<=d and t_lower <= t <= t_upper implies
     // the rational being nonnegative.
-    AddNonnegativeConstraintForPolytopeOnOneSideOfPlane(
+    AddNonnegativeConstraintForGeometryOnOneSideOfPlane(
         ret.prog.get(), rationals[i].rational, d_minus_Ct_polynomial,
         t_minus_t_lower_poly, t_upper_minus_t_poly, monomial_basis_chain,
         verification_option, t_lower_needs_lagrangian, t_upper_needs_lagrangian,
@@ -647,22 +651,16 @@ CspaceFreeRegion::ConstructProgramForCspacePolytope(
 bool CspaceFreeRegion::IsPostureInCollision(
     const systems::Context<double>& context) const {
   const auto& plant = rational_forward_kinematics_.plant();
-  drake::math::RigidTransform<double> X_WB1;
-  drake::math::RigidTransform<double> X_WB2;
-  const auto& model_inspector = scene_graph_->model_inspector();
-  for (const auto& [link1, polytopes1] : polytope_geometries_) {
-    X_WB1 = plant.EvalBodyPoseInWorld(context, plant.get_body(link1));
-    for (const auto& [link2, polytopes2] : polytope_geometries_) {
-      X_WB2 = plant.EvalBodyPoseInWorld(context, plant.get_body(link2));
-      for (const auto& polytope1 : polytopes1) {
-        for (const auto& polytope2 : polytopes2) {
-          if (!model_inspector.CollisionFiltered(polytope1.get_id(),
-                                                 polytope2.get_id()) &&
-              polytope1.IsInCollision(polytope2, X_WB1, X_WB2)) {
-            return true;
-          }
-        }
-      }
+  const auto& query_port = plant.get_geometry_query_input_port();
+  const auto& query_object =
+      query_port.Eval<geometry::QueryObject<double>>(context);
+  const auto& inspector = scene_graph_->model_inspector();
+  for (const auto& geometry_pair : inspector.GetCollisionCandidates()) {
+    const geometry::SignedDistancePair<double> signed_distance_pair =
+        query_object.ComputeSignedDistancePairClosestPoints(
+            geometry_pair.first, geometry_pair.second);
+    if (signed_distance_pair.distance < 0) {
+      return true;
     }
   }
   return false;
@@ -1774,54 +1772,69 @@ void CspaceFreeRegion::CspacePolytopeBinarySearch(
 std::vector<LinkVertexOnPlaneSideRational>
 GenerateLinkOnOneSideOfPlaneRationalFunction(
     const RationalForwardKinematics& rational_forward_kinematics,
-    const ConvexPolytope* polytope, const ConvexPolytope* other_side_polytope,
+    const CollisionGeometry* link_geometry,
+    const CollisionGeometry* other_side_geometry,
     const RationalForwardKinematics::Pose<symbolic::Polynomial>&
         X_AB_multilinear,
     const drake::Vector3<symbolic::Expression>& a_A,
     const symbolic::Expression& b, PlaneSide plane_side,
     SeparatingPlaneOrder plane_order, double separating_delta) {
   std::vector<LinkVertexOnPlaneSideRational> rational_fun;
-  rational_fun.reserve(polytope->p_BV().cols());
-  const symbolic::Monomial monomial_one{};
-  // a_A and b are not polynomial of sinθ or cosθ.
-  Vector3<symbolic::Polynomial> a_A_poly;
-  for (int i = 0; i < 3; ++i) {
-    a_A_poly(i) = symbolic::Polynomial({{monomial_one, a_A(i)}});
-  }
-  const symbolic::Polynomial b_poly({{monomial_one, b}});
-  for (int i = 0; i < polytope->p_BV().cols(); ++i) {
-    // Step 1: Compute vertex position.
-    const Vector3<drake::symbolic::Polynomial> p_AVi =
-        X_AB_multilinear.p_AB + X_AB_multilinear.R_AB * polytope->p_BV().col(i);
 
-    // Step 2: Compute a_A.dot(p_AVi) + b
-    const drake::symbolic::Polynomial point_on_hyperplane_side =
-        a_A_poly.dot(p_AVi) + b_poly;
+  switch (link_geometry->type()) {
+    case CollisionGeometryType::kPolytope: {
+      const auto link_polytope =
+          dynamic_cast<const geometry::optimization::VPolytope*>(
+              &link_geometry->geometry());
+      rational_fun.reserve(link_polytope->vertices().cols());
+      const symbolic::Monomial monomial_one{};
+      // a_A and b are not polynomial of sinθ or cosθ.
+      Vector3<symbolic::Polynomial> a_A_poly;
+      for (int i = 0; i < 3; ++i) {
+        a_A_poly(i) = symbolic::Polynomial({{monomial_one, a_A(i)}});
+      }
+      const symbolic::Polynomial b_poly({{monomial_one, b}});
+      for (int i = 0; i < link_polytope->vertices().cols(); ++i) {
+        // Step 1: Compute vertex position.
+        const Vector3<drake::symbolic::Polynomial> p_AVi =
+            X_AB_multilinear.p_AB +
+            X_AB_multilinear.R_AB * link_polytope->vertices().col(i);
 
-    // Step 3: Convert the multilinear polynomial to rational function.
-    rational_fun.emplace_back(
-        rational_forward_kinematics
-            .ConvertMultilinearPolynomialToRationalFunction(
-                plane_side == PlaneSide::kPositive
-                    ? point_on_hyperplane_side - separating_delta
-                    : -separating_delta - point_on_hyperplane_side),
-        polytope, X_AB_multilinear.frame_A_index, other_side_polytope, a_A, b,
-        plane_side, plane_order);
+        // Step 2: Compute a_A.dot(p_AVi) + b
+        const drake::symbolic::Polynomial point_on_hyperplane_side =
+            a_A_poly.dot(p_AVi) + b_poly;
+
+        // Step 3: Convert the multilinear polynomial to rational function.
+        rational_fun.emplace_back(
+            rational_forward_kinematics
+                .ConvertMultilinearPolynomialToRationalFunction(
+                    plane_side == PlaneSide::kPositive
+                        ? point_on_hyperplane_side - separating_delta
+                        : -separating_delta - point_on_hyperplane_side),
+            link_geometry, X_AB_multilinear.frame_A_index, other_side_geometry,
+            a_A, b, plane_side, plane_order);
+      }
+      break;
+    }
+    case CollisionGeometryType::kEllipsoid: {
+      throw std::runtime_error(
+          "Have not implemented for ellipsoid geometry yet.");
+    }
   }
   return rational_fun;
 }
 
 bool IsGeometryPairCollisionIgnored(
-    const SortedPair<ConvexGeometry::Id>& geometry_pair,
+    const SortedPair<geometry::GeometryId>& geometry_pair,
     const CspaceFreeRegion::FilteredCollisionPairs& filtered_collision_pairs) {
   return filtered_collision_pairs.count(geometry_pair) > 0;
 }
 
 bool IsGeometryPairCollisionIgnored(
-    ConvexGeometry::Id id1, ConvexGeometry::Id id2,
+    geometry::GeometryId id1, geometry::GeometryId id2,
     const CspaceFreeRegion::FilteredCollisionPairs& filtered_collision_pairs) {
   return IsGeometryPairCollisionIgnored(
-      drake::SortedPair<ConvexGeometry::Id>(id1, id2),
+      drake::SortedPair<geometry::GeometryId>(id1, id2),
       filtered_collision_pairs);
 }
 
@@ -2017,11 +2030,11 @@ void AddOuterPolytope(
   }
 }
 
-std::map<BodyIndex, std::vector<ConvexPolytope>> GetConvexPolytopes(
-    const systems::Diagram<double>& diagram,
-    const MultibodyPlant<double>* plant,
-    const geometry::SceneGraph<double>* scene_graph) {
-  std::map<BodyIndex, std::vector<ConvexPolytope>> ret;
+std::map<BodyIndex, std::vector<std::unique_ptr<CollisionGeometry>>>
+GetCollisionGeometries(const systems::Diagram<double>& diagram,
+                       const MultibodyPlant<double>* plant,
+                       const geometry::SceneGraph<double>* scene_graph) {
+  std::map<BodyIndex, std::vector<std::unique_ptr<CollisionGeometry>>> ret;
   // First generate the query object.
   auto diagram_context = diagram.CreateDefaultContext();
   diagram.Publish(*diagram_context);
@@ -2039,17 +2052,24 @@ std::map<BodyIndex, std::vector<ConvexPolytope>> GetConvexPolytopes(
       const auto geometry_ids =
           inspector.GetGeometries(frame_id.value(), geometry::Role::kProximity);
       for (const auto& geometry_id : geometry_ids) {
-        const geometry::optimization::VPolytope v_polytope(
-            query_object, geometry_id, frame_id.value());
-        const ConvexPolytope convex_polytope(body_index, geometry_id,
-                                             v_polytope.vertices());
-        auto it = ret.find(body_index);
-        if (it == ret.end()) {
-          std::vector<ConvexPolytope> body_polytopes;
-          body_polytopes.push_back(convex_polytope);
-          ret.emplace_hint(it, body_index, body_polytopes);
-        } else {
-          it->second.push_back(convex_polytope);
+        const auto& shape = inspector.GetShape(geometry_id);
+        if (dynamic_cast<const geometry::Convex*>(&shape) ||
+            dynamic_cast<const geometry::Box*>(&shape)) {
+          // For a convex mesh or a box, construct a VPolytope.
+          geometry::optimization::VPolytope v_polytope(
+              query_object, geometry_id, frame_id.value());
+          auto collision_geometry = std::make_unique<CollisionGeometry>(
+              CollisionGeometryType::kPolytope, v_polytope.Clone(), body_index,
+              geometry_id);
+
+          auto it = ret.find(body_index);
+          if (it == ret.end()) {
+            std::vector<std::unique_ptr<CollisionGeometry>> body_polytopes;
+            body_polytopes.push_back(std::move(collision_geometry));
+            ret.emplace_hint(it, body_index, std::move(body_polytopes));
+          } else {
+            it->second.push_back(std::move(collision_geometry));
+          }
         }
       }
     }

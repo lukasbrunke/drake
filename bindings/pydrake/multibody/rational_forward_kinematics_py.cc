@@ -8,6 +8,7 @@
 #include "drake/bindings/pydrake/common/default_scalars_pybind.h"
 #include "drake/bindings/pydrake/common/value_pybind.h"
 #include "drake/bindings/pydrake/pydrake_pybind.h"
+#include "drake/multibody/rational_forward_kinematics/collision_geometry.h"
 #include "drake/multibody/rational_forward_kinematics/cspace_free_region.h"
 #include "drake/multibody/rational_forward_kinematics/generate_monomial_basis_util.h"
 #include "drake/multibody/rational_forward_kinematics/rational_forward_kinematics.h"
@@ -107,16 +108,22 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
 
   // Pose
   constexpr auto& doc = pydrake_doc.drake.multibody;
-  py::class_<multibody::ConvexPolytope>(
-      m, "ConvexPolytope", doc.ConvexPolytope.doc)
-      .def(py::init<BodyIndex, geometry::GeometryId,
-               const Eigen::Ref<const Eigen::Matrix3Xd>>(),
-          py::arg("body_index"), py::arg("id"), py::arg("vertices"),
-          doc.ConvexPolytope.doc)
-      .def("p_BV", &ConvexPolytope::p_BV, doc.ConvexPolytope.p_BV.doc)
-      .def("get_id", &ConvexPolytope::get_id, doc.ConvexGeometry.get_id.doc)
-      .def("body_index", &ConvexPolytope::body_index,
-          doc.ConvexGeometry.body_index.doc);
+
+  py::enum_<multibody::CollisionGeometryType>(
+      m, "CollisionGeometryType", doc.CollisionGeometryType.doc)
+      .value("kPolytope", multibody::CollisionGeometryType::kPolytope,
+          doc.CollisionGeometryType.kPolytope.doc)
+      .value("kEllipsoid", multibody::CollisionGeometryType::kEllipsoid,
+          doc.CollisionGeometryType.kEllipsoid.doc);
+
+  py::class_<multibody::CollisionGeometry>(
+      m, "CollisionGeometry", doc.CollisionGeometry.doc)
+      .def("type", &CollisionGeometry::type, doc.CollisionGeometryType.doc)
+      .def("geometry", &CollisionGeometry::geometry, py_rvp::reference_internal,
+          doc.CollisionGeometry.geometry.doc)
+      .def("body_index", &CollisionGeometry::body_index,
+          doc.CollisionGeometry.body_index.doc)
+      .def("id", &CollisionGeometry::id, doc.CollisionGeometry.id.doc);
 
   py::enum_<multibody::SeparatingPlaneOrder>(
       m, "SeparatingPlaneOrder", doc.SeparatingPlaneOrder.doc)
@@ -130,12 +137,12 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
       m, "SeparatingPlane", doc.SeparatingPlane.doc)
       .def_readonly("a", &SeparatingPlane::a, doc.SeparatingPlane.a.doc)
       .def_readonly("b", &SeparatingPlane::b, doc.SeparatingPlane.b.doc)
-      .def_readonly("positive_side_polytope",
-          &SeparatingPlane::positive_side_polytope,
-          doc.SeparatingPlane.positive_side_polytope.doc)
-      .def_readonly("negative_side_polytope",
-          &SeparatingPlane::negative_side_polytope,
-          doc.SeparatingPlane.negative_side_polytope.doc)
+      .def_readonly("positive_side_geometry",
+          &SeparatingPlane::positive_side_geometry,
+          doc.SeparatingPlane.positive_side_geometry.doc)
+      .def_readonly("negative_side_geometry",
+          &SeparatingPlane::negative_side_geometry,
+          doc.SeparatingPlane.negative_side_geometry.doc)
       .def_readonly("expressed_link", &SeparatingPlane::expressed_link,
           doc.SeparatingPlane.expressed_link.doc)
       .def_readonly(
@@ -162,15 +169,15 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
       m, "LinkVertexOnPlaneSideRational", doc.LinkVertexOnPlaneSideRational.doc)
       .def_readonly("rational", &LinkVertexOnPlaneSideRational::rational,
           doc.LinkVertexOnPlaneSideRational.rational.doc)
-      .def_readonly("link_polytope",
-          &LinkVertexOnPlaneSideRational::link_polytope,
-          doc.LinkVertexOnPlaneSideRational.link_polytope.doc)
+      .def_readonly("link_geometry",
+          &LinkVertexOnPlaneSideRational::link_geometry,
+          doc.LinkVertexOnPlaneSideRational.link_geometry.doc)
       .def_readonly("expressed_body_index",
           &LinkVertexOnPlaneSideRational::expressed_body_index,
           doc.LinkVertexOnPlaneSideRational.expressed_body_index.doc)
-      .def_readonly("other_side_link_polytope",
-          &LinkVertexOnPlaneSideRational::other_side_link_polytope,
-          doc.LinkVertexOnPlaneSideRational.other_side_link_polytope.doc)
+      .def_readonly("other_side_link_geometry",
+          &LinkVertexOnPlaneSideRational::other_side_link_geometry,
+          doc.LinkVertexOnPlaneSideRational.other_side_link_geometry.doc)
       .def_readonly("a_A", &LinkVertexOnPlaneSideRational::a_A,
           doc.LinkVertexOnPlaneSideRational.a_A.doc)
       .def_readonly("b", &LinkVertexOnPlaneSideRational::b,
@@ -266,9 +273,9 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
       py::arg("separating_delta"), doc.CspaceFreeRegion.ctor.doc);
 
   cspace_cls
-      .def("map_polytopes_to_separating_planes",
-          &CspaceFreeRegion::map_polytopes_to_separating_planes,
-          doc.CspaceFreeRegion.map_polytopes_to_separating_planes.doc)
+      .def("map_collisions_to_separating_planes",
+          &CspaceFreeRegion::map_collisions_to_separating_planes,
+          doc.CspaceFreeRegion.map_collisions_to_separating_planes.doc)
       .def("GenerateLinkOnOneSideOfPlaneRationals",
           &CspaceFreeRegion::GenerateLinkOnOneSideOfPlaneRationals,
           py::arg("q_star"), py::arg("filtered_collision_pairs"),
@@ -434,8 +441,8 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
       .def("separating_planes", &CspaceFreeRegion::separating_planes,
           py_rvp::reference, doc.CspaceFreeRegion.separating_planes.doc);
 
-  m.def("GetConvexPolytopes", &GetConvexPolytopes, py::arg("diagram"),
-      py::arg("plant"), py::arg("scene_graph"), doc.GetConvexPolytopes.doc);
+  m.def("GetCollisionGeometries", &GetCollisionGeometries, py::arg("diagram"),
+      py::arg("plant"), py::arg("scene_graph"), doc.GetCollisionGeometries.doc);
 
   m.def("AddInscribedEllipsoid", &AddInscribedEllipsoid, py::arg("prog"),
        py::arg("C"), py::arg("d"), py::arg("t_lower"), py::arg("t_upper"),
