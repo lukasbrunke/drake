@@ -3,6 +3,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
 #include <limits>
 #include <optional>
 #include <thread>
@@ -53,7 +56,7 @@ struct DirectedKinematicsChainHash {
 // the expressed body to this link (either the robot link or the obstacle).
 void FindMonomialBasisForPolytopicRegion(
     const RationalForwardKinematics& rational_forward_kinematics,
-    const LinkVertexOnPlaneSideRational& rational,
+    const LinkOnPlaneSideRational& rational,
     std::unordered_map<SortedPair<multibody::BodyIndex>,
                        VectorX<drake::symbolic::Monomial>>*
         map_chain_to_monomial_basis,
@@ -268,7 +271,7 @@ CspaceFreeRegion::CspaceFreeRegion(
     : rational_forward_kinematics_(*plant),
       scene_graph_{scene_graph},
       link_geometries_{GetCollisionGeometries(diagram, plant, scene_graph)},
-      plane_order_{plane_order},
+      plane_order_for_polytope_{plane_order},
       cspace_region_type_{cspace_region_type},
       separating_delta_{separating_delta} {
   DRAKE_DEMAND(separating_delta_ > 0);
@@ -290,8 +293,8 @@ CspaceFreeRegion::CspaceFreeRegion(
         // I need to check if the kinematics chain betwen link 1 and link 2 has
         // length 0.
         std::optional<bool> chain_has_length_zero;
-        for (const auto& geometry1: geometries1) {
-          for (const auto& geometry2: geometries2) {
+        for (const auto& geometry1 : geometries1) {
+          for (const auto& geometry2 : geometries2) {
             if (!model_inspector.CollisionFiltered(geometry1->id(),
                                                    geometry2->id())) {
               if (!chain_has_length_zero.has_value()) {
@@ -331,7 +334,13 @@ CspaceFreeRegion::CspaceFreeRegion(
       symbolic::Expression b;
       const symbolic::Monomial monomial_one{};
       VectorX<symbolic::Variable> plane_decision_vars;
-      if (plane_order_ == SeparatingPlaneOrder::kConstant) {
+      SeparatingPlaneOrder plane_order_geometry_pair =
+          SeparatingPlaneOrder::kConstant;
+      if (geometry_pair.first->type() == CollisionGeometryType::kPolytope &&
+          geometry_pair.second->type() == CollisionGeometryType::kPolytope) {
+        plane_order_geometry_pair = plane_order_for_polytope_;
+      }
+      if (plane_order_geometry_pair == SeparatingPlaneOrder::kConstant) {
         plane_decision_vars.resize(4);
         for (int i = 0; i < 3; ++i) {
           plane_decision_vars(i) = symbolic::Variable(
@@ -341,7 +350,7 @@ CspaceFreeRegion::CspaceFreeRegion(
         }
         a = plane_decision_vars.head<3>().cast<symbolic::Expression>();
         b = plane_decision_vars(3);
-      } else if (plane_order_ == SeparatingPlaneOrder::kAffine) {
+      } else if (plane_order_geometry_pair == SeparatingPlaneOrder::kAffine) {
         VectorX<symbolic::Variable> t_for_plane;
         if (cspace_region_type_ == CspaceRegionType::kGenericPolytope) {
           t_for_plane = rational_forward_kinematics_.t();
@@ -399,7 +408,7 @@ CspaceFreeRegion::CspaceFreeRegion(
           a, b, geometry_pair.first, geometry_pair.second,
           internal::FindBodyInTheMiddleOfChain(*plant, link_pair.first(),
                                                link_pair.second()),
-          plane_order_, plane_decision_vars);
+          plane_order_geometry_pair, plane_decision_vars);
       map_collisions_to_separating_planes_.emplace(
           SortedPair<geometry::GeometryId>(geometry_pair.first->id(),
                                            geometry_pair.second->id()),
@@ -408,7 +417,7 @@ CspaceFreeRegion::CspaceFreeRegion(
   }
 }
 
-std::vector<LinkVertexOnPlaneSideRational>
+std::vector<LinkOnPlaneSideRational>
 CspaceFreeRegion::GenerateLinkOnOneSideOfPlaneRationals(
     const Eigen::Ref<const Eigen::VectorXd>& q_star,
     const CspaceFreeRegion::FilteredCollisionPairs& filtered_collision_pairs)
@@ -417,7 +426,7 @@ CspaceFreeRegion::GenerateLinkOnOneSideOfPlaneRationals(
                      RationalForwardKinematics::Pose<symbolic::Polynomial>,
                      DirectedKinematicsChainHash>
       body_pair_to_X_AB_multilinear;
-  std::vector<LinkVertexOnPlaneSideRational> rationals;
+  std::vector<LinkOnPlaneSideRational> rationals;
   for (const auto& separating_plane : separating_planes_) {
     if (!IsGeometryPairCollisionIgnored(
             separating_plane.positive_side_geometry->id(),
@@ -448,15 +457,14 @@ CspaceFreeRegion::GenerateLinkOnOneSideOfPlaneRationals(
         it = body_pair_to_X_AB_multilinear.find(expressed_to_link);
         const RationalForwardKinematics::Pose<symbolic::Polynomial>&
             X_AB_multilinear = it->second;
-        const std::vector<LinkVertexOnPlaneSideRational>
-            rationals_expressed_to_link =
-                GenerateLinkOnOneSideOfPlaneRationalFunction(
-                    rational_forward_kinematics_, link_geometry,
-                    other_side_geometry, X_AB_multilinear, separating_plane.a,
-                    separating_plane.b, plane_side, separating_plane.order,
-                    separating_delta_);
+        const std::vector<LinkOnPlaneSideRational> rationals_expressed_to_link =
+            GenerateLinkOnOneSideOfPlaneRationalFunction(
+                rational_forward_kinematics_, link_geometry,
+                other_side_geometry, X_AB_multilinear, separating_plane.a,
+                separating_plane.b, plane_side, separating_plane.order,
+                separating_delta_);
         // I cannot use "insert" function to append vectors, since
-        // LinkVertexOnPlaneSideRational contains const members, hence it does
+        // LinkOnPlaneSideRational contains const members, hence it does
         // not have an assignment operator.
         std::copy(rationals_expressed_to_link.begin(),
                   rationals_expressed_to_link.end(),
@@ -573,7 +581,7 @@ void AddNonnegativeConstraintForGeometryOnOneSideOfPlane(
 CspaceFreeRegion::CspacePolytopeProgramReturn
 CspaceFreeRegion::ConstructProgramForCspacePolytope(
     const Eigen::Ref<const Eigen::VectorXd>& q_star,
-    const std::vector<LinkVertexOnPlaneSideRational>& rationals,
+    const std::vector<LinkOnPlaneSideRational>& rationals,
     const Eigen::Ref<const Eigen::MatrixXd>& C,
     const Eigen::Ref<const Eigen::VectorXd>& d,
     const FilteredCollisionPairs& filtered_collision_pairs,
@@ -677,7 +685,10 @@ void CspaceFreeRegion::GenerateTuplesForBilinearAlternation(
     VectorX<symbolic::Variable>* lagrangian_gram_vars,
     VectorX<symbolic::Variable>* verified_gram_vars,
     VectorX<symbolic::Variable>* separating_plane_vars,
-    std::vector<std::vector<int>>* separating_plane_to_tuples) const {
+    std::vector<std::vector<int>>* separating_plane_to_tuples,
+    std::vector<solvers::Binding<solvers::LorentzConeConstraint>>*
+        separating_plane_lorentz_cone_constraints) const {
+  DRAKE_DEMAND(separating_plane_lorentz_cone_constraints != nullptr);
   // Create variables C and d.
   const auto& t = rational_forward_kinematics_.t();
   C->resize(C_rows, t.rows());
@@ -719,7 +730,10 @@ void CspaceFreeRegion::GenerateTuplesForBilinearAlternation(
   // variables.
   int lagrangian_gram_vars_count = 0;
   int verified_gram_vars_count = 0;
+  int lorentz_cone_constraints_count = 0;
   for (int i = 0; i < static_cast<int>(rationals.size()); ++i) {
+    lorentz_cone_constraints_count +=
+        rationals[i].lorentz_cone_constraints.size();
     VectorX<symbolic::Monomial> monomial_basis_chain;
     FindMonomialBasisForPolytopicRegion(
         rational_forward_kinematics_, rationals[i],
@@ -783,6 +797,15 @@ void CspaceFreeRegion::GenerateTuplesForBilinearAlternation(
         separating_plane.decision_variables;
     separating_plane_vars_count += separating_plane.decision_variables.rows();
   }
+  // Set the separating plane lorentz cone constraints.
+  separating_plane_lorentz_cone_constraints->reserve(
+      lorentz_cone_constraints_count);
+  for (const auto& rational : rationals) {
+    separating_plane_lorentz_cone_constraints->insert(
+        separating_plane_lorentz_cone_constraints->end(),
+        rational.lorentz_cone_constraints.begin(),
+        rational.lorentz_cone_constraints.end());
+  }
 }
 
 std::unique_ptr<solvers::MathematicalProgram>
@@ -793,6 +816,8 @@ CspaceFreeRegion::ConstructLagrangianProgram(
     const VectorX<symbolic::Variable>& lagrangian_gram_vars,
     const VectorX<symbolic::Variable>& verified_gram_vars,
     const VectorX<symbolic::Variable>& separating_plane_vars,
+    const std::vector<solvers::Binding<solvers::LorentzConeConstraint>>&
+        separating_plane_lorentz_cone_constraints,
     const Eigen::Ref<const Eigen::VectorXd>& t_lower,
     const Eigen::Ref<const Eigen::VectorXd>& t_upper,
     const VerificationOption& option, std::optional<double> redundant_tighten,
@@ -915,6 +940,10 @@ CspaceFreeRegion::ConstructLagrangianProgram(
       prog->AddLinearEqualityConstraint(item.second, 0);
     }
   }
+  // Now add the Lorentz cone constraints for the separting planes.
+  for (const auto& binding : separating_plane_lorentz_cone_constraints) {
+    prog->AddConstraint(binding);
+  }
   if (P != nullptr && q != nullptr) {
     *P = prog->NewSymmetricContinuousVariables(t.rows(), "P");
     *q = prog->NewContinuousVariables(t.rows(), "q");
@@ -932,6 +961,8 @@ CspaceFreeRegion::ConstructPolytopeProgram(
     const Eigen::VectorXd& lagrangian_gram_var_vals,
     const VectorX<symbolic::Variable>& verified_gram_vars,
     const VectorX<symbolic::Variable>& separating_plane_vars,
+    const std::vector<solvers::Binding<solvers::LorentzConeConstraint>>&
+        separating_plane_lorentz_cone_constraints,
     const VectorX<symbolic::Polynomial>& t_minus_t_lower,
     const VectorX<symbolic::Polynomial>& t_upper_minus_t,
     const VerificationOption& option) const {
@@ -1005,6 +1036,10 @@ CspaceFreeRegion::ConstructPolytopeProgram(
     for (const auto& item : poly_diff.monomial_to_coefficient_map()) {
       prog->AddLinearEqualityConstraint(item.second, 0);
     }
+  }
+  // Add Lorentz cone constraints for separating planes.
+  for (const auto& binding : separating_plane_lorentz_cone_constraints) {
+    prog->AddConstraint(binding);
   }
   return prog;
 }
@@ -1429,11 +1464,13 @@ void CspaceFreeRegion::CspacePolytopeBilinearAlternation(
   VectorX<symbolic::Variable> d_var, lagrangian_gram_vars, verified_gram_vars,
       separating_plane_vars;
   std::vector<std::vector<int>> separating_plane_to_tuples;
+  std::vector<solvers::Binding<solvers::LorentzConeConstraint>>
+      separating_plane_lorentz_cone_constraints;
   GenerateTuplesForBilinearAlternation(
       q_star, filtered_collision_pairs, C_rows, &alternation_tuples,
       &d_minus_Ct, &t_lower, &t_upper, &t_minus_t_lower, &t_upper_minus_t,
       &C_var, &d_var, &lagrangian_gram_vars, &verified_gram_vars,
-      &separating_plane_vars, &separating_plane_to_tuples);
+      &separating_plane_vars, &separating_plane_to_tuples, &separating_plane_lorentz_cone_constraints);
   if (bilinear_alternation_option.compute_polytope_volume) {
     drake::log()->info(
         fmt::format("Polytope volume {}",
@@ -1493,7 +1530,8 @@ void CspaceFreeRegion::CspacePolytopeBilinearAlternation(
     // Now solve the polytope problem (fix Lagrangian).
     auto prog_polytope = ConstructPolytopeProgram(
         alternation_tuples, C_var, d_var, d_minus_Ct, lagrangian_gram_var_vals,
-        verified_gram_vars, separating_plane_vars, t_minus_t_lower,
+        verified_gram_vars, separating_plane_vars,
+        separating_plane_lorentz_cone_constraints, t_minus_t_lower,
         t_upper_minus_t, verification_option);
     // Add the constraint that the polytope contains the ellipsoid
     margin = prog_polytope->NewContinuousVariables(C_var.rows(), "margin");
@@ -1618,11 +1656,13 @@ void CspaceFreeRegion::CspacePolytopeBinarySearch(
   VectorX<symbolic::Variable> d_var, lagrangian_gram_vars, verified_gram_vars,
       separating_plane_vars;
   std::vector<std::vector<int>> separating_plane_to_tuples;
+  std::vector<solvers::Binding<solvers::LorentzConeConstraint>>
+      separating_plane_lorentz_cone_constraints;
   GenerateTuplesForBilinearAlternation(
       q_star, filtered_collision_pairs, C_rows, &alternation_tuples,
       &d_minus_Ct, &t_lower, &t_upper, &t_minus_t_lower, &t_upper_minus_t,
       &C_var, &d_var, &lagrangian_gram_vars, &verified_gram_vars,
-      &separating_plane_vars, &separating_plane_to_tuples);
+      &separating_plane_vars, &separating_plane_to_tuples, &separating_plane_lorentz_cone_constraints);
   std::optional<Eigen::MatrixXd> t_inner_pts;
   if (q_inner_pts.has_value()) {
     t_inner_pts->resize(q_inner_pts->rows(), q_inner_pts->cols());
@@ -1703,11 +1743,6 @@ void CspaceFreeRegion::CspacePolytopeBinarySearch(
             }
           }
         }
-        if (compute_polytope_volume) {
-          drake::log()->info(
-              fmt::format("C-space polytope volume {}",
-                          CalcCspacePolytopeVolume(C, d, t_lower, t_upper)));
-        }
         return is_success;
       };
 
@@ -1769,7 +1804,7 @@ void CspaceFreeRegion::CspacePolytopeBinarySearch(
   }
 }
 
-std::vector<LinkVertexOnPlaneSideRational>
+std::vector<LinkOnPlaneSideRational>
 GenerateLinkOnOneSideOfPlaneRationalFunction(
     const RationalForwardKinematics& rational_forward_kinematics,
     const CollisionGeometry* link_geometry,
@@ -1779,7 +1814,7 @@ GenerateLinkOnOneSideOfPlaneRationalFunction(
     const drake::Vector3<symbolic::Expression>& a_A,
     const symbolic::Expression& b, PlaneSide plane_side,
     SeparatingPlaneOrder plane_order, double separating_delta) {
-  std::vector<LinkVertexOnPlaneSideRational> rational_fun;
+  std::vector<LinkOnPlaneSideRational> rational_fun;
 
   switch (link_geometry->type()) {
     case CollisionGeometryType::kPolytope: {
@@ -1812,13 +1847,68 @@ GenerateLinkOnOneSideOfPlaneRationalFunction(
                         ? point_on_hyperplane_side - separating_delta
                         : -separating_delta - point_on_hyperplane_side),
             link_geometry, X_AB_multilinear.frame_A_index, other_side_geometry,
-            a_A, b, plane_side, plane_order);
+            a_A, b, plane_side, plane_order,
+            std::vector<solvers::Binding<solvers::LorentzConeConstraint>>{});
       }
       break;
     }
     case CollisionGeometryType::kEllipsoid: {
-      throw std::runtime_error(
-          "Have not implemented for ellipsoid geometry yet.");
+      // We will generate the rational for
+      // aᵀcₑ + b − δ − 1 (positive side) or −δ - 1 − b − aᵀcₑ(negative side)
+      // where cₑ is the center of the ellipsoid. Additionally we will need to
+      // add the constraint |aᵀAₑ⁻¹|≤1 as a second-order cone constraint.
+      const auto link_ellipsoid =
+          dynamic_cast<const geometry::optimization::Hyperellipsoid*>(
+              &link_geometry->geometry());
+      rational_fun.reserve(1);
+      const symbolic::Monomial monomial_one{};
+      // a_A and b are not polynomial of sinθ or cosθ.
+      Vector3<symbolic::Polynomial> a_A_poly;
+      for (int i = 0; i < 3; ++i) {
+        a_A_poly(i) = symbolic::Polynomial({{monomial_one, a_A(i)}});
+      }
+      const symbolic::Polynomial b_poly({{monomial_one, b}});
+      // Step 1: Compute ellipsoid center position.
+      const Vector3<drake::symbolic::Polynomial> p_AC =
+          X_AB_multilinear.p_AB +
+          X_AB_multilinear.R_AB * link_ellipsoid->center();
+
+      // Step 2: Compute a_A.dot(p_AC) + b
+      const drake::symbolic::Polynomial center_on_hyperplane_side =
+          a_A_poly.dot(p_AC) + b_poly;
+
+      // Step 3: Get the Lorentz cone constraint |aᵀAₑ⁻¹|≤1
+      // where Aₑ = link_ellipsoid->A();
+      DRAKE_DEMAND(plane_order == SeparatingPlaneOrder::kConstant);
+      // TODO(cache this matrix inverse).
+      const Eigen::Matrix3d Ae_inv =
+          link_ellipsoid->A().partialPivLu().inverse();
+      // [1; aᵀAₑ⁻¹] in Lorentz cone.
+      Eigen::Matrix<double, 4, 3> A_lorentz =
+          Eigen::Matrix<double, 4, 3>::Zero();
+      A_lorentz.bottomRows<3>() = Ae_inv.transpose();
+      const Eigen::Vector4d b_lorentz(1, 0, 0, 0);
+      Vector3<symbolic::Variable> a_var;
+      for (int i = 0; i < 3; ++i) {
+        DRAKE_DEMAND(symbolic::is_variable(a_A(i)));
+        a_var(i) = *a_A(i).GetVariables().begin();
+      }
+      std::vector<solvers::Binding<solvers::LorentzConeConstraint>>
+          lorentz_cone_constraints;
+      lorentz_cone_constraints.emplace_back(
+          std::make_shared<solvers::LorentzConeConstraint>(A_lorentz,
+                                                           b_lorentz),
+          a_var);
+
+      // Step 4: Convert the multilinear polynomial to rational function.
+      rational_fun.emplace_back(
+          rational_forward_kinematics
+              .ConvertMultilinearPolynomialToRationalFunction(
+                  plane_side == PlaneSide::kPositive
+                      ? center_on_hyperplane_side - separating_delta - 1
+                      : -separating_delta - 1 - center_on_hyperplane_side),
+          link_geometry, X_AB_multilinear.frame_A_index, other_side_geometry,
+          a_A, b, plane_side, plane_order, lorentz_cone_constraints);
     }
   }
   return rational_fun;
@@ -2053,23 +2143,32 @@ GetCollisionGeometries(const systems::Diagram<double>& diagram,
           inspector.GetGeometries(frame_id.value(), geometry::Role::kProximity);
       for (const auto& geometry_id : geometry_ids) {
         const auto& shape = inspector.GetShape(geometry_id);
+        std::unique_ptr<CollisionGeometry> collision_geometry{nullptr};
         if (dynamic_cast<const geometry::Convex*>(&shape) ||
             dynamic_cast<const geometry::Box*>(&shape)) {
           // For a convex mesh or a box, construct a VPolytope.
           geometry::optimization::VPolytope v_polytope(
               query_object, geometry_id, frame_id.value());
-          auto collision_geometry = std::make_unique<CollisionGeometry>(
+          collision_geometry = std::make_unique<CollisionGeometry>(
               CollisionGeometryType::kPolytope, v_polytope.Clone(), body_index,
               geometry_id);
+        } else if (dynamic_cast<const geometry::Sphere*>(&shape) ||
+                   dynamic_cast<const geometry::Ellipsoid*>(&shape)) {
+          geometry::optimization::Hyperellipsoid ellipsoid(
+              query_object, geometry_id, frame_id.value());
+          collision_geometry = std::make_unique<CollisionGeometry>(
+              CollisionGeometryType::kEllipsoid, ellipsoid.Clone(), body_index,
+              geometry_id);
+        }
+        DRAKE_DEMAND(collision_geometry.get() != nullptr);
 
-          auto it = ret.find(body_index);
-          if (it == ret.end()) {
-            std::vector<std::unique_ptr<CollisionGeometry>> body_polytopes;
-            body_polytopes.push_back(std::move(collision_geometry));
-            ret.emplace_hint(it, body_index, std::move(body_polytopes));
-          } else {
-            it->second.push_back(std::move(collision_geometry));
-          }
+        auto it = ret.find(body_index);
+        if (it == ret.end()) {
+          std::vector<std::unique_ptr<CollisionGeometry>> body_geometries;
+          body_geometries.push_back(std::move(collision_geometry));
+          ret.emplace_hint(it, body_index, std::move(body_geometries));
+        } else {
+          it->second.push_back(std::move(collision_geometry));
         }
       }
     }
@@ -2261,6 +2360,93 @@ double CalcCspacePolytopeVolume(const Eigen::MatrixXd& C,
                     qhull.qhullStatus(), qhull.qhullMessage()));
   }
   return qhull.volume();
+}
+
+void WriteCspacePolytopeToFile(const Eigen::Ref<const Eigen::MatrixXd>& C,
+                               const Eigen::Ref<const Eigen::VectorXd>& d,
+                               const Eigen::Ref<const Eigen::VectorXd>& t_lower,
+                               const Eigen::Ref<const Eigen::VectorXd>& t_upper,
+                               const std::string& file_name, int precision) {
+  std::ofstream myfile;
+  myfile.open(file_name, std::ios::out);
+  if (myfile.is_open()) {
+    myfile << fmt::format("{} {}\n", C.rows(), C.cols());
+    for (int i = 0; i < C.rows(); ++i) {
+      for (int j = 0; j < C.cols(); ++j) {
+        myfile << std::setprecision(precision) << C(i, j) << " ";
+      }
+      myfile << "\n";
+    }
+    myfile << "\n";
+    for (int i = 0; i < d.rows(); ++i) {
+      myfile << std::setprecision(precision) << d(i) << " ";
+    }
+    myfile << "\n";
+    for (int i = 0; i < t_lower.rows(); ++i) {
+      myfile << std::setprecision(precision) << t_lower(i) << " ";
+    }
+    myfile << "\n";
+    for (int i = 0; i < t_upper.rows(); ++i) {
+      myfile << std::setprecision(precision) << t_upper(i) << " ";
+    }
+    myfile.close();
+  }
+}
+
+void ReadCspacePolytopeFromFile(const std::string& filename, Eigen::MatrixXd* C,
+                                Eigen::VectorXd* d, Eigen::VectorXd* t_lower,
+                                Eigen::VectorXd* t_upper) {
+  std::ifstream infile;
+  infile.open(filename, std::ios::in);
+  std::string line;
+  if (infile.is_open()) {
+    // Read the size of C, d
+    std::getline(infile, line);
+    std::istringstream ss(line);
+    std::string word;
+    ss >> word;
+    const int C_rows = std::stoi(word);
+    ss >> word;
+    const int C_cols = std::stoi(word);
+    C->resize(C_rows, C_cols);
+    for (int i = 0; i < C_rows; ++i) {
+      std::getline(infile, line);
+      ss = std::istringstream(line);
+      for (int j = 0; j < C_cols; ++j) {
+        ss >> word;
+        (*C)(i, j) = std::stod(word);
+      }
+    }
+    std::getline(infile, line);
+    // get d.
+    std::getline(infile, line);
+    d->resize(C_rows);
+    ss = std::istringstream(line);
+    for (int i = 0; i < C_rows; ++i) {
+      ss >> word;
+      (*d)(i) = std::stod(word);
+    }
+    // get t_lower;
+    std::getline(infile, line);
+    t_lower->resize(C_cols);
+    ss = std::istringstream(line);
+    for (int i = 0; i < C_cols; ++i) {
+      ss >> word;
+      (*t_lower)(i) = std::stod(word);
+    }
+    // get t_upper;
+    std::getline(infile, line);
+    t_upper->resize(C_cols);
+    ss = std::istringstream(line);
+    for (int i = 0; i < C_cols; ++i) {
+      ss >> word;
+      (*t_upper)(i) = std::stod(word);
+    }
+  } else {
+    throw std::runtime_error(
+        fmt::format("Cannot open file {} for c-space polytope.", filename));
+  }
+  infile.close();
 }
 
 // Explicit instantiation.

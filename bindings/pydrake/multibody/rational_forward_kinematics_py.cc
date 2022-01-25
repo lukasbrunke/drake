@@ -164,28 +164,30 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
       .def_readonly("lagrangian_type", &VerificationOption::lagrangian_type,
           doc.VerificationOption.lagrangian_type.doc);
 
-  // LinkVertexOnPlaneSideRational
-  py::class_<LinkVertexOnPlaneSideRational>(
-      m, "LinkVertexOnPlaneSideRational", doc.LinkVertexOnPlaneSideRational.doc)
-      .def_readonly("rational", &LinkVertexOnPlaneSideRational::rational,
-          doc.LinkVertexOnPlaneSideRational.rational.doc)
-      .def_readonly("link_geometry",
-          &LinkVertexOnPlaneSideRational::link_geometry,
-          doc.LinkVertexOnPlaneSideRational.link_geometry.doc)
+  // LinkOnPlaneSideRational
+  py::class_<LinkOnPlaneSideRational>(
+      m, "LinkOnPlaneSideRational", doc.LinkOnPlaneSideRational.doc)
+      .def_readonly("rational", &LinkOnPlaneSideRational::rational,
+          doc.LinkOnPlaneSideRational.rational.doc)
+      .def_readonly("link_geometry", &LinkOnPlaneSideRational::link_geometry,
+          doc.LinkOnPlaneSideRational.link_geometry.doc)
       .def_readonly("expressed_body_index",
-          &LinkVertexOnPlaneSideRational::expressed_body_index,
-          doc.LinkVertexOnPlaneSideRational.expressed_body_index.doc)
+          &LinkOnPlaneSideRational::expressed_body_index,
+          doc.LinkOnPlaneSideRational.expressed_body_index.doc)
       .def_readonly("other_side_link_geometry",
-          &LinkVertexOnPlaneSideRational::other_side_link_geometry,
-          doc.LinkVertexOnPlaneSideRational.other_side_link_geometry.doc)
-      .def_readonly("a_A", &LinkVertexOnPlaneSideRational::a_A,
-          doc.LinkVertexOnPlaneSideRational.a_A.doc)
-      .def_readonly("b", &LinkVertexOnPlaneSideRational::b,
-          doc.LinkVertexOnPlaneSideRational.b.doc)
-      .def_readonly("plane_side", &LinkVertexOnPlaneSideRational::plane_side,
-          doc.LinkVertexOnPlaneSideRational.plane_side.doc)
-      .def_readonly("plane_order", &LinkVertexOnPlaneSideRational::plane_order,
-          doc.LinkVertexOnPlaneSideRational.plane_order.doc);
+          &LinkOnPlaneSideRational::other_side_link_geometry,
+          doc.LinkOnPlaneSideRational.other_side_link_geometry.doc)
+      .def_readonly("a_A", &LinkOnPlaneSideRational::a_A,
+          doc.LinkOnPlaneSideRational.a_A.doc)
+      .def_readonly(
+          "b", &LinkOnPlaneSideRational::b, doc.LinkOnPlaneSideRational.b.doc)
+      .def_readonly("plane_side", &LinkOnPlaneSideRational::plane_side,
+          doc.LinkOnPlaneSideRational.plane_side.doc)
+      .def_readonly("plane_order", &LinkOnPlaneSideRational::plane_order,
+          doc.LinkOnPlaneSideRational.plane_order.doc)
+      .def_readonly("lorentz_cone_constraints",
+          &LinkOnPlaneSideRational::lorentz_cone_constraints,
+          doc.LinkOnPlaneSideRational.lorentz_cone_constraints.doc);
 
   // CspaceRegionType
   py::enum_<CspaceRegionType>(m, "CspaceRegionType", doc.CspaceRegionType.doc)
@@ -332,16 +334,18 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
             VectorX<symbolic::Variable> verified_gram_vars;
             VectorX<symbolic::Variable> separating_plane_vars;
             std::vector<std::vector<int>> separating_plane_to_tuples;
+            std::vector<solvers::Binding<solvers::LorentzConeConstraint>>
+                separating_plane_lorentz_cone_constraints;
             self->GenerateTuplesForBilinearAlternation(q_star,
                 filtered_collision_pairs, C_rows, &alternation_tuples,
                 &d_minus_Ct, &t_lower, &t_upper, &t_minus_t_lower,
                 &t_upper_minus_t, &C, &d, &lagrangian_gram_vars,
                 &verified_gram_vars, &separating_plane_vars,
-                &separating_plane_to_tuples);
+                &separating_plane_to_tuples, &separating_plane_lorentz_cone_constraints);
             return std::make_tuple(alternation_tuples, d_minus_Ct, t_lower,
                 t_upper, t_minus_t_lower, t_upper_minus_t, C, d,
                 lagrangian_gram_vars, verified_gram_vars, separating_plane_vars,
-                separating_plane_to_tuples);
+                separating_plane_to_tuples, separating_plane_lorentz_cone_constraints);
           },
           py::arg("q_star"), py::arg("filtered_collision_pairs"),
           py::arg("C_rows"),
@@ -356,26 +360,33 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
               const VectorX<symbolic::Variable>& lagrangian_gram_vars,
               const VectorX<symbolic::Variable>& verified_gram_vars,
               const VectorX<symbolic::Variable>& separating_plane_vars,
+              const std::vector<
+                  solvers::Binding<solvers::LorentzConeConstraint>>&
+                  separating_plane_lorentz_cone_constraints,
               const Eigen::Ref<const Eigen::VectorXd>& t_lower,
               const Eigen::Ref<const Eigen::VectorXd>& t_upper,
               const VerificationOption& option,
               std::optional<double> redundant_tighten) {
             auto prog = self->ConstructLagrangianProgram(alternation_tuples, C,
                 d, lagrangian_gram_vars, verified_gram_vars,
-                separating_plane_vars, t_lower, t_upper, option,
-                redundant_tighten, nullptr, nullptr);
+                separating_plane_vars,
+                separating_plane_lorentz_cone_constraints, t_lower, t_upper,
+                option, redundant_tighten, nullptr, nullptr);
             return prog;
           },
           py::arg("alternation_tuples"), py::arg("C"), py::arg("d"),
           py::arg("lagrangian_gram_vars"), py::arg("verified_gram_vars"),
-          py::arg("separating_plane_vars"), py::arg("t_lower"),
-          py::arg("t_upper"), py::arg("option"), py::arg("redundant_tighten"),
+          py::arg("separating_plane_vars"),
+          py::arg("separating_plane_lorentz_cone_constraints"),
+          py::arg("t_lower"), py::arg("t_upper"), py::arg("option"),
+          py::arg("redundant_tighten"),
           doc.CspaceFreeRegion.ConstructLagrangianProgram.doc)
       .def("ConstructPolytopeProgram",
           &CspaceFreeRegion::ConstructPolytopeProgram,
           py::arg("alternation_tuples"), py::arg("C"), py::arg("d"),
           py::arg("d_minus_Ct"), py::arg("lagrangian_gram_var_vals"),
           py::arg("verified_gram_vars"), py::arg("separating_plane_vars"),
+          py::arg("separating_plane_lorentz_cone_constraints"),
           py::arg("t_minus_t_lower"), py::arg("t_upper_minus_t"),
           py::arg("option"), doc.CspaceFreeRegion.ConstructPolytopeProgram.doc)
       .def(

@@ -13,6 +13,7 @@
 #include "drake/multibody/rational_forward_kinematics/collision_geometry.h"
 #include "drake/multibody/rational_forward_kinematics/plane_side.h"
 #include "drake/multibody/rational_forward_kinematics/rational_forward_kinematics.h"
+#include "drake/solvers/constraint.h"
 #include "drake/solvers/mathematical_program.h"
 #include "drake/solvers/mathematical_program_result.h"
 
@@ -84,18 +85,20 @@ struct VerificationOption {
 };
 
 /**
- * The rational function representing that a link vertex V is on the desired
+ * The rational function representing that a link is on the desired
  * side of the plane. If the link is on the positive side of the plane, then the
  * rational is aᵀx + b - δ, otherwise it is -δ - aᵀx - b
  */
-struct LinkVertexOnPlaneSideRational {
-  LinkVertexOnPlaneSideRational(
+struct LinkOnPlaneSideRational {
+  LinkOnPlaneSideRational(
       symbolic::RationalFunction m_rational,
       const CollisionGeometry* m_link_geometry,
       multibody::BodyIndex m_expressed_body_index,
       const CollisionGeometry* m_other_side_link_geometry,
       Vector3<symbolic::Expression> m_a_A, symbolic::Expression m_b,
-      PlaneSide m_plane_side, SeparatingPlaneOrder m_plane_order)
+      PlaneSide m_plane_side, SeparatingPlaneOrder m_plane_order,
+      std::vector<solvers::Binding<solvers::LorentzConeConstraint>>
+          m_lorentz_cone_constraints)
       : rational{std::move(m_rational)},
         link_geometry{m_link_geometry},
         expressed_body_index{m_expressed_body_index},
@@ -103,7 +106,8 @@ struct LinkVertexOnPlaneSideRational {
         a_A{std::move(m_a_A)},
         b{std::move(m_b)},
         plane_side{m_plane_side},
-        plane_order{m_plane_order} {}
+        plane_order{m_plane_order},
+        lorentz_cone_constraints{std::move(m_lorentz_cone_constraints)} {}
   const symbolic::RationalFunction rational;
   const CollisionGeometry* const link_geometry;
   const multibody::BodyIndex expressed_body_index;
@@ -112,6 +116,10 @@ struct LinkVertexOnPlaneSideRational {
   const symbolic::Expression b;
   const PlaneSide plane_side;
   const SeparatingPlaneOrder plane_order;
+  // Some geometries (ellipsoid, capsules, etc) require imposing
+  // additional Lorentz cone constraints.
+  const std::vector<solvers::Binding<drake::solvers::LorentzConeConstraint>>
+      lorentz_cone_constraints;
 };
 
 enum class CspaceRegionType { kGenericPolytope, kAxisAlignedBoundingBox };
@@ -144,6 +152,10 @@ class CspaceFreeRegion {
 
   /**
    * @param diagram The diagram containing both the plant and the scene graph.
+   * @param plane_order The order of the plane to separate a pair of polytopic
+   * collision geometries. If either or both of the collision geometry is not a
+   * polyhedron, then we can only use SeparatingPlaneOrder::kConstant for that
+   * plane.
    * @param separating_delta δ in the separating plane. It is better to choose
    * this separating_delta to be a small number (like 1E-3) to avoid numerical
    * issues.
@@ -172,8 +184,7 @@ class CspaceFreeRegion {
    * This function loops over all pair of collision geometries  that are not in
    * filtered_collision_pair.
    */
-  std::vector<LinkVertexOnPlaneSideRational>
-  GenerateLinkOnOneSideOfPlaneRationals(
+  std::vector<LinkOnPlaneSideRational> GenerateLinkOnOneSideOfPlaneRationals(
       const Eigen::Ref<const Eigen::VectorXd>& q_star,
       const CspaceFreeRegion::FilteredCollisionPairs& filtered_collision_pairs)
       const;
@@ -212,7 +223,7 @@ class CspaceFreeRegion {
    */
   CspacePolytopeProgramReturn ConstructProgramForCspacePolytope(
       const Eigen::Ref<const Eigen::VectorXd>& q_star,
-      const std::vector<LinkVertexOnPlaneSideRational>& rationals,
+      const std::vector<LinkOnPlaneSideRational>& rationals,
       const Eigen::Ref<const Eigen::MatrixXd>& C,
       const Eigen::Ref<const Eigen::VectorXd>& d,
       const FilteredCollisionPairs& filtered_collision_pairs,
@@ -285,6 +296,9 @@ class CspaceFreeRegion {
    * based on the separating planes. separating_plane_to_tuples[i] are the
    * indices in alternation_tuples such that these tuples are all for
    * this->separating_planes()[i].
+   * @param[out] separating_plane_lorentz_cone_constraints If the collision
+   * geometry is not a polyhedron, but instead ellipsoid, capsules or cylinders,
+   * we will also impose Lorentz cone constraints.
    */
   void GenerateTuplesForBilinearAlternation(
       const Eigen::Ref<const Eigen::VectorXd>& q_star,
@@ -297,7 +311,9 @@ class CspaceFreeRegion {
       VectorX<symbolic::Variable>* lagrangian_gram_vars,
       VectorX<symbolic::Variable>* verified_gram_vars,
       VectorX<symbolic::Variable>* separating_plane_vars,
-      std::vector<std::vector<int>>* separating_plane_to_tuples) const;
+      std::vector<std::vector<int>>* separating_plane_to_tuples,
+      std::vector<solvers::Binding<solvers::LorentzConeConstraint>>*
+          separating_plane_lorentz_cone_constraints) const;
 
   /**
    * Given the C-space free region candidate C*t<=d,
@@ -315,6 +331,8 @@ class CspaceFreeRegion {
    * @param verified_gram_vars computed from
    * GenerateTuplesForBilinearAlternation.
    * @param separating_plane_vars computed from
+   * GenerateTuplesForBilinearAlternation.
+   * @param separating_plane_lorentz_cone_constraints computed from
    * GenerateTuplesForBilinearAlternation.
    * @param t_lower The lower bounds of t computed from joint limits.
    * @param t_upper The upper bounds of t computed from joint limits.
@@ -336,6 +354,8 @@ class CspaceFreeRegion {
       const VectorX<symbolic::Variable>& lagrangian_gram_vars,
       const VectorX<symbolic::Variable>& verified_gram_vars,
       const VectorX<symbolic::Variable>& separating_plane_vars,
+      const std::vector<solvers::Binding<solvers::LorentzConeConstraint>>&
+          separating_plane_lorentz_cone_constraints,
       const Eigen::Ref<const Eigen::VectorXd>& t_lower,
       const Eigen::Ref<const Eigen::VectorXd>& t_upper,
       const VerificationOption& option, std::optional<double> redundant_tighten,
@@ -371,6 +391,8 @@ class CspaceFreeRegion {
       const Eigen::VectorXd& lagrangian_gram_var_vals,
       const VectorX<symbolic::Variable>& verified_gram_vars,
       const VectorX<symbolic::Variable>& separating_plane_vars,
+      const std::vector<solvers::Binding<solvers::LorentzConeConstraint>>&
+          separating_plane_lorentz_cone_constraints,
       const VectorX<symbolic::Polynomial>& t_minus_t_lower,
       const VectorX<symbolic::Polynomial>& t_upper_minus_t,
       const VerificationOption& option) const;
@@ -522,7 +544,7 @@ class CspaceFreeRegion {
            std::vector<std::unique_ptr<CollisionGeometry>>>
       link_geometries_;
 
-  SeparatingPlaneOrder plane_order_;
+  SeparatingPlaneOrder plane_order_for_polytope_;
   CspaceRegionType cspace_region_type_;
   double separating_delta_;
   std::vector<SeparatingPlane> separating_planes_;
@@ -541,7 +563,7 @@ class CspaceFreeRegion {
  * @param X_AB_multilinear The pose of the link frame B in the expressed body
  * frame A. Note that this pose is a multilinear function of sinθ and cosθ.
  */
-std::vector<LinkVertexOnPlaneSideRational>
+std::vector<LinkOnPlaneSideRational>
 GenerateLinkOnOneSideOfPlaneRationalFunction(
     const RationalForwardKinematics& rational_forward_kinematics,
     const CollisionGeometry* link_geometry,
@@ -745,6 +767,16 @@ void AddCspacePolytopeContainment(
                                               const Eigen::VectorXd& d,
                                               const Eigen::VectorXd& t_lower,
                                               const Eigen::VectorXd& t_upper);
+
+void WriteCspacePolytopeToFile(const Eigen::Ref<const Eigen::MatrixXd>& C,
+                               const Eigen::Ref<const Eigen::VectorXd>& d,
+                               const Eigen::Ref<const Eigen::VectorXd>& t_lower,
+                               const Eigen::Ref<const Eigen::VectorXd>& t_upper,
+                               const std::string& file_name, int precision);
+
+void ReadCspacePolytopeFromFile(const std::string& filename, Eigen::MatrixXd* C,
+                                Eigen::VectorXd* d, Eigen::VectorXd* t_lower,
+                                Eigen::VectorXd* t_upper);
 
 namespace internal {
 // Some of the separating planes will be ignored by filtered_collision_pairs.
