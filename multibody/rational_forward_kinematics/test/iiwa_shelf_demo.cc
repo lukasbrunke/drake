@@ -207,11 +207,10 @@ void SearchCspacePolytope(const std::string& write_file) {
   Eigen::VectorXd d_init;
   BuildCandidateCspacePolytope(q0, &C_init, &d_init);
 
-  const double separating_delta{0.001};
   const CspaceFreeRegion dut(
       iiwa_diagram.diagram(), &(iiwa_diagram.plant()),
       &(iiwa_diagram.scene_graph()), SeparatingPlaneOrder::kAffine,
-      CspaceRegionType::kGenericPolytope, separating_delta);
+      CspaceRegionType::kGenericPolytope);
 
   CspaceFreeRegion::FilteredCollisionPairs filtered_collision_pairs{};
 
@@ -315,7 +314,7 @@ void VisualizePostures(const std::string& cspace_polytope_file,
 int DoMain() {
   const std::string cspace_polytope_file = "iiwa_shelf_cspace_polytope.txt";
   SearchCspacePolytope(cspace_polytope_file);
-  VisualizePostures(cspace_polytope_file, 10);
+  //VisualizePostures(cspace_polytope_file, 10);
   return 0;
 }
 }  // namespace multibody

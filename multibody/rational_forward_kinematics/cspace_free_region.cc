@@ -142,15 +142,13 @@ CspaceFreeRegion::CspaceFreeRegion(
     const systems::Diagram<double>& diagram,
     const multibody::MultibodyPlant<double>* plant,
     const geometry::SceneGraph<double>* scene_graph,
-    SeparatingPlaneOrder plane_order, CspaceRegionType cspace_region_type,
-    double separating_delta)
+    SeparatingPlaneOrder plane_order, CspaceRegionType cspace_region_type)
     : rational_forward_kinematics_(*plant),
       scene_graph_{scene_graph},
       link_geometries_{GetCollisionGeometries(diagram, plant, scene_graph)},
       plane_order_for_polytope_{plane_order},
-      cspace_region_type_{cspace_region_type},
-      separating_delta_{separating_delta} {
-  DRAKE_DEMAND(separating_delta_ > 0);
+      cspace_region_type_{cspace_region_type}
+      {
   // Now create the separating planes.
   std::map<SortedPair<BodyIndex>,
            std::vector<
@@ -337,8 +335,8 @@ CspaceFreeRegion::GenerateLinkOnOneSideOfPlaneRationals(
             GenerateLinkOnOneSideOfPlaneRationalFunction(
                 rational_forward_kinematics_, link_geometry,
                 other_side_geometry, X_AB_multilinear, separating_plane.a,
-                separating_plane.b, plane_side, separating_plane.order,
-                separating_delta_);
+                separating_plane.b, plane_side, separating_plane.order
+                );
         // I cannot use "insert" function to append vectors, since
         // LinkOnPlaneSideRational contains const members, hence it does
         // not have an assignment operator.
@@ -1324,8 +1322,13 @@ GenerateLinkOnOneSideOfPlaneRationalFunction(
         X_AB_multilinear,
     const drake::Vector3<symbolic::Expression>& a_A,
     const symbolic::Expression& b, PlaneSide plane_side,
-    SeparatingPlaneOrder plane_order, double separating_delta) {
+    SeparatingPlaneOrder plane_order) {
   std::vector<LinkOnPlaneSideRational> rational_fun;
+  double separating_delta = 0;
+  if (link_geometry->type() == CollisionGeometryType::kPolytope &&
+      other_side_geometry->type() == CollisionGeometryType::kPolytope) {
+    separating_delta = 1;
+  }
 
   switch (link_geometry->type()) {
     case CollisionGeometryType::kPolytope: {
