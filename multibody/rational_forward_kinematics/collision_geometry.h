@@ -13,7 +13,7 @@ namespace drake {
 namespace multibody {
 enum class CollisionGeometryType {
   kPolytope,
-  kEllipsoid,
+  kSphere,
 };
 
 class CollisionGeometry {
