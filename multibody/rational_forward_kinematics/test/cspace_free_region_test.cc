@@ -150,9 +150,8 @@ class IiwaNonpolytopeCollisionCspaceTest : public ::testing::Test {
                                    0.2 * M_PI, Eigen::Vector3d::UnitX())),
                                {0.1, 0.2, -0.1}};
     link7_geometries_id_.push_back(plant_->RegisterCollisionGeometry(
-        plant_->get_body(iiwa_link_[7]), X_7P,
-        geometry::Ellipsoid(0.2, 0.3, 0.1), "link7_ellipsoid",
-        CoulombFriction<double>()));
+        plant_->get_body(iiwa_link_[7]), X_7P, geometry::Sphere(0.2),
+        "link7_sphere", CoulombFriction<double>()));
 
     RigidTransformd X_WO = Eigen::Translation3d(0.25, -0.4, 0.05);
     obstacles_id_.push_back(plant_->RegisterCollisionGeometry(
@@ -266,9 +265,8 @@ TEST_F(IiwaCspaceTest, TestConstructor) {
       CspaceRegionType::kAxisAlignedBoundingBox, separating_delta);
 }
 
-// The Lorentz cone constraint is [1; aᵀAₑ⁻¹] in Lorentz cone.
+// The Lorentz cone constraint is [1; a] in Lorentz cone.
 void CheckRationalLorentzConeConstraint(
-    const Eigen::Matrix3d& Ae_inv,
     const solvers::Binding<solvers::LorentzConeConstraint>& binding,
     const Vector3<symbolic::Expression>& a, double tol) {
   EXPECT_EQ(binding.variables().rows(), 3);
@@ -277,7 +275,7 @@ void CheckRationalLorentzConeConstraint(
   }
   Eigen::Matrix<double, 4, 3> lorentz_cone_A_expected;
   lorentz_cone_A_expected.setZero();
-  lorentz_cone_A_expected.bottomRows<3>() = Ae_inv.transpose();
+  lorentz_cone_A_expected.bottomRows<3>() = Eigen::Matrix3d::Identity();
   EXPECT_TRUE(CompareMatrices(lorentz_cone_A_expected,
                               binding.evaluator()->A_dense(), tol));
   EXPECT_TRUE(CompareMatrices(Eigen::Vector4d(1, 0, 0, 0),
@@ -371,18 +369,21 @@ void TestGenerateLinkOnOneSideOfPlaneRationalFunction(
         }
         break;
       }
-      case CollisionGeometryType::kEllipsoid: {
-        const auto* link_ellipsoid =
+      case CollisionGeometryType::kSphere: {
+        const auto* link_sphere =
             dynamic_cast<const geometry::optimization::Hyperellipsoid*>(
                 &link_geometry->geometry());
         Eigen::Vector3d p_AC;
         plant.CalcPointsPositions(
             *context, plant.get_body(link_geometry->body_index()).body_frame(),
-            link_ellipsoid->center(),
+            link_sphere->center(),
             plant.get_body(separating_plane.expressed_link).body_frame(),
             &p_AC);
         EXPECT_EQ(rationals.size(), 1u);
         const double rational_val = rationals[0].rational.Evaluate(env);
+        const double radius =
+            1. /
+            std::sqrt((link_sphere->A().transpose() * link_sphere->A())(0, 0));
         // Now evaluate this rational function.
         Eigen::Vector3d a_val;
         for (int j = 0; j < 3; ++j) {
@@ -391,15 +392,13 @@ void TestGenerateLinkOnOneSideOfPlaneRationalFunction(
         const double b_val = separating_plane.b.Evaluate(env);
         const double rational_val_expected =
             plane_side == PlaneSide::kPositive
-                ? a_val.dot(p_AC) + b_val - separating_delta - 1
-                : -separating_delta - 1 - a_val.dot(p_AC) - b_val;
+                ? a_val.dot(p_AC) + b_val - separating_delta - radius
+                : -separating_delta - radius - a_val.dot(p_AC) - b_val;
         EXPECT_NEAR(rational_val, rational_val_expected, 1E-12);
         EXPECT_EQ(rationals[0].lorentz_cone_constraints.size(), 1u);
-        const Eigen::Matrix3d Ae_inv =
-            link_ellipsoid->A().partialPivLu().inverse();
         CheckRationalLorentzConeConstraint(
-            Ae_inv, rationals[0].lorentz_cone_constraints[0],
-            separating_plane.a, 1E-12);
+            rationals[0].lorentz_cone_constraints[0], separating_plane.a,
+            1E-12);
       }
     }
   }
@@ -470,7 +469,7 @@ void TestGenerateLinkOnOneSideOfPlaneRationals(
                     .cols();
             break;
           }
-          case CollisionGeometryType::kEllipsoid: {
+          case CollisionGeometryType::kSphere: {
             rationals_size += 1;
             break;
           }
@@ -762,7 +761,7 @@ void CheckGenerateTuplesForBilinearAlternation(const CspaceFreeRegion& dut,
           rational_count += link_polytope->vertices().cols();
           break;
         }
-        case CollisionGeometryType::kEllipsoid: {
+        case CollisionGeometryType::kSphere: {
           rational_count += 1;
           separating_plane_lorentz_cone_constraints_count += 1;
           break;
@@ -1155,16 +1154,11 @@ TEST_F(IiwaNonpolytopeCollisionCspaceTest,
             for (const auto collision_geometry :
                  {plane.positive_side_geometry, plane.negative_side_geometry}) {
               switch (collision_geometry->type()) {
-                case CollisionGeometryType::kEllipsoid: {
-                  const auto* link_ellipsoid = dynamic_cast<
+                case CollisionGeometryType::kSphere: {
+                  const auto* link_sphere = dynamic_cast<
                       const geometry::optimization::Hyperellipsoid*>(
                       &collision_geometry->geometry());
-                  EXPECT_LE(link_ellipsoid->A()
-                                .transpose()
-                                .colPivHouseholderQr()
-                                .solve(a_val)
-                                .norm(),
-                            1 + 1E-8);
+                  EXPECT_LE(a_val.norm(), 1 + 1E-8);
                   break;
                 }
                 default: {
@@ -1629,7 +1623,7 @@ GTEST_TEST(GetCollisionGeometry, Test) {
   EXPECT_GT(collision_geometries.count(link4_index), 0);
   EXPECT_EQ(collision_geometries.at(link4_index).size(), 1u);
   const auto& link4_sphere = collision_geometries.at(link4_index)[0];
-  EXPECT_EQ(link4_sphere->type(), CollisionGeometryType::kEllipsoid);
+  EXPECT_EQ(link4_sphere->type(), CollisionGeometryType::kSphere);
   EXPECT_EQ(link4_sphere->body_index(), link4_index);
   EXPECT_EQ(link4_sphere->id(), link4_sphere_id);
   auto link4_sphere_geometry =

@@ -1363,12 +1363,13 @@ GenerateLinkOnOneSideOfPlaneRationalFunction(
       }
       break;
     }
-    case CollisionGeometryType::kEllipsoid: {
+    case CollisionGeometryType::kSphere: {
       // We will generate the rational for
-      // aᵀcₑ + b − δ − 1 (positive side) or −δ - 1 − b − aᵀcₑ(negative side)
-      // where cₑ is the center of the ellipsoid. Additionally we will need to
-      // add the constraint |aᵀAₑ⁻¹|≤1 as a second-order cone constraint.
-      const auto link_ellipsoid =
+      // aᵀcₑ + b − δ − r (positive side) or −δ - r − b − aᵀcₑ(negative side)
+      // where cₑ is the center of the sphere, r is the radius of the sphere.
+      // Additionally we will need to add the constraint |a|≤1 as a second-order
+      // cone constraint.
+      const auto link_sphere =
           dynamic_cast<const geometry::optimization::Hyperellipsoid*>(
               &link_geometry->geometry());
       rational_fun.reserve(1);
@@ -1381,23 +1382,18 @@ GenerateLinkOnOneSideOfPlaneRationalFunction(
       const symbolic::Polynomial b_poly({{monomial_one, b}});
       // Step 1: Compute ellipsoid center position.
       const Vector3<drake::symbolic::Polynomial> p_AC =
-          X_AB_multilinear.p_AB +
-          X_AB_multilinear.R_AB * link_ellipsoid->center();
+          X_AB_multilinear.p_AB + X_AB_multilinear.R_AB * link_sphere->center();
 
       // Step 2: Compute a_A.dot(p_AC) + b
       const drake::symbolic::Polynomial center_on_hyperplane_side =
           a_A_poly.dot(p_AC) + b_poly;
 
-      // Step 3: Get the Lorentz cone constraint |aᵀAₑ⁻¹|≤1
-      // where Aₑ = link_ellipsoid->A();
+      // Step 3: Get the Lorentz cone constraint |a|≤1
       DRAKE_DEMAND(plane_order == SeparatingPlaneOrder::kConstant);
-      // TODO(cache this matrix inverse).
-      const Eigen::Matrix3d Ae_inv =
-          link_ellipsoid->A().partialPivLu().inverse();
-      // [1; aᵀAₑ⁻¹] in Lorentz cone.
+      // [1; a] in Lorentz cone.
       Eigen::Matrix<double, 4, 3> A_lorentz =
           Eigen::Matrix<double, 4, 3>::Zero();
-      A_lorentz.bottomRows<3>() = Ae_inv.transpose();
+      A_lorentz.bottomRows<3>() = Eigen::Matrix3d::Identity();
       const Eigen::Vector4d b_lorentz(1, 0, 0, 0);
       Vector3<symbolic::Variable> a_var;
       for (int i = 0; i < 3; ++i) {
@@ -1411,13 +1407,17 @@ GenerateLinkOnOneSideOfPlaneRationalFunction(
                                                            b_lorentz),
           a_var);
 
+      const double radius =
+          1. /
+          std::sqrt((link_sphere->A().transpose() * link_sphere->A())(0, 0));
+
       // Step 4: Convert the multilinear polynomial to rational function.
       rational_fun.emplace_back(
           rational_forward_kinematics
               .ConvertMultilinearPolynomialToRationalFunction(
                   plane_side == PlaneSide::kPositive
-                      ? center_on_hyperplane_side - separating_delta - 1
-                      : -separating_delta - 1 - center_on_hyperplane_side),
+                      ? center_on_hyperplane_side - separating_delta - radius
+                      : -separating_delta - radius - center_on_hyperplane_side),
           link_geometry, X_AB_multilinear.frame_A_index, other_side_geometry,
           a_A, b, plane_side, plane_order, lorentz_cone_constraints);
     }
@@ -1663,12 +1663,11 @@ GetCollisionGeometries(const systems::Diagram<double>& diagram,
           collision_geometry = std::make_unique<CollisionGeometry>(
               CollisionGeometryType::kPolytope, v_polytope.Clone(), body_index,
               geometry_id);
-        } else if (dynamic_cast<const geometry::Sphere*>(&shape) ||
-                   dynamic_cast<const geometry::Ellipsoid*>(&shape)) {
-          geometry::optimization::Hyperellipsoid ellipsoid(
+        } else if (dynamic_cast<const geometry::Sphere*>(&shape)) {
+          geometry::optimization::Hyperellipsoid sphere(
               query_object, geometry_id, frame_id.value());
           collision_geometry = std::make_unique<CollisionGeometry>(
-              CollisionGeometryType::kEllipsoid, ellipsoid.Clone(), body_index,
+              CollisionGeometryType::kSphere, sphere.Clone(), body_index,
               geometry_id);
         }
         DRAKE_DEMAND(collision_geometry.get() != nullptr);
