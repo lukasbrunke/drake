@@ -54,7 +54,7 @@ class IiwaCspaceTest(unittest.TestCase):
                                    self.scene_graph,
                                    mut.SeparatingPlaneOrder.kAffine,
                                    mut.CspaceRegionType.kGenericPolytope,
-                                   separating_delta=1.)
+                                   separating_polytope_delta=1.)
         self.assertEqual(len(dut.separating_planes()), 3)
 
     def test_generate_tuples_for_bilinear_alternation(self):
@@ -63,7 +63,7 @@ class IiwaCspaceTest(unittest.TestCase):
                                    self.scene_graph,
                                    mut.SeparatingPlaneOrder.kAffine,
                                    mut.CspaceRegionType.kGenericPolytope,
-                                   separating_delta=1.)
+                                   separating_polytope_delta=1.)
         q_star = np.zeros(7)
         alternation_tuples, d_minus_Ct, t_lower, t_upper, t_minus_t_lower,\
             t_upper_minus_t, C, d, lagrangian_gram_vars, verified_gram_vars,\
@@ -126,7 +126,7 @@ class IiwaCspaceTest(unittest.TestCase):
                                    self.scene_graph,
                                    mut.SeparatingPlaneOrder.kAffine,
                                    mut.CspaceRegionType.kGenericPolytope,
-                                   separating_delta=1.)
+                                   separating_polytope_delta=1.)
         q_star = np.zeros(7)
         alternation_tuples, d_minus_Ct, t_lower, t_upper, t_minus_t_lower,\
             t_upper_minus_t, C_var, d_var, lagrangian_gram_vars,\
@@ -167,7 +167,7 @@ class IiwaCspaceTest(unittest.TestCase):
                                    self.scene_graph,
                                    mut.SeparatingPlaneOrder.kAffine,
                                    mut.CspaceRegionType.kGenericPolytope,
-                                   separating_delta=1.)
+                                   separating_polytope_delta=1.)
         q_star, C_init, d_init = self.construct_initial_cspace_polytope(dut)
         filtered_collision_pairs = set()
         bilinear_alternation_option = mut.BilinearAlternationOption()
@@ -187,7 +187,7 @@ class IiwaCspaceTest(unittest.TestCase):
                                    self.scene_graph,
                                    mut.SeparatingPlaneOrder.kAffine,
                                    mut.CspaceRegionType.kGenericPolytope,
-                                   separating_delta=1.)
+                                   separating_polytope_delta=1.)
         q_star, C_init, d_init = self.construct_initial_cspace_polytope(dut)
         filtered_collision_pairs = set()
         binary_search_option = mut.BinarySearchOption()
