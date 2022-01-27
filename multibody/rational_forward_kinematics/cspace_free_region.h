@@ -142,16 +142,15 @@ class CspaceFreeRegion {
    * collision geometries. If either or both of the collision geometry is not a
    * polyhedron, then we can only use SeparatingPlaneOrder::kConstant for that
    * plane.
-   * @param separating_delta δ in the separating plane. It is better to choose
-   * this separating_delta to be a small number (like 1E-3) to avoid numerical
-   * issues.
+   * @param separating_polytope_delta δ in the separating plane that separates a
+   * pair of polytopes. This should be a strictly positive number.
    */
   CspaceFreeRegion(const systems::Diagram<double>& diagram,
                    const multibody::MultibodyPlant<double>* plant,
                    const geometry::SceneGraph<double>* scene_graph,
                    SeparatingPlaneOrder plane_order,
                    CspaceRegionType cspace_region_type,
-                   double separating_delta);
+                   double separating_polytope_delta);
 
   const std::unordered_map<SortedPair<geometry::GeometryId>,
                            const SeparatingPlane*>&
@@ -496,7 +495,9 @@ class CspaceFreeRegion {
     return link_geometries_;
   }
 
-  double separating_delta() const { return separating_delta_; }
+  double separating_polytope_delta() const {
+    return separating_polytope_delta_;
+  }
 
  private:
   RationalForwardKinematics rational_forward_kinematics_;
@@ -507,7 +508,7 @@ class CspaceFreeRegion {
 
   SeparatingPlaneOrder plane_order_for_polytope_;
   CspaceRegionType cspace_region_type_;
-  double separating_delta_;
+  double separating_polytope_delta_;
   std::vector<SeparatingPlane> separating_planes_;
 
   std::unordered_map<SortedPair<geometry::GeometryId>, const SeparatingPlane*>
@@ -531,7 +532,7 @@ GenerateLinkOnOneSideOfPlaneRationalFunction(
         X_AB_multilinear,
     const drake::Vector3<symbolic::Expression>& a_A,
     const symbolic::Expression& b, PlaneSide plane_side,
-    SeparatingPlaneOrder plane_order, double separating_delta);
+    SeparatingPlaneOrder plane_order, double separating_polytope_delta);
 
 bool IsGeometryPairCollisionIgnored(
     geometry::GeometryId id1, geometry::GeometryId id2,
