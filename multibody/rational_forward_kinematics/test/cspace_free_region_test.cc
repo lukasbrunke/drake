@@ -347,15 +347,13 @@ void TestGenerateLinkOnOneSideOfPlaneRationalFunction(
     }
     switch (link_geometry->type()) {
       case CollisionGeometryType::kPolytope: {
-        const auto* link_polytope =
-            dynamic_cast<const geometry::optimization::VPolytope*>(
-                &link_geometry->geometry());
-        EXPECT_EQ(rationals.size(), link_polytope->vertices().cols());
-        Eigen::Matrix3Xd p_AV(3, link_polytope->vertices().cols());
+        const Eigen::Matrix3Xd p_BV =
+            link_geometry->X_BG() * GetVertices(link_geometry->geometry());
+        EXPECT_EQ(rationals.size(), p_BV.cols());
+        Eigen::Matrix3Xd p_AV(3, p_BV.cols());
         plant.CalcPointsPositions(
             *context, plant.get_body(link_geometry->body_index()).body_frame(),
-            link_polytope->vertices(),
-            plant.get_body(separating_plane.expressed_link).body_frame(),
+            p_BV, plant.get_body(separating_plane.expressed_link).body_frame(),
             &p_AV);
 
         for (int i = 0; i < static_cast<int>(rationals.size()); ++i) {
@@ -377,19 +375,16 @@ void TestGenerateLinkOnOneSideOfPlaneRationalFunction(
       }
       case CollisionGeometryType::kSphere: {
         const auto* link_sphere =
-            dynamic_cast<const geometry::optimization::Hyperellipsoid*>(
-                &link_geometry->geometry());
+            dynamic_cast<const geometry::Sphere*>(&link_geometry->geometry());
         Eigen::Vector3d p_AC;
         plant.CalcPointsPositions(
             *context, plant.get_body(link_geometry->body_index()).body_frame(),
-            link_sphere->center(),
+            link_geometry->X_BG().translation(),
             plant.get_body(separating_plane.expressed_link).body_frame(),
             &p_AC);
         EXPECT_EQ(rationals.size(), 1u);
         const double rational_val = rationals[0].rational.Evaluate(env);
-        const double radius =
-            1. /
-            std::sqrt((link_sphere->A().transpose() * link_sphere->A())(0, 0));
+        const double radius = link_sphere->radius();
         // Now evaluate this rational function.
         Eigen::Vector3d a_val;
         for (int j = 0; j < 3; ++j) {
@@ -468,11 +463,7 @@ void TestGenerateLinkOnOneSideOfPlaneRationals(
             separating_plane->negative_side_geometry}) {
         switch (link_geometry->type()) {
           case CollisionGeometryType::kPolytope: {
-            rationals_size +=
-                dynamic_cast<const geometry::optimization::VPolytope*>(
-                    &link_geometry->geometry())
-                    ->vertices()
-                    .cols();
+            rationals_size += GetVertices(link_geometry->geometry()).cols();
             break;
           }
           case CollisionGeometryType::kSphere: {
@@ -761,10 +752,7 @@ void CheckGenerateTuplesForBilinearAlternation(const CspaceFreeRegion& dut,
           separating_plane.negative_side_geometry}) {
       switch (link_geometry->type()) {
         case CollisionGeometryType::kPolytope: {
-          const auto* link_polytope =
-              dynamic_cast<const geometry::optimization::VPolytope*>(
-                  &link_geometry->geometry());
-          rational_count += link_polytope->vertices().cols();
+          rational_count += GetVertices(link_geometry->geometry()).cols();
           break;
         }
         case CollisionGeometryType::kSphere: {
@@ -1283,7 +1271,7 @@ TEST_F(IiwaCspaceTest, CspacePolytopeBinarySearch) {
   CspaceFreeRegion::BinarySearchOption binary_search_option{
       .epsilon_max = 1, .epsilon_min = 0.1, .max_iters = 4, .search_d = false};
   solvers::SolverOptions solver_options;
-  solver_options.SetOption(solvers::CommonSolverOption::kPrintToConsole, true);
+  solver_options.SetOption(solvers::CommonSolverOption::kPrintToConsole, false);
   Eigen::VectorXd d_final;
   dut.CspacePolytopeBinarySearch(q_star, filtered_collision_pairs, C, d,
                                  binary_search_option, solver_options,
@@ -1594,12 +1582,11 @@ GTEST_TEST(GetCollisionGeometry, Test) {
             iiwa->GetBodyByName("iiwa_link_7").index());
   // Now compute the geometry vertices manually and check with
   // link7_box1->p_BV().
-  const auto* link7_box2 =
-      dynamic_cast<const geometry::optimization::VPolytope*>(
-          &link7_geometry2->geometry());
   const Eigen::Matrix<double, 3, 8> link7_box2_vertices =
       GenerateBoxVertices(box2_size, X_7P2);
-  CheckVertices(link7_box2->vertices(), link7_box2_vertices, 1E-8);
+  CheckVertices(
+      link7_geometry2->X_BG() * GetVertices(link7_geometry2->geometry()),
+      link7_box2_vertices, 1E-8);
 
   // Check the geometry of link5_octahedron.
   const BodyIndex link5_index = iiwa->GetBodyByName("iiwa_link_5").index();
@@ -1616,10 +1603,9 @@ GTEST_TEST(GetCollisionGeometry, Test) {
                                0, 0, 0, 0, std::sqrt(2), -std::sqrt(2);
   // clang-format on
   link5_octahedron_vertices = X_5O * link5_octahedron_vertices;
-  const geometry::optimization::VPolytope* octahedron =
-      dynamic_cast<const geometry::optimization::VPolytope*>(
-          &link5_octahedron->geometry());
-  CheckVertices(octahedron->vertices(), link5_octahedron_vertices, 1E-8);
+  CheckVertices(
+      link5_octahedron->X_BG() * GetVertices(link5_octahedron->geometry()),
+      link5_octahedron_vertices, 1E-8);
 
   // Check link 4 sphere.
   const BodyIndex link4_index = iiwa->GetBodyByName("iiwa_link_4").index();
@@ -1630,14 +1616,10 @@ GTEST_TEST(GetCollisionGeometry, Test) {
   EXPECT_EQ(link4_sphere->body_index(), link4_index);
   EXPECT_EQ(link4_sphere->id(), link4_sphere_id);
   auto link4_sphere_geometry =
-      dynamic_cast<const geometry::optimization::Hyperellipsoid*>(
-          &link4_sphere->geometry());
+      dynamic_cast<const geometry::Sphere*>(&link4_sphere->geometry());
   const double tol{1E-10};
-  EXPECT_TRUE(CompareMatrices(
-      link4_sphere_geometry->A().transpose() * link4_sphere_geometry->A(),
-      Eigen::Matrix3d::Identity() / (link4_sphere_radius * link4_sphere_radius),
-      tol));
-  EXPECT_TRUE(CompareMatrices(link4_sphere_geometry->center(),
+  EXPECT_EQ(link4_sphere_geometry->radius(), link4_sphere_radius);
+  EXPECT_TRUE(CompareMatrices(link4_sphere->X_BG().translation(),
                               X_4S.translation(), tol));
 }
 
