@@ -74,7 +74,7 @@ struct SeparatingPlane {
 
 /**
  * We need to verify that C * t <= d implies p(t) >= 0, where p(t) is the
- * numerator of the rational function aᵀx + b - δ or -1 - aᵀx-δ. Namely we need
+ * numerator of the rational function aᵀx + b - δ or -δ - aᵀx-b. Namely we need
  * to verify the non-negativity of the lagrangian polynomial l(t), together with
  * p(t) - l(t)ᵀ(d - C * t). We can choose the type of the non-negative
  * polynomials (sos, dsos, sdsos).
@@ -164,7 +164,7 @@ class CspaceFreeRegion {
                    const geometry::SceneGraph<double>* scene_graph,
                    SeparatingPlaneOrder plane_order,
                    CspaceRegionType cspace_region_type,
-                   double separating_polytope_delta);
+                   double separating_polytope_delta = 1.);
 
   /** separating_planes()[map_collisions_to_separating_planes.at(geometry1_id,
    * geometry2_id)] is the separating plane that separates geometry1 and
