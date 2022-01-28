@@ -20,25 +20,31 @@ class CollisionGeometry {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(CollisionGeometry)
 
-  CollisionGeometry(CollisionGeometryType type,
-                    std::unique_ptr<geometry::optimization::ConvexSet> geometry,
-                    multibody::BodyIndex body_index, geometry::GeometryId id);
+  /**
+   * @param X_BG The relative pose of the geometry on the frame.
+   */
+  CollisionGeometry(CollisionGeometryType type, const geometry::Shape* geometry,
+                    multibody::BodyIndex body_index, geometry::GeometryId id,
+                    math::RigidTransformd X_BG);
 
   CollisionGeometryType type() const { return type_; }
 
-  const geometry::optimization::ConvexSet& geometry() const {
-    return *geometry_;
-  }
+  const geometry::Shape& geometry() const { return *geometry_; }
 
   multibody::BodyIndex body_index() const { return body_index_; }
 
   geometry::GeometryId id() const { return id_; }
 
+  const math::RigidTransformd& X_BG() const { return X_BG_; }
+
  private:
   CollisionGeometryType type_;
-  std::unique_ptr<geometry::optimization::ConvexSet> geometry_;
+  const geometry::Shape* geometry_;
   multibody::BodyIndex body_index_;
   geometry::GeometryId id_;
+  math::RigidTransformd X_BG_;
 };
+
+Eigen::Matrix3Xd GetVertices(const geometry::Shape& shape);
 }  // namespace multibody
 }  // namespace drake

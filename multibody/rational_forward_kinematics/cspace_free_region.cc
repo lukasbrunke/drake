@@ -1823,10 +1823,11 @@ GenerateLinkOnOneSideOfPlaneRationalFunction(
 
   switch (link_geometry->type()) {
     case CollisionGeometryType::kPolytope: {
-      const auto link_polytope =
-          dynamic_cast<const geometry::optimization::VPolytope*>(
-              &link_geometry->geometry());
-      rational_fun.reserve(link_polytope->vertices().cols());
+      // TODO (hongkai.dai): cache the map from geometry_id to vertices since
+      // getting the vertices might be expensive.
+      const Eigen::Matrix3Xd p_BV =
+          link_geometry->X_BG() * GetVertices(link_geometry->geometry());
+      rational_fun.reserve(p_BV.cols());
       const symbolic::Monomial monomial_one{};
       // a_A and b are not polynomial of sinθ or cosθ.
       Vector3<symbolic::Polynomial> a_A_poly;
@@ -1834,11 +1835,10 @@ GenerateLinkOnOneSideOfPlaneRationalFunction(
         a_A_poly(i) = symbolic::Polynomial({{monomial_one, a_A(i)}});
       }
       const symbolic::Polynomial b_poly({{monomial_one, b}});
-      for (int i = 0; i < link_polytope->vertices().cols(); ++i) {
+      for (int i = 0; i < p_BV.cols(); ++i) {
         // Step 1: Compute vertex position.
         const Vector3<drake::symbolic::Polynomial> p_AVi =
-            X_AB_multilinear.p_AB +
-            X_AB_multilinear.R_AB * link_polytope->vertices().col(i);
+            X_AB_multilinear.p_AB + X_AB_multilinear.R_AB * p_BV.col(i);
 
         // Step 2: Compute a_A.dot(p_AVi) + b
         const drake::symbolic::Polynomial point_on_hyperplane_side =
@@ -1859,13 +1859,12 @@ GenerateLinkOnOneSideOfPlaneRationalFunction(
     }
     case CollisionGeometryType::kSphere: {
       // We will generate the rational for
-      // aᵀcₑ + b − δ − r (positive side) or −δ - r − b − aᵀcₑ(negative side)
-      // where cₑ is the center of the sphere, r is the radius of the sphere.
+      // aᵀc + b − r (positive side) or -r − b − aᵀc(negative side)
+      // where c is the center of the sphere, r is the radius of the sphere.
       // Additionally we will need to add the constraint |a|≤1 as a second-order
       // cone constraint.
       const auto link_sphere =
-          dynamic_cast<const geometry::optimization::Hyperellipsoid*>(
-              &link_geometry->geometry());
+          dynamic_cast<const geometry::Sphere*>(&link_geometry->geometry());
       rational_fun.reserve(1);
       const symbolic::Monomial monomial_one{};
       // a_A and b are not polynomial of sinθ or cosθ.
@@ -1876,7 +1875,8 @@ GenerateLinkOnOneSideOfPlaneRationalFunction(
       const symbolic::Polynomial b_poly({{monomial_one, b}});
       // Step 1: Compute ellipsoid center position.
       const Vector3<drake::symbolic::Polynomial> p_AC =
-          X_AB_multilinear.p_AB + X_AB_multilinear.R_AB * link_sphere->center();
+          X_AB_multilinear.p_AB +
+          X_AB_multilinear.R_AB * link_geometry->X_BG().translation();
 
       // Step 2: Compute a_A.dot(p_AC) + b
       const drake::symbolic::Polynomial center_on_hyperplane_side =
@@ -1901,17 +1901,15 @@ GenerateLinkOnOneSideOfPlaneRationalFunction(
                                                            b_lorentz),
           a_var);
 
-      const double radius =
-          1. /
-          std::sqrt((link_sphere->A().transpose() * link_sphere->A())(0, 0));
+      const double radius = link_sphere->radius();
 
       // Step 4: Convert the multilinear polynomial to rational function.
       rational_fun.emplace_back(
           rational_forward_kinematics
               .ConvertMultilinearPolynomialToRationalFunction(
                   plane_side == PlaneSide::kPositive
-                      ? center_on_hyperplane_side - separating_delta - radius
-                      : -separating_delta - radius - center_on_hyperplane_side),
+                      ? center_on_hyperplane_side - radius
+                      : -radius - center_on_hyperplane_side),
           link_geometry, X_AB_multilinear.frame_A_index, other_side_geometry,
           a_A, b, plane_side, plane_order, lorentz_cone_constraints);
     }
@@ -2148,6 +2146,12 @@ GetCollisionGeometries(const systems::Diagram<double>& diagram,
           inspector.GetGeometries(frame_id.value(), geometry::Role::kProximity);
       for (const auto& geometry_id : geometry_ids) {
         const auto& shape = inspector.GetShape(geometry_id);
+        // Get the pose X_BG;
+        const math::RigidTransformd X_WB =
+            query_object.GetPoseInWorld(*frame_id);
+        const math::RigidTransformd& X_WG =
+            query_object.GetPoseInWorld(geometry_id);
+        const math::RigidTransformd X_BG = X_WB.InvertAndCompose(X_WG);
         std::unique_ptr<CollisionGeometry> collision_geometry{nullptr};
         if (dynamic_cast<const geometry::Convex*>(&shape) ||
             dynamic_cast<const geometry::Box*>(&shape)) {
@@ -2155,14 +2159,12 @@ GetCollisionGeometries(const systems::Diagram<double>& diagram,
           geometry::optimization::VPolytope v_polytope(
               query_object, geometry_id, frame_id.value());
           collision_geometry = std::make_unique<CollisionGeometry>(
-              CollisionGeometryType::kPolytope, v_polytope.Clone(), body_index,
-              geometry_id);
+              CollisionGeometryType::kPolytope, &shape, body_index, geometry_id,
+              X_BG);
         } else if (dynamic_cast<const geometry::Sphere*>(&shape)) {
-          geometry::optimization::Hyperellipsoid sphere(
-              query_object, geometry_id, frame_id.value());
           collision_geometry = std::make_unique<CollisionGeometry>(
-              CollisionGeometryType::kSphere, sphere.Clone(), body_index,
-              geometry_id);
+              CollisionGeometryType::kSphere, &shape, body_index, geometry_id,
+              X_BG);
         }
         DRAKE_DEMAND(collision_geometry.get() != nullptr);
 

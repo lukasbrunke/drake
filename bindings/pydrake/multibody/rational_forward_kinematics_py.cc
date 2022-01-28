@@ -113,8 +113,8 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
       m, "CollisionGeometryType", doc.CollisionGeometryType.doc)
       .value("kPolytope", multibody::CollisionGeometryType::kPolytope,
           doc.CollisionGeometryType.kPolytope.doc)
-      .value("kEllipsoid", multibody::CollisionGeometryType::kEllipsoid,
-          doc.CollisionGeometryType.kEllipsoid.doc);
+      .value("kSphere", multibody::CollisionGeometryType::kSphere,
+          doc.CollisionGeometryType.kSphere.doc);
 
   py::class_<multibody::CollisionGeometry>(
       m, "CollisionGeometry", doc.CollisionGeometry.doc)
