@@ -1948,12 +1948,20 @@ void CspaceFreeRegion::CspacePolytopeBinarySearch(
       &(cspace_free_region_solution->q), &ellipsoid_cost_val);
 }
 
-// Get the Lorentz cone constraint for |a|<=1
-std::vector<solvers::Binding<solvers::LorentzConeConstraint>>
-GetNormLessThan1Constraint(const Vector3<symbolic::Expression>& a_A) {
-  Eigen::Matrix<double, 4, 3> A_lorentz = Eigen::Matrix<double, 4, 3>::Zero();
-  A_lorentz.bottomRows<3>() = Eigen::Matrix3d::Identity();
-  const Eigen::Vector4d b_lorentz(1, 0, 0, 0);
+// Get the Lorentz cone constraint for |P*a|<=1
+// Note that each symbolic expression a(i) should just be a symbolic variable.
+template <typename Derived>
+std::enable_if_t<Derived::RowsAtCompileTime != Eigen::Dynamic &&
+                     Derived::ColsAtCompileTime == 3,
+                 std::vector<solvers::Binding<solvers::LorentzConeConstraint>>>
+GetNormLessThan1Constraint(const Eigen::MatrixBase<Derived>& P,
+                           const Vector3<symbolic::Expression>& a_A) {
+  Eigen::Matrix<double, Derived::RowsAtCompileTime + 1, 3> A_lorentz =
+      Eigen::Matrix<double, Derived::RowsAtCompileTime + 1, 3>::Zero();
+  A_lorentz.template bottomRows<Derived::RowsAtCompileTime>() = P;
+  Eigen::Matrix<double, Derived::RowsAtCompileTime + 1, 1> b_lorentz =
+      Eigen::Matrix<double, Derived::RowsAtCompileTime + 1, 1>::Zero();
+  b_lorentz(0) = 1;
   Vector3<symbolic::Variable> a_var;
   for (int i = 0; i < 3; ++i) {
     DRAKE_DEMAND(symbolic::is_variable(a_A(i)));
@@ -2046,8 +2054,9 @@ GenerateLinkOnOneSideOfPlaneRationalFunction(
       rational_fun.reserve(1);
       const double radius = link_sphere->radius();
       DRAKE_DEMAND(plane_order == SeparatingPlaneOrder::kConstant);
-      compute_rational(link_geometry->X_BG().translation(), radius,
-                       GetNormLessThan1Constraint(a_A));
+      compute_rational(
+          link_geometry->X_BG().translation(), radius,
+          GetNormLessThan1Constraint(Eigen::Matrix3d::Identity(), a_A));
       break;
     }
     case CollisionGeometryType::kCapsule: {
@@ -2071,9 +2080,47 @@ GenerateLinkOnOneSideOfPlaneRationalFunction(
         if (i == 0) {
           // We only need to impose the Lorentz cone constraint |a|<=1 for
           // once, no need to do that for both spheres on the capsule.
-          lorentz_cone_constraints = GetNormLessThan1Constraint(a_A);
+          lorentz_cone_constraints =
+              GetNormLessThan1Constraint(Eigen::Matrix3d::Identity(), a_A);
         }
         compute_rational(p_BC.col(i), link_capsule->radius(),
+                         lorentz_cone_constraints);
+      }
+      break;
+    }
+    case CollisionGeometryType::kCylinder: {
+      // We will generate the rational for
+      // aᵀc₁ + b − r, aᵀc₂ + b − r (positive side) or -r − b − aᵀc₁, -r − b −
+      // aᵀc₂ (negative side) where c₁, c₂ are the centers of the cylinder
+      // spheres, r is the radius of the cylinder. Additionally we will need to
+      // add the constraint |R₁₂ᵀa|≤1 as a second-order cone constraint where
+      // R₁₂ is the first two columns of the rotation matrix in X_BG (the
+      // cylinder axis is on the z axis in its frame G, so only the first two
+      // columns for x/y axis of rotation matrix needs to be considered).
+      const auto link_cylinder =
+          dynamic_cast<const geometry::Cylinder*>(&link_geometry->geometry());
+      rational_fun.reserve(2);
+      Eigen::Matrix<double, 3, 2> p_BC;
+      p_BC.col(0) = link_geometry->X_BG() *
+                    Eigen::Vector3d(0, 0, -link_cylinder->length() / 2);
+      p_BC.col(1) = link_geometry->X_BG() *
+                    Eigen::Vector3d(0, 0, link_cylinder->length() / 2);
+      for (int i = 0; i < 2; ++i) {
+        DRAKE_DEMAND(plane_order == SeparatingPlaneOrder::kConstant);
+        std::vector<solvers::Binding<solvers::LorentzConeConstraint>>
+            lorentz_cone_constraints;
+        if (i == 0) {
+          // We only need to impose the Lorentz cone constraint |R₁₂ᵀa|<=1 for
+          // once, no need to do that for both spheres on the cylinder.
+          lorentz_cone_constraints =
+              GetNormLessThan1Constraint(link_geometry->X_BG()
+                                             .rotation()
+                                             .matrix()
+                                             .leftCols<2>()
+                                             .transpose(),
+                                         a_A);
+        }
+        compute_rational(p_BC.col(i), link_cylinder->radius(),
                          lorentz_cone_constraints);
       }
       break;
@@ -2312,36 +2359,29 @@ GetCollisionGeometries(const systems::Diagram<double>& diagram,
     if (frame_id.has_value()) {
       const auto geometry_ids =
           inspector.GetGeometries(frame_id.value(), geometry::Role::kProximity);
+      const math::RigidTransformd X_WB = query_object.GetPoseInWorld(*frame_id);
       for (const auto& geometry_id : geometry_ids) {
         const auto& shape = inspector.GetShape(geometry_id);
         // Get the pose X_BG;
-        const math::RigidTransformd X_WB =
-            query_object.GetPoseInWorld(*frame_id);
         const math::RigidTransformd& X_WG =
             query_object.GetPoseInWorld(geometry_id);
         const math::RigidTransformd X_BG = X_WB.InvertAndCompose(X_WG);
-        std::unique_ptr<CollisionGeometry> collision_geometry{nullptr};
+        CollisionGeometryType collision_geometry_type;
         if (dynamic_cast<const geometry::Convex*>(&shape) ||
             dynamic_cast<const geometry::Box*>(&shape)) {
-          // For a convex mesh or a box, construct a VPolytope.
-          geometry::optimization::VPolytope v_polytope(
-              query_object, geometry_id, frame_id.value());
-          collision_geometry = std::make_unique<CollisionGeometry>(
-              CollisionGeometryType::kPolytope, &shape, body_index, geometry_id,
-              X_BG);
+          collision_geometry_type = CollisionGeometryType::kPolytope;
         } else if (dynamic_cast<const geometry::Sphere*>(&shape)) {
-          collision_geometry = std::make_unique<CollisionGeometry>(
-              CollisionGeometryType::kSphere, &shape, body_index, geometry_id,
-              X_BG);
+          collision_geometry_type = CollisionGeometryType::kSphere;
         } else if (dynamic_cast<const geometry::Capsule*>(&shape)) {
-          collision_geometry = std::make_unique<CollisionGeometry>(
-              CollisionGeometryType::kCapsule, &shape, body_index, geometry_id,
-              X_BG);
+          collision_geometry_type = CollisionGeometryType::kCapsule;
+        } else if (dynamic_cast<const geometry::Cylinder*>(&shape)) {
+          collision_geometry_type = CollisionGeometryType::kCylinder;
         } else {
           throw std::runtime_error(
               "GetCollisionGeometries: unsupported shape type.");
         }
-        DRAKE_DEMAND(collision_geometry.get() != nullptr);
+        auto collision_geometry = std::make_unique<CollisionGeometry>(
+            collision_geometry_type, &shape, body_index, geometry_id, X_BG);
 
         auto it = ret.find(body_index);
         if (it == ret.end()) {

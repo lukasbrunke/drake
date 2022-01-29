@@ -15,6 +15,7 @@ enum class CollisionGeometryType {
   kPolytope,
   kSphere,
   kCapsule,
+  kCylinder,
 };
 
 class CollisionGeometry {

@@ -165,6 +165,11 @@ class IiwaNonpolytopeCollisionCspaceTest : public ::testing::Test {
         math::RigidTransformd(Eigen::Vector3d(0.05, 0.02, 0.01)),
         geometry::Capsule(0.05, 0.3), "link2_capsule",
         CoulombFriction<double>()));
+    link3_geometries_id_.push_back(plant_->RegisterCollisionGeometry(
+        plant_->GetBodyByName("iiwa_link_3"),
+        math::RigidTransformd(Eigen::Vector3d(-0.1, 0.05, 0.02)),
+        geometry::Cylinder(0.01, 0.2), "link3_cylinder",
+        CoulombFriction<double>()));
 
     plant_->Finalize();
     diagram_ = builder.Build();
@@ -178,6 +183,7 @@ class IiwaNonpolytopeCollisionCspaceTest : public ::testing::Test {
   std::vector<geometry::GeometryId> link7_geometries_id_;
   std::vector<geometry::GeometryId> link1_geometries_id_;
   std::vector<geometry::GeometryId> link2_geometries_id_;
+  std::vector<geometry::GeometryId> link3_geometries_id_;
   std::vector<geometry::GeometryId> obstacles_id_;
 };
 
@@ -272,20 +278,22 @@ TEST_F(IiwaCspaceTest, TestConstructor) {
       CspaceRegionType::kAxisAlignedBoundingBox, separating_polytope_delta);
 }
 
-// The Lorentz cone constraint is [1; a] in Lorentz cone.
+// The Lorentz cone constraint is [1; P*a] in Lorentz cone.
 void CheckRationalLorentzConeConstraint(
     const solvers::Binding<solvers::LorentzConeConstraint>& binding,
-    const Vector3<symbolic::Expression>& a, double tol) {
+    const Eigen::Ref<const Eigen::Matrix<double, Eigen::Dynamic, 3>>& P, const Vector3<symbolic::Expression>& a, double tol) {
   EXPECT_EQ(binding.variables().rows(), 3);
   for (int i = 0; i < 3; ++i) {
     EXPECT_EQ(a(i), symbolic::Expression(binding.variables()(i)));
   }
-  Eigen::Matrix<double, 4, 3> lorentz_cone_A_expected;
+  Eigen::Matrix<double, Eigen::Dynamic, 3> lorentz_cone_A_expected(P.rows() + 1, 3);
   lorentz_cone_A_expected.setZero();
-  lorentz_cone_A_expected.bottomRows<3>() = Eigen::Matrix3d::Identity();
+  lorentz_cone_A_expected.bottomRows(P.rows()) = P;
   EXPECT_TRUE(CompareMatrices(lorentz_cone_A_expected,
                               binding.evaluator()->A_dense(), tol));
-  EXPECT_TRUE(CompareMatrices(Eigen::Vector4d(1, 0, 0, 0),
+  Eigen::VectorXd b_expected = Eigen::VectorXd::Zero(P.rows() + 1);
+  b_expected(0) = 1;
+  EXPECT_TRUE(CompareMatrices(b_expected,
                               binding.evaluator()->b(), tol));
 }
 
@@ -405,19 +413,33 @@ void TestGenerateLinkOnOneSideOfPlaneRationalFunction(
         EXPECT_NEAR(rational_val, rational_val_expected, 1E-12);
         EXPECT_EQ(rationals[0].lorentz_cone_constraints.size(), 1u);
         CheckRationalLorentzConeConstraint(
-            rationals[0].lorentz_cone_constraints[0], separating_plane.a,
+            rationals[0].lorentz_cone_constraints[0], Eigen::Matrix3d::Identity(), separating_plane.a,
             1E-12);
         break;
       }
-      case CollisionGeometryType::kCapsule: {
+      case CollisionGeometryType::kCapsule:
+      case CollisionGeometryType::kCylinder: {
+        double radius{};
+       double length;
+        Eigen::MatrixX3d P;
+        if (link_geometry->type() == CollisionGeometryType::kCapsule) {
         const auto* link_capsule =
             dynamic_cast<const geometry::Capsule*>(&link_geometry->geometry());
+        radius = link_capsule->radius();
+        length = link_capsule->length();
+        P = Eigen::Matrix3d::Identity();
+        } else if (link_geometry->type() == CollisionGeometryType::kCylinder) {
+          const auto* link_cylinder = dynamic_cast<const geometry::Cylinder*>(&link_geometry->geometry());
+          radius = link_cylinder->radius();
+          length = link_cylinder->length();
+          P = link_geometry->X_BG().rotation().matrix().leftCols<2>().transpose();
+        }
         Eigen::Matrix<double, 3, 2> p_AC;
         Eigen::Matrix<double, 3, 2> p_BC;
         p_BC.col(0) = link_geometry->X_BG() *
-                      Eigen::Vector3d(0, 0, -link_capsule->length() / 2);
+                      Eigen::Vector3d(0, 0, -length / 2);
         p_BC.col(1) = link_geometry->X_BG() *
-                      Eigen::Vector3d(0, 0, link_capsule->length() / 2);
+                      Eigen::Vector3d(0, 0, length / 2);
         plant.CalcPointsPositions(
             *context, plant.get_body(link_geometry->body_index()).body_frame(),
             p_BC, plant.get_body(separating_plane.expressed_link).body_frame(),
@@ -430,7 +452,6 @@ void TestGenerateLinkOnOneSideOfPlaneRationalFunction(
         EXPECT_EQ(rationals.size(), 2u);
         for (int i = 0; i < 2; ++i) {
           const double rational_val = rationals[i].rational.Evaluate(env);
-          const double radius = link_capsule->radius();
           // Now evaluate this rational function.
           const double rational_val_expected =
               plane_side == PlaneSide::kPositive
@@ -440,7 +461,7 @@ void TestGenerateLinkOnOneSideOfPlaneRationalFunction(
         }
         EXPECT_EQ(rationals[0].lorentz_cone_constraints.size(), 1u);
         CheckRationalLorentzConeConstraint(
-            rationals[0].lorentz_cone_constraints[0], separating_plane.a,
+            rationals[0].lorentz_cone_constraints[0], P, separating_plane.a,
             1E-12);
         EXPECT_TRUE(rationals[1].lorentz_cone_constraints.empty());
         break;
@@ -519,7 +540,8 @@ void TestGenerateRationalsForLinkOnOneSideOfPlane(
             rationals_size += 1;
             break;
           }
-          case CollisionGeometryType::kCapsule: {
+          case CollisionGeometryType::kCapsule:
+          case CollisionGeometryType::kCylinder: {
             rationals_size += 2;
             break;
           }
@@ -847,7 +869,8 @@ void CheckGenerateTuplesForBilinearAlternation(const CspaceFreeRegion& dut,
           separating_plane_to_lorentz_cone_constraints_count[plane_index] += 1;
           break;
         }
-        case CollisionGeometryType::kCapsule: {
+        case CollisionGeometryType::kCapsule:
+        case CollisionGeometryType::kCylinder: {
           rational_count += 2;
           separating_plane_to_lorentz_cone_constraints_count[plane_index] += 1;
           break;
@@ -1314,6 +1337,9 @@ TEST_F(IiwaNonpolytopeCollisionCspaceTest,
                 case CollisionGeometryType::kCapsule: {
                   EXPECT_LE(a_val.norm(), 1 + 1E-8);
                   break;
+                }
+                case CollisionGeometryType::kCylinder: {
+                  EXPECT_LE((a_val.transpose() * collision_geometry->X_BG().rotation().matrix().leftCols<2>()).norm(), 1+1E-8);
                 }
                 default: {
                 }
@@ -1865,7 +1891,7 @@ void CheckVertices(const Eigen::Ref<const Eigen::Matrix3Xd>& vert1,
   }
 }
 
-GTEST_TEST(GetCollisionGeometry, Test) {
+GTEST_TEST(GetCollisionGeometries, Test) {
   systems::DiagramBuilder<double> builder;
   auto iiwa = builder.AddSystem<MultibodyPlant<double>>(
       ConstructIiwaPlant("iiwa14_no_collision.sdf", false));
@@ -1877,6 +1903,7 @@ GTEST_TEST(GetCollisionGeometry, Test) {
   builder.Connect(iiwa->get_geometry_poses_output_port(),
                   sg->get_source_pose_port(iiwa->get_source_id().value()));
   // Now add the collision geometries.
+  // Test box.
   const auto link7_box1_id = iiwa->RegisterCollisionGeometry(
       iiwa->GetBodyByName("iiwa_link_7"), {}, geometry::Box(0.1, 0.2, 0.3),
       "link7_box1", CoulombFriction<double>());
@@ -1889,6 +1916,7 @@ GTEST_TEST(GetCollisionGeometry, Test) {
       iiwa->GetBodyByName("iiwa_link_7"), X_7P2,
       geometry::Box(box2_size(0), box2_size(1), box2_size(2)), "link7_box2",
       CoulombFriction<double>());
+  // Test convex mesh.
   const math::RigidTransformd X_5O(Eigen::Vector3d(0.2, 0.3, 0.4));
   const auto link5_octahedron_id = iiwa->RegisterCollisionGeometry(
       iiwa->GetBodyByName("iiwa_link_5"), X_5O,
@@ -1896,6 +1924,7 @@ GTEST_TEST(GetCollisionGeometry, Test) {
           FindResourceOrThrow("drake/geometry/test/octahedron.obj")),
       "link5_octahedron", CoulombFriction<double>());
 
+  // Test sphere.
   const math::RigidTransformd X_4S(
       math::RotationMatrixd(
           Eigen::AngleAxisd(0.2, Eigen::Vector3d(0.1, 0.3, 0.5).normalized())),
@@ -1906,10 +1935,12 @@ GTEST_TEST(GetCollisionGeometry, Test) {
       geometry::Sphere(link4_sphere_radius), "link4_sphere",
       CoulombFriction<double>());
 
+  // Test box.
   const auto world_box_id = iiwa->RegisterCollisionGeometry(
       iiwa->world_body(), {}, geometry::Box(0.2, 0.1, 0.3), "world_box",
       CoulombFriction<double>());
 
+  // Test capsule.
   const math::RigidTransformd X_1Capsule(
       math::RotationMatrixd(
           Eigen::AngleAxisd(0.2, Eigen::Vector3d(1. / 3, 2. / 3, 2. / 3))),
@@ -1921,6 +1952,18 @@ GTEST_TEST(GetCollisionGeometry, Test) {
       geometry::Capsule(link1_capsule_radius, link1_capsule_length),
       "link1_capsule", CoulombFriction<double>());
 
+  // Test cylinder.
+  const math::RigidTransform X_WCylinder(
+      math::RotationMatrixd(
+          Eigen::AngleAxisd(0.2, Eigen::Vector3d(2. / 3, -1. / 3, 2. / 3))),
+      Eigen::Vector3d(0.1, -0.2, 0.4));
+  const double world_cylinder_radius = 0.15;
+  const double world_cylinder_length = 0.2;
+  const auto world_cylinder_id = iiwa->RegisterCollisionGeometry(
+      iiwa->world_body(), X_WCylinder,
+      geometry::Cylinder(world_cylinder_radius, world_cylinder_length),
+      "world_cylinder", CoulombFriction<double>());
+
   iiwa->Finalize();
   auto diagram = builder.Build();
 
@@ -1929,10 +1972,6 @@ GTEST_TEST(GetCollisionGeometry, Test) {
   const auto& link7_geometries =
       collision_geometries.at(iiwa->GetBodyByName("iiwa_link_7").index());
   EXPECT_EQ(link7_geometries.size(), 2u);
-  const auto& obstacles = collision_geometries.at(iiwa->world_body().index());
-  EXPECT_EQ(obstacles[0]->body_index(), iiwa->world_body().index());
-  EXPECT_EQ(obstacles[0]->id(), world_box_id);
-
   std::unordered_map<geometry::GeometryId, const CollisionGeometry*>
       link7_geometry_map;
   for (const auto& link7_geometry : link7_geometries) {
@@ -1956,6 +1995,24 @@ GTEST_TEST(GetCollisionGeometry, Test) {
   CheckVertices(
       link7_geometry2->X_BG() * GetVertices(link7_geometry2->geometry()),
       link7_box2_vertices, 1E-8);
+
+  // Check collisions on world.
+  const auto& obstacles = collision_geometries.at(iiwa->world_body().index());
+  EXPECT_EQ(obstacles.size(), 2u);
+  const std::unordered_map<geometry::GeometryId, const CollisionGeometry*>
+      obstacle_map{{{obstacles[0]->id(), obstacles[0].get()},
+                    {obstacles[1]->id(), obstacles[1].get()}}};
+  EXPECT_NE(obstacle_map.find(world_box_id), obstacle_map.end());
+  const CollisionGeometry* world_box = obstacle_map.find(world_box_id)->second;
+  EXPECT_EQ(world_box->body_index(), iiwa->world_body().index());
+  EXPECT_EQ(world_box->type(), CollisionGeometryType::kPolytope);
+  EXPECT_NE(obstacle_map.find(world_cylinder_id), obstacle_map.end());
+  const CollisionGeometry* world_cylinder =
+      obstacle_map.find(world_cylinder_id)->second;
+  EXPECT_EQ(world_cylinder->type(), CollisionGeometryType::kCylinder);
+  const double tol{1E-12};
+  EXPECT_TRUE(CompareMatrices(world_cylinder->X_BG().GetAsMatrix4(),
+                              X_WCylinder.GetAsMatrix4(), tol));
 
   // Check the geometry of link5_octahedron.
   const BodyIndex link5_index = iiwa->GetBodyByName("iiwa_link_5").index();
@@ -1986,7 +2043,6 @@ GTEST_TEST(GetCollisionGeometry, Test) {
   EXPECT_EQ(link4_sphere->id(), link4_sphere_id);
   auto link4_sphere_geometry =
       dynamic_cast<const geometry::Sphere*>(&link4_sphere->geometry());
-  const double tol{1E-10};
   EXPECT_EQ(link4_sphere_geometry->radius(), link4_sphere_radius);
   EXPECT_TRUE(CompareMatrices(link4_sphere->X_BG().translation(),
                               X_4S.translation(), tol));
