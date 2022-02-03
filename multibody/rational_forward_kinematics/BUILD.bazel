@@ -225,4 +225,22 @@ drake_cc_binary(
     ],
 )
 
+drake_cc_binary(
+    name = "dual_ur3e_demo",
+    srcs = ["test/dual_ur3e_demo.cc"],
+    data = [
+        "//manipulation/models/ur3e_description:models",
+        "//manipulation/models/wsg_50_description:models",
+    ],
+    deps = [
+        ":cspace_free_region",
+        "//common:find_resource",
+        "//geometry:meshcat_visualizer",
+        "//geometry/optimization:polytope_cover",
+        "//multibody/inverse_kinematics",
+        "//multibody/parsing:parser",
+        "//multibody/plant",
+    ],
+)
+
 add_lint_tests()
