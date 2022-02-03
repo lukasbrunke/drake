@@ -158,7 +158,7 @@ Eigen::VectorXd FindInitialPosture(const MultibodyPlant<double>& plant,
   return result.GetSolution(ik.q());
 }
 
-void BuildCandidateCspacePolytope(const Eigen::VectorXd q_free,
+void BuildCandidateCspacePolytope(const Eigen::VectorXd& q_free,
                                   Eigen::MatrixXd* C, Eigen::VectorXd* d) {
   const int C_rows = 23;
   C->resize(C_rows, 7);
