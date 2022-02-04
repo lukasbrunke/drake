@@ -425,7 +425,8 @@ class CspaceFreeRegion {
       const std::optional<std::pair<Eigen::MatrixXd, Eigen::VectorXd>>&
           inner_polytope,
       Eigen::MatrixXd* C_final, Eigen::VectorXd* d_final,
-      Eigen::MatrixXd* P_final, Eigen::VectorXd* q_final) const;
+      Eigen::MatrixXd* P_final, Eigen::VectorXd* q_final,
+      std::vector<SeparatingPlane>* separating_planes_sol) const;
 
   struct BinarySearchOption {
     double epsilon_max{10};
@@ -469,7 +470,8 @@ class CspaceFreeRegion {
       const std::optional<Eigen::MatrixXd>& q_inner_pts,
       const std::optional<std::pair<Eigen::MatrixXd, Eigen::VectorXd>>&
           inner_polytope,
-      Eigen::VectorXd* d_final) const;
+      Eigen::VectorXd* d_final,
+      std::vector<SeparatingPlane>* separating_planes_sol) const;
 
   const RationalForwardKinematics& rational_forward_kinematics() const {
     return rational_forward_kinematics_;
