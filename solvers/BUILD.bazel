@@ -1817,6 +1817,16 @@ drake_cc_googletest(
     ],
 )
 
+drake_cc_binary(
+    name = "multithread_solve_demo",
+    srcs = ["test/multithread_solve_demo.cc"],
+    deps = [
+        ":mosek_solver",
+        ":scs_solver",
+        ":mathematical_program",
+    ],
+)
+
 # The extra_srcs are required here because add_lint_tests() doesn't understand
 # how to extract labels from select() functions yet.
 add_lint_tests(cpplint_extra_srcs = [
