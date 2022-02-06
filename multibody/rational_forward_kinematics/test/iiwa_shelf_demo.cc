@@ -194,7 +194,8 @@ int DoMain() {
       .epsilon_max = 0.01,
       .epsilon_min = 0.,
       .max_iters = 2,
-      .compute_polytope_volume = true};
+      .compute_polytope_volume = true,
+      .multi_thread = true};
   solvers::SolverOptions solver_options;
   solver_options.SetOption(solvers::CommonSolverOption::kPrintToConsole, false);
   Eigen::VectorXd d_binary_search;
@@ -209,7 +210,8 @@ int DoMain() {
       .convergence_tol = 0.001,
       .lagrangian_backoff_scale = 0.01,
       .redundant_tighten = 0.5,
-      .compute_polytope_volume = true};
+      .compute_polytope_volume = true,
+      .multi_thread = true};
   Eigen::MatrixXd C_final;
   Eigen::VectorXd d_final;
   Eigen::MatrixXd P_final;
