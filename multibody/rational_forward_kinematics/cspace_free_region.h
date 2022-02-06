@@ -222,8 +222,11 @@ class CspaceFreeRegion {
                    SeparatingPlaneOrder plane_order,
                    CspaceRegionType cspace_region_type);
 
-  const std::unordered_map<SortedPair<ConvexGeometry::Id>,
-                           const SeparatingPlane*>&
+  /** separating_planes()[map_polytopes_to_separating_planes.at(geometry1_id,
+   * geometry2_id)] is the separating plane that separates geometry1 and
+   * geometry 2.
+   */
+  const std::unordered_map<SortedPair<ConvexGeometry::Id>, int>&
   map_polytopes_to_separating_planes() const {
     return map_polytopes_to_separating_planes_;
   }
@@ -345,6 +348,10 @@ class CspaceFreeRegion {
    * l_upper(t)ᵀ(t_upper-t) for all of the rationals.
    * @param[out] separating_plane_vars All of the variables in the separating
    * plane aᵀx + b = 0.
+   * @param[out] separating_plane_to_tuples alternation_tuples can be grouped
+   * based on the separating planes. separating_plane_to_tuples[i] are the
+   * indices in alternation_tuples such that these tuples are all for
+   * this->separating_planes()[i].
    */
   void GenerateTuplesForBilinearAlternation(
       const Eigen::Ref<const Eigen::VectorXd>& q_star,
@@ -356,7 +363,8 @@ class CspaceFreeRegion {
       MatrixX<symbolic::Variable>* C, VectorX<symbolic::Variable>* d,
       VectorX<symbolic::Variable>* lagrangian_gram_vars,
       VectorX<symbolic::Variable>* verified_gram_vars,
-      VectorX<symbolic::Variable>* separating_plane_vars) const;
+      VectorX<symbolic::Variable>* separating_plane_vars,
+      std::vector<std::vector<int>>* separating_plane_to_tuples) const;
 
   /**
    * Given the C-space free region candidate C*t<=d,
@@ -465,6 +473,9 @@ class CspaceFreeRegion {
     // The objective function used in maximizing the volume of the inscribed
     // ellipsoid.
     EllipsoidVolume ellipsoid_volume{EllipsoidVolume::kNthRoot};
+    // If set to true, then solve the Lagrangian program through many small SOS
+    // on multiple threads. Each program for one pair of collision geometries.
+    bool multi_thread{false};
   };
 
   /**
@@ -505,13 +516,16 @@ class CspaceFreeRegion {
     double epsilon_min{0};
     int max_iters{5};
     double lagrangian_backoff_scale{0.};
-    int verbose{true};
     // If set to true, then after we verify that C*t<=d is collision free, we
     // then fix the Lagrangian multiplier and search the right-hand side vector
     // d through another SOS program.
     bool search_d{true};
     // Whether to compute and print the volume of the C-space polytope.
     bool compute_polytope_volume{false};
+    bool verbose{true};
+    // If set to true, then solve the Lagrangian program through many small SOS
+    // on multiple threads. Each program for one pair of collision geometries.
+    bool multi_thread{false};
 
     // The objective function used in maximizing the volume of the inscribed
     // ellipsoid.
@@ -554,6 +568,10 @@ class CspaceFreeRegion {
     return rational_forward_kinematics_;
   }
 
+  const geometry::SceneGraph<double>& scene_graph() const {
+    return *scene_graph_;
+  }
+
   const std::vector<SeparatingPlane>& separating_planes() const {
     return separating_planes_;
   }
@@ -573,7 +591,9 @@ class CspaceFreeRegion {
   CspaceRegionType cspace_region_type_;
   std::vector<SeparatingPlane> separating_planes_;
 
-  std::unordered_map<SortedPair<ConvexGeometry::Id>, const SeparatingPlane*>
+  // separating_planes_[(geometry1_id, geometry2_id)] is the separating plane
+  // that separates geometry1 and geometry 2.
+  std::unordered_map<SortedPair<ConvexGeometry::Id>, int>
       map_polytopes_to_separating_planes_;
 };
 
@@ -788,5 +808,44 @@ void AddCspacePolytopeContainment(
                                               const Eigen::VectorXd& d,
                                               const Eigen::VectorXd& t_lower,
                                               const Eigen::VectorXd& t_upper);
+
+namespace internal {
+// Some of the separating planes will be ignored by filtered_collision_pairs.
+// Returns std::vector<bool> to indicate if each plane is active or not.
+std::vector<bool> IsPlaneActive(
+    const std::vector<SeparatingPlane>& separating_planes,
+    const CspaceFreeRegion::FilteredCollisionPairs& filtered_collision_pairs);
+
+/** For a given polytopic C-space region C * t <= d, t_lower <= t <= t_upper,
+ * verify if this region is collision-free by solving the SOS program to find
+ * the separating planes and the Lagrangian multipliers. Return true if the SOS
+ * is successful, false otherwise.
+ * The inputs to this function is the output of
+ * GenerateTuplesForBilinearAlternation()
+ * @param multi_thread If set to false, then solve a large SOS that searches for
+ * the separating planes and Lagrangian multipliers for all pairs of collision
+ * geometries. If set to true, then solve many small SOS in parallel, each SOS
+ * for one pair of collision geometries.
+ * @param If a solution is found, it is written into cspace_free_region
+ */
+bool FindLagrangianAndSeparatingPlanes(
+    const CspaceFreeRegion& cspace_free_region,
+    const std::vector<CspaceFreeRegion::CspacePolytopeTuple>&
+        alternation_tuples,
+    const Eigen::MatrixXd& C, const Eigen::VectorXd& d,
+    const VectorX<symbolic::Variable>& lagrangian_gram_vars,
+    const VectorX<symbolic::Variable>& verified_gram_vars,
+    const VectorX<symbolic::Variable>& separating_plane_vars,
+    const Eigen::VectorXd& t_lower, const Eigen::VectorXd& t_upper,
+    const VerificationOption& verification_option,
+    std::optional<double> redundant_tighten,
+    const solvers::SolverOptions& solver_options, bool verbose,
+    bool multi_thread,
+    const std::vector<std::vector<int>>& separating_plane_to_tuples,
+    Eigen::VectorXd* lagrangian_gram_var_vals,
+    Eigen::VectorXd* verified_gram_var_vals,
+    Eigen::VectorXd* separating_plane_var_vals,
+    CspaceFreeRegionSolution* cspace_free_region_solution);
+}  // namespace internal
 }  // namespace multibody
 }  // namespace drake
