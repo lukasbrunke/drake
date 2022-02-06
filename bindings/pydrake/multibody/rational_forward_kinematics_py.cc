@@ -128,7 +128,10 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
   // SeparatingPlane
   py::class_<multibody::SeparatingPlane>(
       m, "SeparatingPlane", doc.SeparatingPlane.doc)
-      .def_readonly("a", &SeparatingPlane::a, doc.SeparatingPlane.a.doc)
+      .def("a",
+                    [](const SeparatingPlane* self){
+          return self->a;
+      }, doc.SeparatingPlane.a.doc)
       .def_readonly("b", &SeparatingPlane::b, doc.SeparatingPlane.b.doc)
       .def_readonly("positive_side_polytope",
           &SeparatingPlane::positive_side_polytope,
@@ -140,7 +143,10 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
           doc.SeparatingPlane.expressed_link.doc)
       .def_readonly(
           "order", &SeparatingPlane::order, doc.SeparatingPlane.order.doc)
-      .def_readonly("decision_variables", &SeparatingPlane::decision_variables,
+      .def("decision_variables",
+                    [](const SeparatingPlane* self){
+          return self->decision_variables;
+      },
           doc.SeparatingPlane.decision_variables.doc);
 
   // PlaneSide
@@ -225,6 +231,12 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
       .def_readwrite("epsilon_max",
           &CspaceFreeRegion::BinarySearchOption::epsilon_max,
           doc.CspaceFreeRegion.BinarySearchOption.epsilon_max.doc)
+      .def_readwrite("verbose",
+          &CspaceFreeRegion::BinarySearchOption::verbose,
+          doc.CspaceFreeRegion.BinarySearchOption.verbose.doc)
+      .def_readwrite("lagrangian_backoff_scale",
+          &CspaceFreeRegion::BinarySearchOption::lagrangian_backoff_scale,
+          doc.CspaceFreeRegion.BinarySearchOption.lagrangian_backoff_scale.doc)
       .def_readwrite("epsilon_min",
           &CspaceFreeRegion::BinarySearchOption::epsilon_min,
           doc.CspaceFreeRegion.BinarySearchOption.epsilon_min.doc)
@@ -235,6 +247,14 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
           &CspaceFreeRegion::BinarySearchOption::search_d,
           doc.CspaceFreeRegion.BinarySearchOption.search_d.doc);
 
+  //CspaceFreeRegionSolution
+  py::class_<CspaceFreeRegionSolution>(m, "CspaceFreeRegionSolution", doc.CspaceFreeRegionSolution.doc)
+      .def_readwrite("C", &CspaceFreeRegionSolution::C, doc.CspaceFreeRegionSolution.C.doc)
+      .def_readwrite("d", &CspaceFreeRegionSolution::d, doc.CspaceFreeRegionSolution.d.doc)
+      .def_readwrite("P", &CspaceFreeRegionSolution::P, doc.CspaceFreeRegionSolution.P.doc)
+      .def_readwrite("q", &CspaceFreeRegionSolution::q, doc.CspaceFreeRegionSolution.q.doc)
+      .def_readwrite("separating_planes", &CspaceFreeRegionSolution::separating_planes,
+                     doc.CspaceFreeRegionSolution.separating_planes.doc);
   // CspaceFreeRegion
   py::class_<CspaceFreeRegion> cspace_cls(
       m, "CspaceFreeRegion", doc.CspaceFreeRegion.doc);
@@ -363,18 +383,13 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
               const std::optional<Eigen::MatrixXd>& q_inner_pts,
               const std::optional<std::pair<Eigen::MatrixXd, Eigen::VectorXd>>&
                   inner_polytope) {
-            Eigen::MatrixXd C_final;
-            Eigen::VectorXd d_final;
-            Eigen::MatrixXd P_final;
-            Eigen::VectorXd q_final;
-            std::vector<SeparatingPlane> separating_planes_sol;
+            CspaceFreeRegionSolution cspace_free_region_solution;
+//            std::vector<SeparatingPlane> separating_planes_sol;
             self->CspacePolytopeBilinearAlternation(q_star,
                 filtered_collision_pairs, C_init, d_init,
                 bilinear_alternation_option, solver_options, q_inner_pts,
-                inner_polytope, &C_final, &d_final, &P_final, &q_final,
-                &separating_planes_sol);
-            return std::make_tuple(
-                C_final, d_final, P_final, q_final, separating_planes_sol);
+                inner_polytope, &cspace_free_region_solution);
+            return cspace_free_region_solution;
           },
           py::arg("q_star"), py::arg("filtered_collision_pairs"),
           py::arg("C_init"), py::arg("d_init"),
@@ -395,12 +410,11 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
               const std::optional<Eigen::MatrixXd>& q_inner_pts,
               const std::optional<std::pair<Eigen::MatrixXd, Eigen::VectorXd>>&
                   inner_polytope) {
-            Eigen::VectorXd d_final;
-            std::vector<SeparatingPlane> separating_planes_sol;
+            CspaceFreeRegionSolution cspace_free_region_solution;
             self->CspacePolytopeBinarySearch(q_star, filtered_collision_pairs,
                 C, d_init, binary_search_option, solver_options, q_inner_pts,
-                inner_polytope, &d_final, &separating_planes_sol);
-            return std::make_tuple(d_final, separating_planes_sol);
+                inner_polytope, &cspace_free_region_solution);
+            return cspace_free_region_solution;
           },
           py::arg("q_star"), py::arg("filtered_collision_pairs"), py::arg("C"),
           py::arg("d_init"), py::arg("binary_search_option"),
