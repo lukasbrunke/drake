@@ -207,6 +207,7 @@ int DoMain() {
   CspaceFreeRegion::BilinearAlternationOption bilinear_alternation_option{
       .max_iters = 10,
       .convergence_tol = 0.001,
+      .lagrangian_backoff_scale = 0.01,
       .redundant_tighten = 0.5,
       .compute_polytope_volume = true};
   Eigen::MatrixXd C_final;

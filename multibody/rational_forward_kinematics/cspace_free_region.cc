@@ -1,6 +1,7 @@
 #include "drake/multibody/rational_forward_kinematics/cspace_free_region.h"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <optional>
 
@@ -1018,6 +1019,56 @@ solvers::MathematicalProgramResult BackoffProgram(
   }
   return result;
 }
+
+// Find the largest inscribed ellipsoid in the polytope
+// C*t<=d, t_lower <= t <= t_upper. The ellipsoid is parameterized as {P*y+q |
+// |y|<=1}. We may need to backoff the inscribed ellipsoid a bit to find a
+// strict feasible solution.
+void FindLargestInscribedEllipsoid(
+    const Eigen::MatrixXd& C, const Eigen::VectorXd& d,
+    const Eigen::VectorXd& t_lower, const Eigen::VectorXd& t_upper,
+    double backoff_scale, EllipsoidVolume ellipsoid_volume,
+    const solvers::SolverOptions& solver_options, bool verbose,
+    Eigen::MatrixXd* P_sol, Eigen::VectorXd* q_sol, double* max_cost) {
+  solvers::MathematicalProgram prog;
+  const int nt = t_lower.rows();
+  const auto P = prog.NewSymmetricContinuousVariables(nt, "P");
+  const auto q = prog.NewContinuousVariables(nt, "q");
+  AddInscribedEllipsoid(&prog, C, d, t_lower, t_upper, P, q, true);
+  std::string cost_name;
+  switch (ellipsoid_volume) {
+    case EllipsoidVolume::kLog: {
+      prog.AddMaximizeLogDeterminantCost(P.cast<symbolic::Expression>());
+      cost_name = "log(det(P))";
+      break;
+    }
+    case EllipsoidVolume::kNthRoot: {
+      AddMaximizeEigenValueGeometricMean(&prog, P);
+      cost_name = fmt::format("power(det(P), 1/{})", SmallestPower2(P.rows()));
+      break;
+    }
+  }
+  const auto ellipsoid_cost = prog.linear_costs()[0];
+  auto result = solvers::Solve(prog, std::nullopt, solver_options);
+  *max_cost = -result.get_optimal_cost();
+  if (verbose) {
+    drake::log()->info(fmt::format(
+        "max({})={}, solver_time {}", cost_name, *max_cost,
+        result.get_solver_details<solvers::MosekSolver>().optimizer_time));
+  }
+  if (backoff_scale > 0) {
+    result = BackoffProgram(&prog, result.get_optimal_cost(), backoff_scale,
+                            solver_options);
+    *max_cost = -result.EvalBinding(ellipsoid_cost)(0);
+    if (verbose) {
+      drake::log()->info(fmt::format(
+          "backoff with {}={}, solver time {}", cost_name, *max_cost,
+          result.get_solver_details<solvers::MosekSolver>().optimizer_time));
+    }
+  }
+  *P_sol = result.GetSolution(P);
+  *q_sol = result.GetSolution(q);
+}
 }  // namespace
 
 void CspaceFreeRegion::CspacePolytopeBilinearAlternation(
@@ -1077,8 +1128,6 @@ void CspaceFreeRegion::CspacePolytopeBilinearAlternation(
                     CalcCspacePolytopeVolume(C_val, d_val, t_lower, t_upper)));
   }
 
-  MatrixX<symbolic::Variable> P;
-  VectorX<symbolic::Variable> q;
   VectorX<symbolic::Variable> margin;
   int iter_count = 0;
   double cost_improvement = kInf;
@@ -1089,23 +1138,8 @@ void CspaceFreeRegion::CspacePolytopeBilinearAlternation(
     auto prog_lagrangian = ConstructLagrangianProgram(
         alternation_tuples, C_val, d_val, lagrangian_gram_vars,
         verified_gram_vars, separating_plane_vars, t_lower, t_upper,
-        verification_option, bilinear_alternation_option.redundant_tighten, &P,
-        &q);
-    std::string cost_name;
-    switch (bilinear_alternation_option.ellipsoid_volume) {
-      case EllipsoidVolume::kLog: {
-        prog_lagrangian->AddMaximizeLogDeterminantCost(
-            P.cast<symbolic::Expression>());
-        cost_name = "log(det(P))";
-        break;
-      }
-      case EllipsoidVolume::kNthRoot: {
-        AddMaximizeEigenValueGeometricMean(prog_lagrangian.get(), P);
-        cost_name = fmt::format("power(det(P), 1/{}", SmallestPower2(P.rows()));
-        break;
-      }
-    }
-    const auto lagrangian_cost = prog_lagrangian->linear_costs()[0];
+        verification_option, bilinear_alternation_option.redundant_tighten,
+        nullptr, nullptr);
     auto result_lagrangian =
         solvers::Solve(*prog_lagrangian, std::nullopt, solver_options);
     if (!result_lagrangian.is_success()) {
@@ -1114,38 +1148,28 @@ void CspaceFreeRegion::CspacePolytopeBilinearAlternation(
       *separating_planes_sol =
           GetSeparatingPlanesSolution(*this, result_lagrangian);
       return;
-    }
-    double lagrangian_cost_val = -result_lagrangian.get_optimal_cost();
-    if (bilinear_alternation_option.verbose) {
+    } else {
       drake::log()->info(fmt::format(
-          "Iter: {}, max({})={}, solver_time {}", iter_count, cost_name,
-          -result_lagrangian.get_optimal_cost(),
+          "Iter {} Lagrangian step takes {} secons", iter_count,
           result_lagrangian.get_solver_details<solvers::MosekSolver>()
               .optimizer_time));
     }
-    if (bilinear_alternation_option.lagrangian_backoff_scale > 0) {
-      result_lagrangian = BackoffProgram(
-          prog_lagrangian.get(), result_lagrangian.get_optimal_cost(),
-          bilinear_alternation_option.lagrangian_backoff_scale, solver_options);
-      lagrangian_cost_val = -result_lagrangian.EvalBinding(lagrangian_cost)(0);
-      if (bilinear_alternation_option.verbose) {
-        drake::log()->info(fmt::format(
-            "backoff with {} {}, solver time {}", cost_name,
-            lagrangian_cost_val,
-            result_lagrangian.get_solver_details<solvers::MosekSolver>()
-                .optimizer_time));
-      }
-    }
     const Eigen::VectorXd lagrangian_gram_var_vals =
         result_lagrangian.GetSolution(lagrangian_gram_vars);
-    const auto P_sol = result_lagrangian.GetSolution(P);
-    const auto q_sol = result_lagrangian.GetSolution(q);
-    *P_final = P_sol;
-    *q_final = q_sol;
+    // Now construct a program that finds the maximal inner ellipsoid in C*t<=d,
+    // t_lower<=t<=t_upper. This program can be solved independently from
+    // prog_lagrangian.
+    double ellipsoid_cost_val;
+    FindLargestInscribedEllipsoid(
+        C_val, d_val, t_lower, t_upper,
+        bilinear_alternation_option.lagrangian_backoff_scale,
+        bilinear_alternation_option.ellipsoid_volume, solver_options,
+        bilinear_alternation_option.verbose, P_final, q_final,
+        &ellipsoid_cost_val);
     // Update the cost.
-    cost_improvement = lagrangian_cost_val - previous_cost;
+    cost_improvement = ellipsoid_cost_val - previous_cost;
     drake::log()->info(fmt::format("cost improvement {}", cost_improvement));
-    previous_cost = lagrangian_cost_val;
+    previous_cost = ellipsoid_cost_val;
 
     // Now solve the polytope problem (fix Lagrangian).
     auto prog_polytope = ConstructPolytopeProgram(
@@ -1154,7 +1178,8 @@ void CspaceFreeRegion::CspacePolytopeBilinearAlternation(
         t_upper_minus_t, verification_option);
     // Add the constraint that the polytope contains the ellipsoid
     margin = prog_polytope->NewContinuousVariables(C_var.rows(), "margin");
-    AddOuterPolytope(prog_polytope.get(), P_sol, q_sol, C_var, d_var, margin);
+    AddOuterPolytope(prog_polytope.get(), *P_final, *q_final, C_var, d_var,
+                     margin);
 
     // We know that the verified polytope has to be contained in the box t_lower
     // <= t <= t_upper. Hence there is no point to grow the polytope such that
