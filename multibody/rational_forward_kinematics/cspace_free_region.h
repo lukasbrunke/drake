@@ -88,15 +88,15 @@ struct VerificationOption {
  * the planes for all the collision pairs, and the inscribed ellipsoid approximating the volume of the polytope
  */
 struct CspaceFreeRegionSolution{
-//   public:
-//    DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(CspaceFreeRegionSolution)
-//    CspaceFreeRegionSolution() = default;
-   CspaceFreeRegionSolution() {}
+   public:
+    DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(CspaceFreeRegionSolution)
+    CspaceFreeRegionSolution() = default;
+
    CspaceFreeRegionSolution(
-     Eigen::Ref<Eigen::MatrixXd> m_C,
-     Eigen::Ref<Eigen::VectorXd> m_d,
-     Eigen::Ref<Eigen::MatrixXd> m_P,
-     Eigen::Ref<Eigen::VectorXd> m_q,
+     Eigen::MatrixXd m_C,
+     Eigen::MatrixXd m_d,
+     Eigen::MatrixXd m_P,
+     Eigen::MatrixXd m_q,
 //     const std::vector<VectorX<symbolic::Polynomial>> m_polytope_lagrangians,
 //     const std::vector<VectorX<symbolic::Polynomial>> m_t_lower_lagrangians,
 //     const std::vector<VectorX<symbolic::Polynomial>> m_t_upper_lagrangians,
@@ -113,27 +113,24 @@ struct CspaceFreeRegionSolution{
         separating_planes{std::move(m_separating_planes)} {}
 //
    CspaceFreeRegionSolution(
-     Eigen::Ref<Eigen::MatrixXd> m_C,
-     Eigen::Ref<Eigen::VectorXd> m_d)
-      : C{std::move(m_C)},
-        d{std::move(m_d)}
+     Eigen::MatrixXd m_C,
+     Eigen::MatrixXd m_d)
+      : C{m_C},
+        d{m_d}
 //        polytope_lagrangians{num_pairs},
 //        t_lower_lagrangians{num_pairs},
 //        t_upper_lagrangians{num_pairs},
 //        verified_polynomials{num_pairs},
 //        separating_planes{num_pairs}
-        {
-     P.resize(C.cols(), C.cols());
-     q.resize(C.cols());
-   }
+        { }
 
    // values defining Hpolyhedron Ct <= d
    Eigen::MatrixXd C;
    Eigen::VectorXd d;
 
    // values defining Inscribed ellipsoid {t | t = Ps + q , norm(s) <= 1}
-   Eigen::MatrixXd P;
-   Eigen::VectorXd q;
+   std::optional<Eigen::MatrixXd> P;
+   std::optional<Eigen::VectorXd> q;
 
 
    // TODO (Alex.Amice) add these polynomials back in one I figure out how to extract them

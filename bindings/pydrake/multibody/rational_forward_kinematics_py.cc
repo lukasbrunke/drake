@@ -128,10 +128,7 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
   // SeparatingPlane
   py::class_<multibody::SeparatingPlane>(
       m, "SeparatingPlane", doc.SeparatingPlane.doc)
-      .def("a",
-                    [](const SeparatingPlane* self){
-          return self->a;
-      }, doc.SeparatingPlane.a.doc)
+      .def_readonly("a", &SeparatingPlane::a, py_rvp::copy, doc.SeparatingPlane.a.doc)
       .def_readonly("b", &SeparatingPlane::b, doc.SeparatingPlane.b.doc)
       .def_readonly("positive_side_polytope",
           &SeparatingPlane::positive_side_polytope,
@@ -143,11 +140,7 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
           doc.SeparatingPlane.expressed_link.doc)
       .def_readonly(
           "order", &SeparatingPlane::order, doc.SeparatingPlane.order.doc)
-      .def("decision_variables",
-                    [](const SeparatingPlane* self){
-          return self->decision_variables;
-      },
-          doc.SeparatingPlane.decision_variables.doc);
+      .def_readonly("decision_variables", &SeparatingPlane::decision_variables, py_rvp::copy, doc.SeparatingPlane.a.doc);
 
   // PlaneSide
   py::enum_<PlaneSide>(m, "PlaneSide", doc.PlaneSide.doc)
@@ -404,7 +397,6 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
               const std::optional<std::pair<Eigen::MatrixXd, Eigen::VectorXd>>&
                   inner_polytope) {
             CspaceFreeRegionSolution cspace_free_region_solution;
-//            std::vector<SeparatingPlane> separating_planes_sol;
             self->CspacePolytopeBilinearAlternation(q_star,
                 filtered_collision_pairs, C_init, d_init,
                 bilinear_alternation_option, solver_options, q_inner_pts,
