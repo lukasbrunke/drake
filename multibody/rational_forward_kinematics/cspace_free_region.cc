@@ -225,8 +225,8 @@ SeparatingPlane GetSeparatingPlaneSolution(
     a_sol(i) = plane.a(i).EvaluatePartial(env);
   }
   const symbolic::Expression b_sol = plane.b.EvaluatePartial(env);
-  return SeparatingPlane(a_sol, b_sol, plane.positive_side_polytope,
-                         plane.negative_side_polytope, plane.expressed_link,
+  return SeparatingPlane(a_sol, b_sol, plane.positive_side_geometry,
+                         plane.negative_side_geometry, plane.expressed_link,
                          plane.order, plane.decision_variables);
 }
 
@@ -687,9 +687,9 @@ void CspaceFreeRegion::GenerateTuplesForBilinearAlternation(
     VectorX<symbolic::Variable>* verified_gram_vars,
     VectorX<symbolic::Variable>* separating_plane_vars,
     std::vector<std::vector<int>>* separating_plane_to_tuples,
-    std::vector<solvers::Binding<solvers::LorentzConeConstraint>>*
-        separating_plane_lorentz_cone_constraints) const {
-  DRAKE_DEMAND(separating_plane_lorentz_cone_constraints != nullptr);
+    std::vector<std::vector<solvers::Binding<solvers::LorentzConeConstraint>>>*
+        separating_plane_to_lorentz_cone_constraints) const {
+  DRAKE_DEMAND(separating_plane_to_lorentz_cone_constraints != nullptr);
   // Create variables C and d.
   const auto& t = rational_forward_kinematics_.t();
   C->resize(C_rows, t.rows());
@@ -731,10 +731,7 @@ void CspaceFreeRegion::GenerateTuplesForBilinearAlternation(
   // variables.
   int lagrangian_gram_vars_count = 0;
   int verified_gram_vars_count = 0;
-  int lorentz_cone_constraints_count = 0;
   for (int i = 0; i < static_cast<int>(rationals.size()); ++i) {
-    lorentz_cone_constraints_count +=
-        rationals[i].lorentz_cone_constraints.size();
     VectorX<symbolic::Monomial> monomial_basis_chain;
     FindMonomialBasisForPolytopicRegion(
         rational_forward_kinematics_, rationals[i],
@@ -762,12 +759,12 @@ void CspaceFreeRegion::GenerateTuplesForBilinearAlternation(
         t_lower_lagrangian_gram_lower_start,
         t_upper_lagrangian_gram_lower_start, verified_gram_vars_count,
         monomial_basis_chain);
-    (*separating_plane_to_tuples)
-        [this->map_polytopes_to_separating_planes_.at(
-             SortedPair<geometry::GeometryId>(
-                 rationals[i].link_polytope->get_id(),
-                 rationals[i].other_side_link_polytope->get_id()))]
-            .push_back(alternation_tuples->size() - 1);
+    (*separating_plane_to_tuples)[this->map_collisions_to_separating_planes_.at(
+                                      SortedPair<geometry::GeometryId>(
+                                          rationals[i].link_geometry->id(),
+                                          rationals[i]
+                                              .other_side_link_geometry->id()))]
+        .push_back(alternation_tuples->size() - 1);
     // Each Gram matrix is of size monomial_basis_chain.rows() *
     // (monomial_basis_chain.rows() + 1) / 2. Each rational needs C.rows() + 2 *
     // t.rows() Lagrangians.
@@ -799,13 +796,20 @@ void CspaceFreeRegion::GenerateTuplesForBilinearAlternation(
     separating_plane_vars_count += separating_plane.decision_variables.rows();
   }
   // Set the separating plane lorentz cone constraints.
-  separating_plane_lorentz_cone_constraints->reserve(
-      lorentz_cone_constraints_count);
+  separating_plane_to_lorentz_cone_constraints->clear();
+  separating_plane_to_lorentz_cone_constraints->resize(
+      separating_planes_.size());
   for (const auto& rational : rationals) {
-    separating_plane_lorentz_cone_constraints->insert(
-        separating_plane_lorentz_cone_constraints->end(),
-        rational.lorentz_cone_constraints.begin(),
-        rational.lorentz_cone_constraints.end());
+    if (!rational.lorentz_cone_constraints.empty()) {
+      const int plane_index = map_collisions_to_separating_planes_.at(
+          SortedPair<geometry::GeometryId>(
+              rational.link_geometry->id(),
+              rational.other_side_link_geometry->id()));
+      (*separating_plane_to_lorentz_cone_constraints)[plane_index].insert(
+          (*separating_plane_to_lorentz_cone_constraints)[plane_index].end(),
+          rational.lorentz_cone_constraints.begin(),
+          rational.lorentz_cone_constraints.end());
+    }
   }
 }
 
@@ -962,8 +966,9 @@ CspaceFreeRegion::ConstructPolytopeProgram(
     const Eigen::VectorXd& lagrangian_gram_var_vals,
     const VectorX<symbolic::Variable>& verified_gram_vars,
     const VectorX<symbolic::Variable>& separating_plane_vars,
-    const std::vector<solvers::Binding<solvers::LorentzConeConstraint>>&
-        separating_plane_lorentz_cone_constraints,
+    const std::vector<
+        std::vector<solvers::Binding<solvers::LorentzConeConstraint>>>&
+        separating_plane_to_lorentz_cone_constraints,
     const VectorX<symbolic::Polynomial>& t_minus_t_lower,
     const VectorX<symbolic::Polynomial>& t_upper_minus_t,
     const VerificationOption& option) const {
@@ -1039,8 +1044,10 @@ CspaceFreeRegion::ConstructPolytopeProgram(
     }
   }
   // Add Lorentz cone constraints for separating planes.
-  for (const auto& binding : separating_plane_lorentz_cone_constraints) {
-    prog->AddConstraint(binding);
+  for (const auto& bindings : separating_plane_to_lorentz_cone_constraints) {
+    for (const auto& binding : bindings) {
+      prog->AddConstraint(binding);
+    }
   }
   return prog;
 }
@@ -1148,8 +1155,8 @@ std::vector<bool> IsPlaneActive(
   std::vector<bool> is_plane_active(separating_planes.size(), true);
   for (int i = 0; i < static_cast<int>(separating_planes.size()); ++i) {
     if (filtered_collision_pairs.count(SortedPair<geometry::GeometryId>(
-            separating_planes[i].positive_side_polytope->get_id(),
-            separating_planes[i].negative_side_polytope->get_id())) != 0) {
+            separating_planes[i].positive_side_geometry->id(),
+            separating_planes[i].negative_side_geometry->id())) != 0) {
       is_plane_active[i] = false;
     }
   }
@@ -1168,6 +1175,9 @@ bool FindLagrangianAndSeparatingPlanesSingleThread(
     const VectorX<symbolic::Variable>& lagrangian_gram_vars,
     const VectorX<symbolic::Variable>& verified_gram_vars,
     const VectorX<symbolic::Variable>& separating_plane_vars,
+    const std::vector<
+        std::vector<solvers::Binding<solvers::LorentzConeConstraint>>>&
+        separating_plane_to_lorentz_cone_constraints,
     const Eigen::VectorXd& t_lower, const Eigen::VectorXd& t_upper,
     const VerificationOption& verification_option,
     std::optional<double> redundant_tighten,
@@ -1177,10 +1187,17 @@ bool FindLagrangianAndSeparatingPlanesSingleThread(
     Eigen::VectorXd* verified_gram_var_vals,
     Eigen::VectorXd* separating_plane_var_vals,
     std::vector<SeparatingPlane>* separating_planes_sol) {
+  std::vector<solvers::Binding<solvers::LorentzConeConstraint>>
+      separating_plane_lorentz_cone_constraints;
+  for (const auto& bindings : separating_plane_to_lorentz_cone_constraints) {
+    separating_plane_lorentz_cone_constraints.insert(
+        separating_plane_lorentz_cone_constraints.end(), bindings.begin(),
+        bindings.end());
+  }
   auto prog_lagrangian = cspace_free_region.ConstructLagrangianProgram(
       alternation_tuples, C, d, lagrangian_gram_vars, verified_gram_vars,
-      separating_plane_vars, t_lower, t_upper, verification_option,
-      redundant_tighten, nullptr, nullptr);
+      separating_plane_vars, separating_plane_lorentz_cone_constraints, t_lower,
+      t_upper, verification_option, redundant_tighten, nullptr, nullptr);
   auto result_lagrangian =
       solvers::Solve(*prog_lagrangian, std::nullopt, solver_options);
   if (!result_lagrangian.is_success()) {
@@ -1217,6 +1234,9 @@ bool FindLagrangianAndSeparatingPlanesMultiThread(
     const VectorX<symbolic::Variable>& lagrangian_gram_vars,
     const VectorX<symbolic::Variable>& verified_gram_vars,
     const VectorX<symbolic::Variable>& separating_plane_vars,
+    const std::vector<
+        std::vector<solvers::Binding<solvers::LorentzConeConstraint>>>&
+        separating_plane_to_lorentz_cone_constraints,
     const Eigen::VectorXd& t_lower, const Eigen::VectorXd& t_upper,
     const VerificationOption& verification_option,
     std::optional<double> redundant_tighten,
@@ -1254,9 +1274,11 @@ bool FindLagrangianAndSeparatingPlanesMultiThread(
   // multiplier for a pair of collision geometries.
   auto solve_small_sos = [&cspace_free_region, &alternation_tuples, &C, &d,
                           &lagrangian_gram_vars, &verified_gram_vars,
-                          &separating_plane_vars, &t_lower, &t_upper,
-                          &verification_option, &redundant_tighten,
-                          &solver_options, &separating_plane_to_tuples,
+                          &separating_plane_vars,
+                          &separating_plane_to_lorentz_cone_constraints,
+                          &t_lower, &t_upper, &verification_option,
+                          &redundant_tighten, &solver_options,
+                          &separating_plane_to_tuples,
                           &separating_plane_var_indices,
                           lagrangian_gram_var_vals, separating_planes_sol,
                           verified_gram_var_vals, separating_plane_var_vals,
@@ -1271,8 +1293,9 @@ bool FindLagrangianAndSeparatingPlanesMultiThread(
     }
     auto prog = cspace_free_region.ConstructLagrangianProgram(
         plane_tuples, C, d, lagrangian_gram_vars, verified_gram_vars,
-        separating_plane_vars, t_lower, t_upper, verification_option,
-        redundant_tighten, nullptr, nullptr);
+        separating_plane_vars,
+        separating_plane_to_lorentz_cone_constraints[plane_index], t_lower,
+        t_upper, verification_option, redundant_tighten, nullptr, nullptr);
     const auto result = solvers::Solve(*prog, std::nullopt, solver_options);
     is_success[active_plane_count] = result.is_success();
     if (result.is_success()) {
@@ -1359,10 +1382,10 @@ bool FindLagrangianAndSeparatingPlanesMultiThread(
                 "({}, {})\n",
                 inspector.GetName(
                     cspace_free_region.separating_planes()[plane_index]
-                        .positive_side_polytope->get_id()),
+                        .positive_side_geometry->id()),
                 inspector.GetName(
                     cspace_free_region.separating_planes()[plane_index]
-                        .negative_side_polytope->get_id())));
+                        .negative_side_geometry->id())));
           }
           active_plane_count++;
         }
@@ -1384,6 +1407,9 @@ bool FindLagrangianAndSeparatingPlanes(
     const VectorX<symbolic::Variable>& lagrangian_gram_vars,
     const VectorX<symbolic::Variable>& verified_gram_vars,
     const VectorX<symbolic::Variable>& separating_plane_vars,
+    const std::vector<
+        std::vector<solvers::Binding<solvers::LorentzConeConstraint>>>&
+        separating_plane_to_lorentz_cone_constraints,
     const Eigen::VectorXd& t_lower, const Eigen::VectorXd& t_upper,
     const VerificationOption& verification_option,
     std::optional<double> redundant_tighten,
@@ -1397,7 +1423,8 @@ bool FindLagrangianAndSeparatingPlanes(
   if (multi_thread) {
     return FindLagrangianAndSeparatingPlanesMultiThread(
         cspace_free_region, alternation_tuples, C, d, lagrangian_gram_vars,
-        verified_gram_vars, separating_plane_vars, t_lower, t_upper,
+        verified_gram_vars, separating_plane_vars,
+        separating_plane_to_lorentz_cone_constraints, t_lower, t_upper,
         verification_option, redundant_tighten, solver_options, verbose,
         separating_plane_to_tuples, lagrangian_gram_var_vals,
         verified_gram_var_vals, separating_plane_var_vals,
@@ -1408,9 +1435,11 @@ bool FindLagrangianAndSeparatingPlanes(
     for (int i = 0; i < static_cast<int>(is_plane_active.size()); ++i) {
       is_plane_active[i] = !separating_plane_to_tuples[i].empty();
     }
+    // Aggregate all separating plane Lorentz cone constraints;
     return FindLagrangianAndSeparatingPlanesSingleThread(
         cspace_free_region, alternation_tuples, C, d, lagrangian_gram_vars,
-        verified_gram_vars, separating_plane_vars, t_lower, t_upper,
+        verified_gram_vars, separating_plane_vars,
+        separating_plane_to_lorentz_cone_constraints, t_lower, t_upper,
         verification_option, redundant_tighten, solver_options, verbose,
         is_plane_active, lagrangian_gram_var_vals, verified_gram_var_vals,
         separating_plane_var_vals, separating_planes_sol);
@@ -1465,13 +1494,14 @@ void CspaceFreeRegion::CspacePolytopeBilinearAlternation(
   VectorX<symbolic::Variable> d_var, lagrangian_gram_vars, verified_gram_vars,
       separating_plane_vars;
   std::vector<std::vector<int>> separating_plane_to_tuples;
-  std::vector<solvers::Binding<solvers::LorentzConeConstraint>>
-      separating_plane_lorentz_cone_constraints;
+  std::vector<std::vector<solvers::Binding<solvers::LorentzConeConstraint>>>
+      separating_plane_to_lorentz_cone_constraints;
   GenerateTuplesForBilinearAlternation(
       q_star, filtered_collision_pairs, C_rows, &alternation_tuples,
       &d_minus_Ct, &t_lower, &t_upper, &t_minus_t_lower, &t_upper_minus_t,
       &C_var, &d_var, &lagrangian_gram_vars, &verified_gram_vars,
-      &separating_plane_vars, &separating_plane_to_tuples, &separating_plane_lorentz_cone_constraints);
+      &separating_plane_vars, &separating_plane_to_tuples,
+      &separating_plane_to_lorentz_cone_constraints);
   if (bilinear_alternation_option.compute_polytope_volume) {
     drake::log()->info(
         fmt::format("Polytope volume {}",
@@ -1493,7 +1523,8 @@ void CspaceFreeRegion::CspacePolytopeBilinearAlternation(
     auto clock_start = std::chrono::system_clock::now();
     const bool find_lagrangian = internal::FindLagrangianAndSeparatingPlanes(
         *this, alternation_tuples, C_val, d_val, lagrangian_gram_vars,
-        verified_gram_vars, separating_plane_vars, t_lower, t_upper,
+        verified_gram_vars, separating_plane_vars,
+        separating_plane_to_lorentz_cone_constraints, t_lower, t_upper,
         verification_option, bilinear_alternation_option.redundant_tighten,
         solver_options, bilinear_alternation_option.verbose,
         bilinear_alternation_option.multi_thread, separating_plane_to_tuples,
@@ -1532,7 +1563,7 @@ void CspaceFreeRegion::CspacePolytopeBilinearAlternation(
     auto prog_polytope = ConstructPolytopeProgram(
         alternation_tuples, C_var, d_var, d_minus_Ct, lagrangian_gram_var_vals,
         verified_gram_vars, separating_plane_vars,
-        separating_plane_lorentz_cone_constraints, t_minus_t_lower,
+        separating_plane_to_lorentz_cone_constraints, t_minus_t_lower,
         t_upper_minus_t, verification_option);
     // Add the constraint that the polytope contains the ellipsoid
     margin = prog_polytope->NewContinuousVariables(C_var.rows(), "margin");
@@ -1657,13 +1688,14 @@ void CspaceFreeRegion::CspacePolytopeBinarySearch(
   VectorX<symbolic::Variable> d_var, lagrangian_gram_vars, verified_gram_vars,
       separating_plane_vars;
   std::vector<std::vector<int>> separating_plane_to_tuples;
-  std::vector<solvers::Binding<solvers::LorentzConeConstraint>>
-      separating_plane_lorentz_cone_constraints;
+  std::vector<std::vector<solvers::Binding<solvers::LorentzConeConstraint>>>
+      separating_plane_to_lorentz_cone_constraints;
   GenerateTuplesForBilinearAlternation(
       q_star, filtered_collision_pairs, C_rows, &alternation_tuples,
       &d_minus_Ct, &t_lower, &t_upper, &t_minus_t_lower, &t_upper_minus_t,
       &C_var, &d_var, &lagrangian_gram_vars, &verified_gram_vars,
-      &separating_plane_vars, &separating_plane_to_tuples, &separating_plane_lorentz_cone_constraints);
+      &separating_plane_vars, &separating_plane_to_tuples,
+      &separating_plane_to_lorentz_cone_constraints);
   std::optional<Eigen::MatrixXd> t_inner_pts;
   if (q_inner_pts.has_value()) {
     t_inner_pts->resize(q_inner_pts->rows(), q_inner_pts->cols());
@@ -1684,7 +1716,8 @@ void CspaceFreeRegion::CspacePolytopeBinarySearch(
   // This function will update d_sol when the polytope is collision free.
   auto is_polytope_collision_free =
       [this, &alternation_tuples, &C, &lagrangian_gram_vars,
-       &verified_gram_vars, &separating_plane_vars, &t_lower, &t_upper,
+       &verified_gram_vars, &separating_plane_vars,
+       &separating_plane_to_lorentz_cone_constraints, &t_lower, &t_upper,
        &verification_option, &solver_options, &C_var, &d_var, &d_minus_Ct,
        &t_minus_t_lower, &t_upper_minus_t, &t_inner_pts, &inner_polytope,
        &d_max, &is_plane_active, &separating_plane_to_tuples,
@@ -1696,7 +1729,8 @@ void CspaceFreeRegion::CspacePolytopeBinarySearch(
             separating_plane_var_vals;
         const bool is_success = internal::FindLagrangianAndSeparatingPlanes(
             *this, alternation_tuples, C, d, lagrangian_gram_vars,
-            verified_gram_vars, separating_plane_vars, t_lower, t_upper,
+            verified_gram_vars, separating_plane_vars,
+            separating_plane_to_lorentz_cone_constraints, t_lower, t_upper,
             verification_option, redundant_tighten, solver_options, verbose,
             multi_thread, separating_plane_to_tuples, &lagrangian_gram_var_vals,
             &verified_gram_var_vals, &separating_plane_var_vals,
@@ -1708,8 +1742,9 @@ void CspaceFreeRegion::CspacePolytopeBinarySearch(
             auto prog_polytope = this->ConstructPolytopeProgram(
                 alternation_tuples, C_var, d_var, d_minus_Ct,
                 lagrangian_gram_var_vals, verified_gram_vars,
-                separating_plane_vars, t_minus_t_lower, t_upper_minus_t,
-                verification_option);
+                separating_plane_vars,
+                separating_plane_to_lorentz_cone_constraints, t_minus_t_lower,
+                t_upper_minus_t, verification_option);
             // Calling AddBoundingBoxConstraint(C, C, C_var) for matrix C and
             // C_var might have problem, see Drake issue #16421
             prog_polytope->AddBoundingBoxConstraint(
@@ -1741,8 +1776,16 @@ void CspaceFreeRegion::CspacePolytopeBinarySearch(
               *d_sol = result_polytope.GetSolution(d_var);
               *separating_planes_sol = GetSeparatingPlanesSolution(
                   *this, is_plane_active, result_polytope);
+            } else {
+              drake::log()->info(fmt::format(
+                  "search d {}", result_polytope.get_solution_result()));
             }
           }
+        }
+        if (compute_polytope_volume) {
+          drake::log()->info(
+              fmt::format("C-space polytope volume {}",
+                          CalcCspacePolytopeVolume(C, d, t_lower, t_upper)));
         }
         return is_success;
       };

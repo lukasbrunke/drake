@@ -334,18 +334,21 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
             VectorX<symbolic::Variable> verified_gram_vars;
             VectorX<symbolic::Variable> separating_plane_vars;
             std::vector<std::vector<int>> separating_plane_to_tuples;
-            std::vector<solvers::Binding<solvers::LorentzConeConstraint>>
-                separating_plane_lorentz_cone_constraints;
+            std::vector<
+                std::vector<solvers::Binding<solvers::LorentzConeConstraint>>>
+                separating_plane_to_lorentz_cone_constraints;
             self->GenerateTuplesForBilinearAlternation(q_star,
                 filtered_collision_pairs, C_rows, &alternation_tuples,
                 &d_minus_Ct, &t_lower, &t_upper, &t_minus_t_lower,
                 &t_upper_minus_t, &C, &d, &lagrangian_gram_vars,
                 &verified_gram_vars, &separating_plane_vars,
-                &separating_plane_to_tuples, &separating_plane_lorentz_cone_constraints);
+                &separating_plane_to_tuples,
+                &separating_plane_to_lorentz_cone_constraints);
             return std::make_tuple(alternation_tuples, d_minus_Ct, t_lower,
                 t_upper, t_minus_t_lower, t_upper_minus_t, C, d,
                 lagrangian_gram_vars, verified_gram_vars, separating_plane_vars,
-                separating_plane_to_tuples, separating_plane_lorentz_cone_constraints);
+                separating_plane_to_tuples,
+                separating_plane_to_lorentz_cone_constraints);
           },
           py::arg("q_star"), py::arg("filtered_collision_pairs"),
           py::arg("C_rows"),

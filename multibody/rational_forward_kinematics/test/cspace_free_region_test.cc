@@ -506,7 +506,8 @@ void TestGenerateLinkOnOneSideOfPlaneRationals(
        dut.map_collisions_to_separating_planes()) {
     if (!IsGeometryPairCollisionIgnored(link_pair.first(), link_pair.second(),
                                         filtered_collision_pairs)) {
-      const auto& separating_plane = dut.separating_planes()[separating_plane_index];
+      const auto& separating_plane =
+          dut.separating_planes()[separating_plane_index];
       for (const auto link_geometry :
            {separating_plane.positive_side_geometry,
             separating_plane.negative_side_geometry}) {
@@ -791,15 +792,21 @@ void CheckGenerateTuplesForBilinearAlternation(const CspaceFreeRegion& dut,
   VectorX<symbolic::Variable> d_var, lagrangian_gram_vars, verified_gram_vars,
       separating_plane_vars;
   std::vector<std::vector<int>> separating_plane_to_tuples;
-  std::vector<solvers::Binding<solvers::LorentzConeConstraint>>
-      separating_plane_lorentz_cone_constraints;
+  std::vector<std::vector<solvers::Binding<solvers::LorentzConeConstraint>>>
+      separating_plane_to_lorentz_cone_constraints;
   dut.GenerateTuplesForBilinearAlternation(
       q_star, {}, C_rows, &alternation_tuples, &d_minus_Ct, &t_lower, &t_upper,
       &t_minus_t_lower, &t_upper_minus_t, &C_var, &d_var, &lagrangian_gram_vars,
-      &verified_gram_vars, &separating_plane_vars, &separating_plane_to_tuples, &separating_plane_lorentz_cone_constraints);
+      &verified_gram_vars, &separating_plane_vars, &separating_plane_to_tuples,
+      &separating_plane_to_lorentz_cone_constraints);
   int rational_count = 0;
-  int separating_plane_lorentz_cone_constraints_count = 0;
+  std::vector<int> separating_plane_to_lorentz_cone_constraints_count(
+      dut.separating_planes().size(), 0);
   for (const auto& separating_plane : dut.separating_planes()) {
+    const int plane_index = dut.map_collisions_to_separating_planes().at(
+        SortedPair<geometry::GeometryId>(
+            separating_plane.positive_side_geometry->id(),
+            separating_plane.negative_side_geometry->id()));
     for (const CollisionGeometry* link_geometry :
          {separating_plane.positive_side_geometry,
           separating_plane.negative_side_geometry}) {
@@ -810,12 +817,12 @@ void CheckGenerateTuplesForBilinearAlternation(const CspaceFreeRegion& dut,
         }
         case CollisionGeometryType::kSphere: {
           rational_count += 1;
-          separating_plane_lorentz_cone_constraints_count += 1;
+          separating_plane_to_lorentz_cone_constraints_count[plane_index] += 1;
           break;
         }
         case CollisionGeometryType::kCapsule: {
           rational_count += 2;
-          separating_plane_lorentz_cone_constraints_count += 1;
+          separating_plane_to_lorentz_cone_constraints_count[plane_index] += 1;
           break;
         }
         default: {
@@ -825,8 +832,12 @@ void CheckGenerateTuplesForBilinearAlternation(const CspaceFreeRegion& dut,
     }
   }
   EXPECT_EQ(alternation_tuples.size(), rational_count);
-  EXPECT_EQ(separating_plane_lorentz_cone_constraints.size(),
-            separating_plane_lorentz_cone_constraints_count);
+  EXPECT_EQ(separating_plane_to_lorentz_cone_constraints.size(),
+            dut.separating_planes().size());
+  for (int i = 0; i < static_cast<int>(dut.separating_planes().size()); ++i) {
+    EXPECT_EQ(separating_plane_to_lorentz_cone_constraints[i].size(),
+              separating_plane_to_lorentz_cone_constraints_count[i]);
+  }
   // Now count the total number of lagrangian gram vars.
   int lagrangian_gram_vars_count = 0;
   int verified_gram_vars_count = 0;
@@ -1022,18 +1033,26 @@ TEST_F(IiwaCspaceTest, ConstructLagrangianAndPolytopeProgram) {
   VectorX<symbolic::Variable> d_var, lagrangian_gram_vars, verified_gram_vars,
       separating_plane_vars;
   std::vector<std::vector<int>> separating_plane_to_tuples;
-  std::vector<solvers::Binding<solvers::LorentzConeConstraint>>
-      separating_plane_lorentz_cone_constraints;
+  std::vector<std::vector<solvers::Binding<solvers::LorentzConeConstraint>>>
+      separating_plane_to_lorentz_cone_constraints;
   dut.GenerateTuplesForBilinearAlternation(
       q_star, filtered_collision_pairs, C.rows(), &alternation_tuples,
       &d_minus_Ct, &t_lower, &t_upper, &t_minus_t_lower, &t_upper_minus_t,
       &C_var, &d_var, &lagrangian_gram_vars, &verified_gram_vars,
-      &separating_plane_vars, &separating_plane_to_tuples, &separating_plane_lorentz_cone_constraints);
+      &separating_plane_vars, &separating_plane_to_tuples,
+      &separating_plane_to_lorentz_cone_constraints);
 
   MatrixX<symbolic::Variable> P;
   VectorX<symbolic::Variable> q;
   auto clock_start = std::chrono::system_clock::now();
   double redundant_tighten = 0;
+  std::vector<solvers::Binding<solvers::LorentzConeConstraint>>
+      separating_plane_lorentz_cone_constraints;
+  for (const auto& bindings : separating_plane_to_lorentz_cone_constraints) {
+    separating_plane_lorentz_cone_constraints.insert(
+        separating_plane_lorentz_cone_constraints.end(), bindings.begin(),
+        bindings.end());
+  }
   auto prog = dut.ConstructLagrangianProgram(
       alternation_tuples, C, d, lagrangian_gram_vars, verified_gram_vars,
       separating_plane_vars, separating_plane_lorentz_cone_constraints, t_lower,
@@ -1075,7 +1094,7 @@ TEST_F(IiwaCspaceTest, ConstructLagrangianAndPolytopeProgram) {
   auto prog_polytope = dut.ConstructPolytopeProgram(
       alternation_tuples, C_var, d_var, d_minus_Ct, lagrangian_gram_var_vals,
       verified_gram_vars, separating_plane_vars,
-      separating_plane_lorentz_cone_constraints, t_minus_t_lower,
+      separating_plane_to_lorentz_cone_constraints, t_minus_t_lower,
       t_upper_minus_t, {});
   margin = prog_polytope->NewContinuousVariables(C_var.rows(), "margin");
   AddOuterPolytope(prog_polytope.get(), P_sol, q_sol, C_var, d_var, margin);
@@ -1191,18 +1210,27 @@ TEST_F(IiwaNonpolytopeCollisionCspaceTest,
   MatrixX<symbolic::Variable> C_var;
   VectorX<symbolic::Variable> d_var, lagrangian_gram_vars, verified_gram_vars,
       separating_plane_vars;
-  std::vector<solvers::Binding<solvers::LorentzConeConstraint>>
-      separating_plane_lorentz_cone_constraints;
+  std::vector<std::vector<int>> separating_plane_to_tuples;
+  std::vector<std::vector<solvers::Binding<solvers::LorentzConeConstraint>>>
+      separating_plane_to_lorentz_cone_constraints;
   dut.GenerateTuplesForBilinearAlternation(
       q_star, filtered_collision_pairs, C.rows(), &alternation_tuples,
       &d_minus_Ct, &t_lower, &t_upper, &t_minus_t_lower, &t_upper_minus_t,
       &C_var, &d_var, &lagrangian_gram_vars, &verified_gram_vars,
-      &separating_plane_vars, &separating_plane_lorentz_cone_constraints);
+      &separating_plane_vars, &separating_plane_to_tuples,
+      &separating_plane_to_lorentz_cone_constraints);
 
   MatrixX<symbolic::Variable> P;
   VectorX<symbolic::Variable> q;
   auto clock_start = std::chrono::system_clock::now();
   double redundant_tighten = 0;
+  std::vector<solvers::Binding<solvers::LorentzConeConstraint>>
+      separating_plane_lorentz_cone_constraints;
+  for (const auto& binding : separating_plane_to_lorentz_cone_constraints) {
+    separating_plane_lorentz_cone_constraints.insert(
+        separating_plane_lorentz_cone_constraints.end(), binding.begin(),
+        binding.end());
+  }
   auto prog = dut.ConstructLagrangianProgram(
       alternation_tuples, C, d, lagrangian_gram_vars, verified_gram_vars,
       separating_plane_vars, separating_plane_lorentz_cone_constraints, t_lower,
@@ -1270,7 +1298,7 @@ TEST_F(IiwaNonpolytopeCollisionCspaceTest,
   auto prog_polytope = dut.ConstructPolytopeProgram(
       alternation_tuples, C_var, d_var, d_minus_Ct, lagrangian_gram_var_vals,
       verified_gram_vars, separating_plane_vars,
-      separating_plane_lorentz_cone_constraints, t_minus_t_lower,
+      separating_plane_to_lorentz_cone_constraints, t_minus_t_lower,
       t_upper_minus_t, {});
   margin = prog_polytope->NewContinuousVariables(C_var.rows(), "margin");
   AddOuterPolytope(prog_polytope.get(), P_sol, q_sol, C_var, d_var, margin);
@@ -1296,12 +1324,9 @@ TEST_F(IiwaNonpolytopeCollisionCspaceTest,
   check_separating_plane_lorentz_cone(result_polytope);
 }
 
-TEST_F(IiwaCspaceTest, CspacePolytopeBilinearAlternation) {
-  ApplyFilter();
-  const double separating_polytope_delta{0.1};
-  const CspaceFreeRegion dut(
-      *diagram_, plant_, scene_graph_, SeparatingPlaneOrder::kAffine,
-      CspaceRegionType::kGenericPolytope, separating_polytope_delta);
+void TestBilinearAlternation(const CspaceFreeRegion& dut,
+                             const systems::Diagram<double>& diagram,
+                             bool multi_thread) {
   const auto& plant = dut.rational_forward_kinematics().plant();
   auto context = plant.CreateDefaultContext();
 
@@ -1309,7 +1334,7 @@ TEST_F(IiwaCspaceTest, CspacePolytopeBilinearAlternation) {
   Eigen::MatrixXd C;
   Eigen::VectorXd d;
   Eigen::VectorXd q_not_in_collision;
-  ConstructInitialCspacePolytope(dut, *diagram_, &q_star, &C, &d,
+  ConstructInitialCspacePolytope(dut, diagram, &q_star, &C, &d,
                                  &q_not_in_collision);
 
   CspaceFreeRegion::FilteredCollisionPairs filtered_collision_pairs{};
@@ -1328,7 +1353,8 @@ TEST_F(IiwaCspaceTest, CspacePolytopeBilinearAlternation) {
                                    .convergence_tol = 0.001,
                                    .lagrangian_backoff_scale = 0.05,
                                    .polytope_backoff_scale = 0.05,
-                                   .verbose = true};
+                                   .verbose = true,
+                                   .multi_thread = multi_thread};
   solvers::SolverOptions solver_options;
   solver_options.SetOption(solvers::CommonSolverOption::kPrintToConsole, true);
   std::vector<SeparatingPlane> separating_planes_sol;
@@ -1349,6 +1375,25 @@ TEST_F(IiwaCspaceTest, CspacePolytopeBilinearAlternation) {
       dut.rational_forward_kinematics().ComputeTValue(q_not_in_collision,
                                                       q_star);
   EXPECT_TRUE(((C_final * t_inner_pts).array() <= d_final.array()).all());
+}
+
+TEST_F(IiwaCspaceTest, CspacePolytopeBilinearAlternation) {
+  ApplyFilter();
+  const double separating_polytope_delta{0.1};
+  const CspaceFreeRegion dut(
+      *diagram_, plant_, scene_graph_, SeparatingPlaneOrder::kAffine,
+      CspaceRegionType::kGenericPolytope, separating_polytope_delta);
+  bool multi_thread{false};
+  TestBilinearAlternation(dut, *diagram_, multi_thread);
+}
+
+TEST_F(IiwaNonpolytopeCollisionCspaceTest, CspacePolytopeBilinearAlternation) {
+  const double separating_polytope_delta{0.1};
+  const CspaceFreeRegion dut(
+      *diagram_, plant_, scene_graph_, SeparatingPlaneOrder::kAffine,
+      CspaceRegionType::kGenericPolytope, separating_polytope_delta);
+  bool multi_thread{true};
+  TestBilinearAlternation(dut, *diagram_, multi_thread);
 }
 
 TEST_F(IiwaCspaceTest, CspacePolytopeBinarySearch) {
@@ -1409,49 +1454,77 @@ void CheckSeparatingPlanesSol(
        plane_index < static_cast<int>(dut.separating_planes().size());
        ++plane_index) {
     if (is_plane_active[plane_index]) {
-      EXPECT_EQ(separating_planes_sol[active_plane_count]
-                    .positive_side_polytope->get_id(),
-                dut.separating_planes()[plane_index]
-                    .positive_side_polytope->get_id());
-      EXPECT_EQ(separating_planes_sol[active_plane_count]
-                    .negative_side_polytope->get_id(),
-                dut.separating_planes()[plane_index]
-                    .negative_side_polytope->get_id());
+      const SeparatingPlane& separating_plane_sol =
+          separating_planes_sol[active_plane_count];
+      EXPECT_EQ(
+          separating_plane_sol.positive_side_geometry->id(),
+          dut.separating_planes()[plane_index].positive_side_geometry->id());
+      EXPECT_EQ(
+          separating_plane_sol.negative_side_geometry->id(),
+          dut.separating_planes()[plane_index].negative_side_geometry->id());
       for (int i = 0; i < 3; ++i) {
-        EXPECT_TRUE(separating_planes_sol[active_plane_count]
-                        .a(i)
-                        .GetVariables()
-                        .IsSubsetOf(t_vars));
+        EXPECT_TRUE(
+            separating_plane_sol.a(i).GetVariables().IsSubsetOf(t_vars));
       }
-      EXPECT_TRUE(
-          separating_planes_sol[active_plane_count].b.GetVariables().IsSubsetOf(
-              t_vars));
+      EXPECT_TRUE(separating_plane_sol.b.GetVariables().IsSubsetOf(t_vars));
+      for (const auto* collision :
+           {dut.separating_planes()[plane_index].positive_side_geometry,
+            dut.separating_planes()[plane_index].negative_side_geometry}) {
+        switch (collision->type()) {
+          case CollisionGeometryType::kPolytope: {
+            break;
+          }
+          case CollisionGeometryType::kSphere:
+          case CollisionGeometryType::kCapsule: {
+            switch (dut.separating_planes()[plane_index].order) {
+              case SeparatingPlaneOrder::kConstant: {
+                Eigen::Vector3d a_val;
+                for (int i = 0; i < 3; ++i) {
+                  a_val(i) =
+                      symbolic::get_constant_value(separating_plane_sol.a(i));
+                }
+                EXPECT_LE(a_val.norm(), 1 + 1e-6);
+                break;
+              }
+              default: {
+                throw std::runtime_error("Not implemented yet.");
+              }
+            }
+            break;
+          }
+          default: {
+            throw std::runtime_error("Not implemented yet.");
+          }
+        }
+      }
       active_plane_count++;
     }
   }
   EXPECT_EQ(separating_planes_sol.size(), active_plane_count);
 }
 
-TEST_F(IiwaCspaceTest, FindLagrangianAndSeparatingPlanes) {
-  // Test both the single-thread version and the multiple-thread version. Make
-  // sure the result are correct.
-  ApplyFilter();
-  const CspaceFreeRegion dut(*diagram_, plant_, scene_graph_,
+// Test both the single-thread version and the multiple-thread version. Make
+// sure the result are correct.
+void TestFindLagrangianAndSeparatingPlanes(
+    const systems::Diagram<double>& diagram,
+    const MultibodyPlant<double>& plant,
+    const geometry::SceneGraph<double>& scene_graph) {
+  const CspaceFreeRegion dut(diagram, &plant, &scene_graph,
                              SeparatingPlaneOrder::kAffine,
                              CspaceRegionType::kGenericPolytope);
-  const auto& plant = dut.rational_forward_kinematics().plant();
   auto context = plant.CreateDefaultContext();
 
   Eigen::VectorXd q_star;
   Eigen::MatrixXd C;
   Eigen::VectorXd d;
   Eigen::VectorXd q_not_in_collision;
-  ConstructInitialCspacePolytope(dut, &q_star, &C, &d, &q_not_in_collision);
+  ConstructInitialCspacePolytope(dut, diagram, &q_star, &C, &d,
+                                 &q_not_in_collision);
 
   CspaceFreeRegion::FilteredCollisionPairs filtered_collision_pairs{
       {SortedPair<geometry::GeometryId>(
-          dut.separating_planes()[0].positive_side_polytope->get_id(),
-          dut.separating_planes()[0].negative_side_polytope->get_id())}};
+          dut.separating_planes()[0].positive_side_geometry->id(),
+          dut.separating_planes()[0].negative_side_geometry->id())}};
   std::vector<CspaceFreeRegion::CspacePolytopeTuple> alternation_tuples;
   VectorX<symbolic::Polynomial> d_minus_Ct;
   Eigen::VectorXd t_lower, t_upper;
@@ -1460,11 +1533,14 @@ TEST_F(IiwaCspaceTest, FindLagrangianAndSeparatingPlanes) {
   VectorX<symbolic::Variable> d_var, lagrangian_gram_vars, verified_gram_vars,
       separating_plane_vars;
   std::vector<std::vector<int>> separating_plane_to_tuples;
+  std::vector<std::vector<solvers::Binding<solvers::LorentzConeConstraint>>>
+      separating_plane_to_lorentz_cone_constraints;
   dut.GenerateTuplesForBilinearAlternation(
       q_star, filtered_collision_pairs, C.rows(), &alternation_tuples,
       &d_minus_Ct, &t_lower, &t_upper, &t_minus_t_lower, &t_upper_minus_t,
       &C_var, &d_var, &lagrangian_gram_vars, &verified_gram_vars,
-      &separating_plane_vars, &separating_plane_to_tuples);
+      &separating_plane_vars, &separating_plane_to_tuples,
+      &separating_plane_to_lorentz_cone_constraints);
   const std::vector<bool> is_plane_active = internal::IsPlaneActive(
       dut.separating_planes(), filtered_collision_pairs);
   EXPECT_FALSE(is_plane_active[0]);
@@ -1483,11 +1559,11 @@ TEST_F(IiwaCspaceTest, FindLagrangianAndSeparatingPlanes) {
     const bool verbose{true};
     bool is_success = internal::FindLagrangianAndSeparatingPlanes(
         dut, alternation_tuples, C, d, lagrangian_gram_vars, verified_gram_vars,
-        separating_plane_vars, t_lower, t_upper, verification_option,
-        redundant_tighten, solver_options, verbose, multi_thread,
-        separating_plane_to_tuples, &lagrangian_gram_var_vals,
-        &verified_gram_var_vals, &separating_plane_var_vals,
-        &separating_planes_sol);
+        separating_plane_vars, separating_plane_to_lorentz_cone_constraints,
+        t_lower, t_upper, verification_option, redundant_tighten,
+        solver_options, verbose, multi_thread, separating_plane_to_tuples,
+        &lagrangian_gram_var_vals, &verified_gram_var_vals,
+        &separating_plane_var_vals, &separating_planes_sol);
     EXPECT_TRUE(is_success);
     EXPECT_EQ(separating_planes_sol.size(), num_active_planes);
     TestLagrangianResult(dut, alternation_tuples, C, d, separating_plane_vars,
@@ -1501,13 +1577,22 @@ TEST_F(IiwaCspaceTest, FindLagrangianAndSeparatingPlanes) {
     const Eigen::VectorXd d_infeasible = (d.array() + 1E5).matrix();
     is_success = internal::FindLagrangianAndSeparatingPlanes(
         dut, alternation_tuples, C, d_infeasible, lagrangian_gram_vars,
-        verified_gram_vars, separating_plane_vars, t_lower, t_upper,
+        verified_gram_vars, separating_plane_vars,
+        separating_plane_to_lorentz_cone_constraints, t_lower, t_upper,
         verification_option, redundant_tighten, solver_options, verbose,
         multi_thread, separating_plane_to_tuples, &lagrangian_gram_var_vals,
         &verified_gram_var_vals, &separating_plane_var_vals,
         &separating_planes_sol);
     EXPECT_FALSE(is_success);
   }
+}
+
+TEST_F(IiwaCspaceTest, FindLagrangianAndSeparatingPlanes) {
+  TestFindLagrangianAndSeparatingPlanes(*diagram_, *plant_, *scene_graph_);
+}
+
+TEST_F(IiwaNonpolytopeCollisionCspaceTest, FindLagrangianAndSeparatingPlanes) {
+  TestFindLagrangianAndSeparatingPlanes(*diagram_, *plant_, *scene_graph_);
 }
 
 GTEST_TEST(CalcPolynomialFromGram, Test1) {

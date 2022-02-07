@@ -311,8 +311,9 @@ class CspaceFreeRegion {
       VectorX<symbolic::Variable>* verified_gram_vars,
       VectorX<symbolic::Variable>* separating_plane_vars,
       std::vector<std::vector<int>>* separating_plane_to_tuples,
-      std::vector<solvers::Binding<solvers::LorentzConeConstraint>>*
-          separating_plane_lorentz_cone_constraints) const;
+      std::vector<
+          std::vector<solvers::Binding<solvers::LorentzConeConstraint>>>*
+          separating_plane_to_lorentz_cone_constraints) const;
 
   /**
    * Given the C-space free region candidate C*t<=d,
@@ -390,8 +391,9 @@ class CspaceFreeRegion {
       const Eigen::VectorXd& lagrangian_gram_var_vals,
       const VectorX<symbolic::Variable>& verified_gram_vars,
       const VectorX<symbolic::Variable>& separating_plane_vars,
-      const std::vector<solvers::Binding<solvers::LorentzConeConstraint>>&
-          separating_plane_lorentz_cone_constraints,
+      const std::vector<
+          std::vector<solvers::Binding<solvers::LorentzConeConstraint>>>&
+          separating_plane_to_lorentz_cone_constraints,
       const VectorX<symbolic::Polynomial>& t_minus_t_lower,
       const VectorX<symbolic::Polynomial>& t_upper_minus_t,
       const VerificationOption& option) const;
@@ -552,7 +554,7 @@ class CspaceFreeRegion {
 
   // separating_planes_[(geometry1_id, geometry2_id)] is the separating plane
   // that separates geometry1 and geometry 2.
-  std::unordered_map<SortedPair<ConvexGeometry::Id>, int>
+  std::unordered_map<SortedPair<geometry::GeometryId>, int>
       map_collisions_to_separating_planes_;
 };
 
@@ -805,6 +807,9 @@ bool FindLagrangianAndSeparatingPlanes(
     const VectorX<symbolic::Variable>& lagrangian_gram_vars,
     const VectorX<symbolic::Variable>& verified_gram_vars,
     const VectorX<symbolic::Variable>& separating_plane_vars,
+    const std::vector<
+        std::vector<solvers::Binding<solvers::LorentzConeConstraint>>>&
+        separating_plane_to_lorentz_cone_constraints,
     const Eigen::VectorXd& t_lower, const Eigen::VectorXd& t_upper,
     const VerificationOption& verification_option,
     std::optional<double> redundant_tighten,

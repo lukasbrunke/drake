@@ -144,9 +144,9 @@ Eigen::VectorXd FindInitialPosture(const MultibodyPlant<double>& plant,
   const auto& link7 = plant.GetFrameByName("iiwa_link_7");
   const auto& shelf = plant.GetFrameByName("shelves_body");
   ik.AddPositionConstraint(link7, Eigen::Vector3d::Zero(), shelf,
-                           Eigen::Vector3d(-0.2, -0.2, -0.2),
+                           Eigen::Vector3d(-0.25, -0.2, -0.2),
                            Eigen::Vector3d(-.0, 0.2, 0.2));
-  ik.AddMinimumDistanceConstraint(0.035);
+  ik.AddMinimumDistanceConstraint(0.02);
 
   Eigen::Matrix<double, 7, 1> q_init;
   q_init << 0.1, 0.3, 0.2, 0.5, 0.4, 0.3, 0.2;
@@ -239,10 +239,10 @@ void SearchCspacePolytope(const std::string& write_file) {
                                  &separating_planes_sol);
   CspaceFreeRegion::BilinearAlternationOption bilinear_alternation_option{
       .max_iters = 10,
-      .convergence_tol = 0.001,
+      .convergence_tol = 0.000,
       .lagrangian_backoff_scale = 0.01,
       .redundant_tighten = 0.5,
-      .compute_polytope_volume = true,
+      .compute_polytope_volume = false,
       .multi_thread = true};
   Eigen::MatrixXd C_final;
   Eigen::VectorXd d_final;
