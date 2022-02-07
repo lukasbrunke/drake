@@ -70,6 +70,7 @@ struct SeparatingPlane {
   VectorX<symbolic::Variable> decision_variables;
 };
 
+
 /**
  * We need to verify that C * t <= d implies p(t) >= 0, where p(t) is the
  * numerator of the rational function aᵀx + b - 1 or -1 - aᵀx-b. Namely we need
@@ -81,6 +82,71 @@ struct VerificationOption {
   solvers::MathematicalProgram::NonnegativePolynomial link_polynomial_type;
   solvers::MathematicalProgram::NonnegativePolynomial lagrangian_type;
 };
+
+/**
+ * A verified region is a polytope C*t <= d along with the multiplier polynomials acting as the certificate,
+ * the planes for all the collision pairs, and the inscribed ellipsoid approximating the volume of the polytope
+ */
+struct CspaceFreeRegionSolution{
+   public:
+    DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(CspaceFreeRegionSolution)
+    CspaceFreeRegionSolution() = default;
+
+   CspaceFreeRegionSolution(
+     Eigen::MatrixXd m_C,
+     Eigen::MatrixXd m_d,
+     Eigen::MatrixXd m_P,
+     Eigen::MatrixXd m_q,
+//     const std::vector<VectorX<symbolic::Polynomial>> m_polytope_lagrangians,
+//     const std::vector<VectorX<symbolic::Polynomial>> m_t_lower_lagrangians,
+//     const std::vector<VectorX<symbolic::Polynomial>> m_t_upper_lagrangians,
+//     const std::vector<symbolic::Polynomial> m_verified_polynomials,
+     std::vector<SeparatingPlane> m_separating_planes)
+      : C{std::move(m_C)},
+        d{std::move(m_d)},
+        P{std::move(m_P)},
+        q{std::move(m_q)},
+//        polytope_lagrangians{m_polytope_lagrangians},
+//        t_lower_lagrangians{m_t_lower_lagrangians},
+//        t_upper_lagrangians{m_t_upper_lagrangians},
+//        verified_polynomials{m_verified_polynomials},
+        separating_planes{std::move(m_separating_planes)} {}
+//
+   CspaceFreeRegionSolution(
+     Eigen::MatrixXd m_C,
+     Eigen::MatrixXd m_d)
+      : C{m_C},
+        d{m_d}
+//        polytope_lagrangians{num_pairs},
+//        t_lower_lagrangians{num_pairs},
+//        t_upper_lagrangians{num_pairs},
+//        verified_polynomials{num_pairs},
+//        separating_planes{num_pairs}
+        { }
+
+   // values defining Hpolyhedron Ct <= d
+   Eigen::MatrixXd C;
+   Eigen::VectorXd d;
+
+   // values defining Inscribed ellipsoid {t | t = Ps + q , norm(s) <= 1}
+   Eigen::MatrixXd P;
+   Eigen::VectorXd q;
+
+
+   // TODO (Alex.Amice) add these polynomials back in one I figure out how to extract them
+//    // multipliers for C*t <= d
+//    std::vector<VectorX<symbolic::Polynomial>> polytope_lagrangians;
+//    // multiplier for t >= t_lower
+//    std::vector<VectorX<symbolic::Polynomial>> t_lower_lagrangians;
+//    // multiplier for t <= t_upper
+//    std::vector<VectorX<symbolic::Polynomial>> t_upper_lagrangians;
+//    // verified_polynomial[i] is p(t) - l_polytope(t)ᵀ(d - C*t) -
+//    // l_lower(t)ᵀ(t-t_lower) - l_upper(t)ᵀ(t_upper-t)
+//    std::vector<symbolic::Polynomial> verified_polynomials;
+
+    // Separating hyperplanes that are the certificate
+    std::vector<SeparatingPlane> separating_planes;
+ };
 
 /**
  * The rational function representing that a link vertex V is on the desired
@@ -440,14 +506,13 @@ class CspaceFreeRegion {
       const std::optional<Eigen::MatrixXd>& q_inner_pts,
       const std::optional<std::pair<Eigen::MatrixXd, Eigen::VectorXd>>&
           inner_polytope,
-      Eigen::MatrixXd* C_final, Eigen::VectorXd* d_final,
-      Eigen::MatrixXd* P_final, Eigen::VectorXd* q_final,
-      std::vector<SeparatingPlane>* separating_planes_sol) const;
+      CspaceFreeRegionSolution* cspace_free_region_solution) const;
 
   struct BinarySearchOption {
     double epsilon_max{10};
     double epsilon_min{0};
     int max_iters{5};
+    double lagrangian_backoff_scale{0.};
     // If set to true, then after we verify that C*t<=d is collision free, we
     // then fix the Lagrangian multiplier and search the right-hand side vector
     // d through another SOS program.
@@ -458,6 +523,10 @@ class CspaceFreeRegion {
     // If set to true, then solve the Lagrangian program through many small SOS
     // on multiple threads. Each program for one pair of collision geometries.
     bool multi_thread{false};
+
+    // The objective function used in maximizing the volume of the inscribed
+    // ellipsoid.
+    EllipsoidVolume ellipsoid_volume{EllipsoidVolume::kNthRoot};
   };
 
   /**
@@ -490,8 +559,7 @@ class CspaceFreeRegion {
       const std::optional<Eigen::MatrixXd>& q_inner_pts,
       const std::optional<std::pair<Eigen::MatrixXd, Eigen::VectorXd>>&
           inner_polytope,
-      Eigen::VectorXd* d_final,
-      std::vector<SeparatingPlane>* separating_planes_sol) const;
+      CspaceFreeRegionSolution* cspace_free_region_solution) const;
 
   const RationalForwardKinematics& rational_forward_kinematics() const {
     return rational_forward_kinematics_;
@@ -755,6 +823,7 @@ std::vector<bool> IsPlaneActive(
  * the separating planes and Lagrangian multipliers for all pairs of collision
  * geometries. If set to true, then solve many small SOS in parallel, each SOS
  * for one pair of collision geometries.
+ * @param If a solution is found, it is written into cspace_free_region
  */
 bool FindLagrangianAndSeparatingPlanes(
     const CspaceFreeRegion& cspace_free_region,
@@ -773,7 +842,7 @@ bool FindLagrangianAndSeparatingPlanes(
     Eigen::VectorXd* lagrangian_gram_var_vals,
     Eigen::VectorXd* verified_gram_var_vals,
     Eigen::VectorXd* separating_plane_var_vals,
-    std::vector<SeparatingPlane>* separating_planes_sol);
+    CspaceFreeRegionSolution* cspace_free_region_solution);
 }  // namespace internal
 }  // namespace multibody
 }  // namespace drake
