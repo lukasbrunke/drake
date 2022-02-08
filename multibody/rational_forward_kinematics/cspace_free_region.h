@@ -542,6 +542,7 @@ class CspaceFreeRegion {
     // collision geometries. std::nullopt means to solve a single big SOS with
     // all the separating planes simultaneously.
     std::optional<int> num_threads{std::nullopt};
+    VerificationOption verification_option{};
   };
 
   /**
@@ -602,6 +603,7 @@ class CspaceFreeRegion {
     EllipsoidVolume ellipsoid_volume{EllipsoidVolume::kNthRoot};
     // Whether to check the Lagrangian program for C*t <= d + epsilon_min
     bool check_epsilon_min = true;
+    VerificationOption verification_option{};
   };
 
   /**

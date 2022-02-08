@@ -756,6 +756,29 @@ void CspaceFreeRegion::GenerateTuplesForBilinearAlternation(
   }
 }
 
+namespace {
+void AddPositiveMatrixConstraint(
+    solvers::MathematicalProgram* prog,
+    const Eigen::Ref<const MatrixX<symbolic::Variable>>& mat,
+    solvers::MathematicalProgram::NonnegativePolynomial type) {
+  switch (type) {
+    case solvers::MathematicalProgram::NonnegativePolynomial::kSos: {
+      prog->AddPositiveSemidefiniteConstraint(mat);
+      break;
+    }
+    case solvers::MathematicalProgram::NonnegativePolynomial::kSdsos: {
+      prog->AddScaledDiagonallyDominantMatrixConstraint(mat);
+      break;
+    }
+    case solvers::MathematicalProgram::NonnegativePolynomial::kDsos: {
+      prog->AddPositiveDiagonallyDominantMatrixConstraint(
+          mat.cast<symbolic::Expression>());
+      break;
+    }
+  }
+}
+}  // namespace
+
 std::unique_ptr<solvers::MathematicalProgram>
 CspaceFreeRegion::ConstructLagrangianProgram(
     const std::vector<CspacePolytopeTuple>& alternation_tuples,
@@ -770,15 +793,6 @@ CspaceFreeRegion::ConstructLagrangianProgram(
     const Eigen::Ref<const Eigen::VectorXd>& t_upper,
     const VerificationOption& option, std::optional<double> redundant_tighten,
     MatrixX<symbolic::Variable>* P, VectorX<symbolic::Variable>* q) const {
-  // TODO(hongkai.dai): support more nonnegative polynomials.
-  if (option.lagrangian_type !=
-      solvers::MathematicalProgram::NonnegativePolynomial::kSos) {
-    throw std::runtime_error("Only support sos polynomial for now");
-  }
-  if (option.link_polynomial_type !=
-      solvers::MathematicalProgram::NonnegativePolynomial::kSos) {
-    throw std::runtime_error("Only support sos polynomial for now");
-  }
   auto prog = std::make_unique<solvers::MathematicalProgram>();
   // Adds decision variables.
   prog->AddDecisionVariables(lagrangian_gram_vars);
@@ -835,10 +849,10 @@ CspaceFreeRegion::ConstructLagrangianProgram(
     // 1. Set the Gram variables to be 0.
     auto constrain_lagrangian =
         [&gram_mat, &verified_polynomial, &lagrangian_gram_vars, &prog,
-         gram_lower_size](int lagrangian_gram_lower_start,
-                          const VectorX<symbolic::Monomial>& monomial_basis,
-                          const symbolic::Polynomial& constraint_polynomial,
-                          bool redundant) {
+         gram_lower_size, &option](
+            int lagrangian_gram_lower_start,
+            const VectorX<symbolic::Monomial>& monomial_basis,
+            const symbolic::Polynomial& constraint_polynomial, bool redundant) {
           if (redundant) {
             prog->AddBoundingBoxConstraint(
                 0, 0,
@@ -851,7 +865,8 @@ CspaceFreeRegion::ConstructLagrangianProgram(
                 lagrangian_gram_vars.segment(lagrangian_gram_lower_start,
                                              gram_lower_size),
                 &gram_mat);
-            prog->AddPositiveSemidefiniteConstraint(gram_mat);
+            AddPositiveMatrixConstraint(prog.get(), gram_mat,
+                                        option.lagrangian_type);
             verified_polynomial -= CalcPolynomialFromGram<symbolic::Variable>(
                                        monomial_basis, gram_mat) *
                                    constraint_polynomial;
@@ -878,7 +893,8 @@ CspaceFreeRegion::ConstructLagrangianProgram(
         verified_gram_vars.segment(tuple.verified_polynomial_gram_lower_start,
                                    gram_lower_size),
         &gram_mat);
-    prog->AddPositiveSemidefiniteConstraint(gram_mat);
+    AddPositiveMatrixConstraint(prog.get(), gram_mat,
+                                option.link_polynomial_type);
     const symbolic::Polynomial verified_polynomial_expected =
         CalcPolynomialFromGram<symbolic::Variable>(tuple.monomial_basis,
                                                    gram_mat);
@@ -915,10 +931,6 @@ CspaceFreeRegion::ConstructPolytopeProgram(
     const VectorX<symbolic::Polynomial>& t_minus_t_lower,
     const VectorX<symbolic::Polynomial>& t_upper_minus_t,
     const VerificationOption& option) const {
-  if (option.link_polynomial_type !=
-      solvers::MathematicalProgram::NonnegativePolynomial::kSos) {
-    throw std::runtime_error("Only support sos polynomial for now");
-  }
   auto prog = std::make_unique<solvers::MathematicalProgram>();
   // Add the decision variables.
   prog->AddDecisionVariables(Eigen::Map<const VectorX<symbolic::Variable>>(
@@ -976,7 +988,8 @@ CspaceFreeRegion::ConstructPolytopeProgram(
         verified_gram_vars.segment(tuple.verified_polynomial_gram_lower_start,
                                    gram_lower_size),
         &verified_gram);
-    prog->AddPositiveSemidefiniteConstraint(verified_gram);
+    AddPositiveMatrixConstraint(prog.get(), verified_gram,
+                                option.link_polynomial_type);
     const symbolic::Polynomial verified_polynomial_expected =
         CalcPolynomialFromGram<symbolic::Variable>(tuple.monomial_basis,
                                                    verified_gram);
@@ -1587,7 +1600,6 @@ void CspaceFreeRegion::CspacePolytopeBilinearAlternation(
   int iter_count = 0;
   double cost_improvement = kInf;
   double previous_cost = -kInf;
-  VerificationOption verification_option{};
   while (iter_count < bilinear_alternation_option.max_iters &&
          cost_improvement > bilinear_alternation_option.convergence_tol) {
     Eigen::VectorXd lagrangian_gram_var_vals, verified_gram_var_vals,
@@ -1598,8 +1610,9 @@ void CspaceFreeRegion::CspacePolytopeBilinearAlternation(
         (cspace_free_region_solution->d), lagrangian_gram_vars,
         verified_gram_vars, separating_plane_vars,
         separating_plane_to_lorentz_cone_constraints, t_lower, t_upper,
-        verification_option, bilinear_alternation_option.redundant_tighten,
-        solver_options, bilinear_alternation_option.verbose,
+        bilinear_alternation_option.verification_option,
+        bilinear_alternation_option.redundant_tighten, solver_options,
+        bilinear_alternation_option.verbose,
         bilinear_alternation_option.num_threads, separating_plane_to_tuples,
         &lagrangian_gram_var_vals, &verified_gram_var_vals,
         &separating_plane_var_vals, cspace_free_region_solution);
@@ -1634,7 +1647,7 @@ void CspaceFreeRegion::CspacePolytopeBilinearAlternation(
         alternation_tuples, C_var, d_var, d_minus_Ct, lagrangian_gram_var_vals,
         verified_gram_vars, separating_plane_vars,
         separating_plane_to_lorentz_cone_constraints, t_minus_t_lower,
-        t_upper_minus_t, verification_option);
+        t_upper_minus_t, bilinear_alternation_option.verification_option);
     // Add the constraint that the polytope contains the ellipsoid
     margin = prog_polytope->NewContinuousVariables(C_var.rows(), "margin");
     AddOuterPolytope(prog_polytope.get(), (cspace_free_region_solution->P),
@@ -1778,7 +1791,8 @@ void CspaceFreeRegion::CspacePolytopeBinarySearch(
                                 inner_polytope));
   const Eigen::VectorXd d_max = ComputeMaxD(C, t_lower, t_upper);
 
-  VerificationOption verification_option{};
+  const VerificationOption& verification_option =
+      binary_search_option.verification_option;
   const auto is_plane_active =
       internal::IsPlaneActive(separating_planes_, filtered_collision_pairs);
   // Checks if C*t<=d, t_lower<=t<=t_upper is collision free.
