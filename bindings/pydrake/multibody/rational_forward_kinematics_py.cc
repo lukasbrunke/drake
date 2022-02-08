@@ -236,7 +236,11 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
           doc.CspaceFreeRegion.BilinearAlternationOption.ellipsoid_volume.doc)
       .def_readwrite("num_threads",
           &CspaceFreeRegion::BilinearAlternationOption::num_threads,
-          doc.CspaceFreeRegion.BilinearAlternationOption.num_threads.doc);
+          doc.CspaceFreeRegion.BilinearAlternationOption.num_threads.doc)
+      .def_readwrite("verification_option",
+          &CspaceFreeRegion::BilinearAlternationOption::verification_option,
+          doc.CspaceFreeRegion.BilinearAlternationOption.verification_option
+              .doc);
 
   // BinarySearchOption
   py::class_<CspaceFreeRegion::BinarySearchOption>(
@@ -266,7 +270,10 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
           doc.CspaceFreeRegion.BinarySearchOption.verbose.doc)
       .def_readwrite("num_threads",
           &CspaceFreeRegion::BinarySearchOption::num_threads,
-          doc.CspaceFreeRegion.BinarySearchOption.num_threads.doc);
+          doc.CspaceFreeRegion.BinarySearchOption.num_threads.doc)
+      .def_readwrite("verification_option",
+          &CspaceFreeRegion::BinarySearchOption::verification_option,
+          doc.CspaceFreeRegion.BinarySearchOption.verification_option.doc);
 
   //CspaceFreeRegionSolution
   py::class_<CspaceFreeRegionSolution>(m, "CspaceFreeRegionSolution", doc.CspaceFreeRegionSolution.doc)
@@ -276,6 +283,7 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
       .def_readwrite("q", &CspaceFreeRegionSolution::q, doc.CspaceFreeRegionSolution.q.doc)
       .def_readwrite("separating_planes", &CspaceFreeRegionSolution::separating_planes,
                      doc.CspaceFreeRegionSolution.separating_planes.doc);
+
   // CspaceFreeRegion
   py::class_<CspaceFreeRegion> cspace_cls(
       m, "CspaceFreeRegion", doc.CspaceFreeRegion.doc);

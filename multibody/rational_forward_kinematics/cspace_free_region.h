@@ -499,6 +499,7 @@ class CspaceFreeRegion {
     // collision geometries. std::nullopt means to solve a single big SOS with
     // all the separating planes simultaneously.
     std::optional<int> num_threads{std::nullopt};
+    VerificationOption verification_option{};
   };
 
   /**
@@ -556,6 +557,7 @@ class CspaceFreeRegion {
     // The objective function used in maximizing the volume of the inscribed
     // ellipsoid.
     EllipsoidVolume ellipsoid_volume{EllipsoidVolume::kNthRoot};
+    VerificationOption verification_option{};
   };
 
   /**
