@@ -208,28 +208,26 @@ int DoMain() {
       .epsilon_min = 0.,
       .max_iters = 2,
       .compute_polytope_volume = false,
-      .multi_thread = true};
+      .num_threads = -1};
   solvers::SolverOptions solver_options;
   solver_options.SetOption(solvers::CommonSolverOption::kPrintToConsole, false);
-  Eigen::VectorXd d_binary_search;
-//  std::vector<SeparatingPlane> separating_planes_sol;
   CspaceFreeRegionSolution cspace_free_region_solution;
   Eigen::VectorXd q_star = Eigen::Matrix<double, 7, 1>::Zero();
-  dut.CspacePolytopeBinarySearch(q_star, filtered_collision_pairs, C_init,
-                                 d_init, binary_search_option, solver_options,
-                                 q0, std::nullopt, &cspace_free_region_solution);
+  dut.CspacePolytopeBinarySearch(
+      q_star, filtered_collision_pairs, C_init, d_init, binary_search_option,
+      solver_options, q0, std::nullopt, &cspace_free_region_solution);
   CspaceFreeRegion::BilinearAlternationOption bilinear_alternation_option{
       .max_iters = 10,
       .convergence_tol = 0.001,
       .lagrangian_backoff_scale = 0.01,
       .redundant_tighten = 0.5,
       .compute_polytope_volume = false,
-      .multi_thread = true};
+      .num_threads = -1};
 
   dut.CspacePolytopeBilinearAlternation(
-      q_star, filtered_collision_pairs, C_init, d_binary_search,
-      bilinear_alternation_option, solver_options, q0, std::nullopt,
-      &cspace_free_region_solution);
+      q_star, filtered_collision_pairs, cspace_free_region_solution.C,
+      cspace_free_region_solution.d, bilinear_alternation_option,
+      solver_options, q0, std::nullopt, &cspace_free_region_solution);
   Eigen::MatrixXd C_final(cspace_free_region_solution.C);
   Eigen::VectorXd d_final(cspace_free_region_solution.d);
   Eigen::MatrixXd P_final(cspace_free_region_solution.P);
