@@ -212,6 +212,7 @@ void SearchCspacePolytope(const std::string& write_file) {
                          dual_ur_diagram.right_ur(), &plant_context);
   dual_ur_diagram.plant().SetPositions(&plant_context, q0);
   dual_ur_diagram.diagram().Publish(*diagram_context);
+  std::cin.get();
 
   Eigen::MatrixXd C_init;
   Eigen::VectorXd d_init;
@@ -226,30 +227,29 @@ void SearchCspacePolytope(const std::string& write_file) {
   CspaceFreeRegion::FilteredCollisionPairs filtered_collision_pairs{};
 
   CspaceFreeRegion::BinarySearchOption binary_search_option{
-      .epsilon_max = 0.005,
+      .epsilon_max = 0.05,
       .epsilon_min = 1E-6,
       .max_iters = 2,
-      .compute_polytope_volume = false};
+      .compute_polytope_volume = false,
+      .num_threads = 20};
   solvers::SolverOptions solver_options;
-  solver_options.SetOption(solvers::CommonSolverOption::kPrintToConsole, true);
-  Eigen::VectorXd d_binary_search;
+  solver_options.SetOption(solvers::CommonSolverOption::kPrintToConsole, false);
+  CspaceFreeRegionSolution cspace_free_region_solution;
   Eigen::VectorXd q_star = Eigen::Matrix<double, 12, 1>::Zero();
-  dut.CspacePolytopeBinarySearch(q_star, filtered_collision_pairs, C_init,
-                                 d_init, binary_search_option, solver_options,
-                                 q0, std::nullopt, &d_binary_search);
+  dut.CspacePolytopeBinarySearch(
+      q_star, filtered_collision_pairs, C_init, d_init, binary_search_option,
+      solver_options, q0, std::nullopt, &cspace_free_region_solution);
   CspaceFreeRegion::BilinearAlternationOption bilinear_alternation_option{
       .max_iters = 10,
       .convergence_tol = 0.001,
       .redundant_tighten = 0.5,
-      .compute_polytope_volume = false};
-  Eigen::MatrixXd C_final;
-  Eigen::VectorXd d_final;
-  Eigen::MatrixXd P_final;
-  Eigen::VectorXd q_final;
+      .compute_polytope_volume = false,
+      .num_threads = 20};
+  const Eigen::MatrixXd C0 = cspace_free_region_solution.C;
+  const Eigen::VectorXd d0 = cspace_free_region_solution.d;
   dut.CspacePolytopeBilinearAlternation(
-      q_star, filtered_collision_pairs, C_init, d_binary_search,
-      bilinear_alternation_option, solver_options, q0, std::nullopt, &C_final,
-      &d_final, &P_final, &q_final);
+      q_star, filtered_collision_pairs, C0, d0, bilinear_alternation_option,
+      solver_options, q0, std::nullopt, &cspace_free_region_solution);
 
   const Eigen::VectorXd t_upper =
       (dual_ur_diagram.plant().GetPositionUpperLimits() / 2)
@@ -261,7 +261,9 @@ void SearchCspacePolytope(const std::string& write_file) {
           .array()
           .tan()
           .matrix();
-  WriteCspacePolytopeToFile(C_final, d_final, t_lower, t_upper, write_file, 10);
+  WriteCspacePolytopeToFile(cspace_free_region_solution.C,
+                            cspace_free_region_solution.d, t_lower, t_upper,
+                            write_file, 10);
 }
 
 int DoMain() {
