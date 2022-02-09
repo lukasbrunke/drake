@@ -5,13 +5,8 @@ import numpy as np
 from pydrake.autodiffutils import AutoDiffXd
 from pydrake.common import RandomDistribution, RandomGenerator
 from pydrake.common.test_utilities import numpy_compare
-from pydrake.common.test_utilities.deprecation import catch_drake_warnings
 from pydrake.common.value import AbstractValue
 from pydrake.symbolic import Expression, Variable
-from pydrake.systems.analysis import (
-    Simulator,
-    Simulator_,
-)
 from pydrake.systems.framework import (
     BasicVector,
     DiagramBuilder,
@@ -528,6 +523,10 @@ class TestGeneral(unittest.TestCase):
             mlp.GetWeights(params=params, layer=0), np.array([[1], [2]]))
         np.testing.assert_array_equal(
             mlp.GetBiases(params=params, layer=0), np.array([3, 4]))
+        mutable_params = mlp.GetMutableParameters(context=context)
+        mutable_params[:] = 3.0
+        np.testing.assert_array_equal(mlp.GetParameters(context),
+                                      np.full(mlp.num_parameters(), 3.0))
 
         global called_loss
         called_loss = False
@@ -535,7 +534,10 @@ class TestGeneral(unittest.TestCase):
         def silly_loss(Y, dloss_dY):
             global called_loss
             called_loss = True
-            dloss_dY = 0*Y + 1
+            # We must be careful to update the dloss in place, rather than bind
+            # a new matrix to the same variable name.
+            dloss_dY[:] = 1
+            # dloss_dY = np.array(...etc...)  # <== wrong
             return Y.sum()
 
         dloss_dparams = np.zeros((13,))
@@ -555,6 +557,12 @@ class TestGeneral(unittest.TestCase):
                                             Y_desired=np.eye(3),
                                             dloss_dparams=dloss_dparams)
         self.assertTrue(dloss_dparams.any())  # No longer all zero.
+
+        Y = np.asfortranarray(np.eye(3))
+        mlp.BatchOutput(context=context, X=np.array([[0.1, 0.3, 0.4]]), Y=Y)
+        self.assertFalse(np.allclose(Y, np.eye(3)))
+        Y2 = mlp.BatchOutput(context=context, X=np.array([[0.1, 0.3, 0.4]]))
+        np.testing.assert_array_equal(Y, Y2)
 
         mlp2 = MultilayerPerceptron(layers=[1, 2, 3],
                                     activation_types=[

@@ -15,13 +15,30 @@ drake_cc_package_library(
     name = "fem",
     visibility = ["//multibody/fixed_fem:__subpackages__"],
     deps = [
+        ":calc_lame_parameters",
         ":constitutive_model",
+        ":damping_model",
         ":deformation_gradient_data",
         ":isoparametric_element",
         ":linear_constitutive_model_data",
         ":linear_simplex_element",
+        ":matrix_utilities",
         ":quadrature",
+        ":schur_complement",
         ":simplex_gaussian_quadrature",
+    ],
+)
+
+drake_cc_library(
+    name = "calc_lame_parameters",
+    srcs = [
+        "calc_lame_parameters.cc",
+    ],
+    hdrs = [
+        "calc_lame_parameters.h",
+    ],
+    deps = [
+        "//common:default_scalars",
     ],
 )
 
@@ -33,6 +50,20 @@ drake_cc_library(
     deps = [
         "//common:essential",
         "//common:nice_type_name",
+    ],
+)
+
+drake_cc_library(
+    name = "damping_model",
+    srcs = [
+        "damping_model.cc",
+    ],
+    hdrs = [
+        "damping_model.h",
+    ],
+    deps = [
+        "//common:default_scalars",
+        "//common:essential",
     ],
 )
 
@@ -93,12 +124,40 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "matrix_utilities",
+    srcs = [
+        "matrix_utilities.cc",
+    ],
+    hdrs = [
+        "matrix_utilities.h",
+    ],
+    deps = [
+        "//common:default_scalars",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
     name = "quadrature",
     srcs = [
         "quadrature.cc",
     ],
     hdrs = [
         "quadrature.h",
+    ],
+    deps = [
+        "//common:default_scalars",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "schur_complement",
+    srcs = [
+        "schur_complement.cc",
+    ],
+    hdrs = [
+        "schur_complement.h",
     ],
     deps = [
         "//common:default_scalars",
@@ -120,11 +179,27 @@ drake_cc_library(
 )
 
 drake_cc_googletest(
+    name = "calc_lame_parameters_test",
+    deps = [
+        ":calc_lame_parameters",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+drake_cc_googletest(
     name = "constitutive_model_test",
     deps = [
         ":constitutive_model",
         "//common/test_utilities:expect_throws_message",
         "//multibody/fem:deformation_gradient_data",
+    ],
+)
+
+drake_cc_googletest(
+    name = "damping_model_test",
+    deps = [
+        ":damping_model",
+        "//common/test_utilities:expect_throws_message",
     ],
 )
 
@@ -159,6 +234,25 @@ drake_cc_googletest(
     name = "linear_simplex_element_test",
     deps = [
         ":linear_simplex_element",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "matrix_utilities_test",
+    deps = [
+        ":matrix_utilities",
+        "//common:essential",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//math:geometric_transform",
+        "//math:gradient",
+    ],
+)
+
+drake_cc_googletest(
+    name = "schur_complement_test",
+    deps = [
+        ":schur_complement",
         "//common/test_utilities:eigen_matrix_compare",
     ],
 )

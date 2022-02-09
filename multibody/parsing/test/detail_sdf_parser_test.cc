@@ -144,7 +144,6 @@ GTEST_TEST(MultibodyPlantSdfParserTest, ModelInstanceTest) {
       "drake/multibody/parsing/test/"
       "links_with_visuals_and_collisions.sdf");
   PackageMap package_map;
-  package_map.PopulateUpstreamToDrake(full_name);
 
   ModelInstanceIndex instance1 =
       AddModelFromSdfFile(full_name, "instance1", package_map, &plant);
@@ -152,7 +151,6 @@ GTEST_TEST(MultibodyPlantSdfParserTest, ModelInstanceTest) {
   // Check that a duplicate model names are not allowed.
   DRAKE_EXPECT_THROWS_MESSAGE(
       AddModelFromSdfFile(full_name, "instance1", package_map, &plant),
-      std::logic_error,
       "This model already contains a model instance named 'instance1'. "
       "Model instance names must be unique within a given model.");
 
@@ -186,7 +184,7 @@ GTEST_TEST(MultibodyPlantSdfParserTest, ModelInstanceTest) {
   // Links which appear in multiple model instances throw if the instance
   // isn't specified.
   DRAKE_EXPECT_THROWS_MESSAGE(
-      plant.HasBodyNamed("Link1"), std::logic_error,
+      plant.HasBodyNamed("Link1"),
       ".*Body.*Link1.*multiple model instances.*");
 
   EXPECT_FALSE(plant.HasBodyNamed("Link1", instance1));
@@ -202,12 +200,12 @@ GTEST_TEST(MultibodyPlantSdfParserTest, ModelInstanceTest) {
   EXPECT_EQ(acrobot2_link1.model_instance(), acrobot2);
 
   DRAKE_EXPECT_THROWS_MESSAGE(
-      plant.GetBodyByName("Link1"), std::logic_error,
+      plant.GetBodyByName("Link1"),
       ".*Body.*Link1.*multiple model instances.*");
 
 
   DRAKE_EXPECT_THROWS_MESSAGE(
-      plant.HasJointNamed("ShoulderJoint"), std::logic_error,
+      plant.HasJointNamed("ShoulderJoint"),
       ".*Joint.*ShoulderJoint.*multiple model instances.*");
   EXPECT_FALSE(plant.HasJointNamed("ShoulderJoint", instance1));
   EXPECT_TRUE(plant.HasJointNamed("ShoulderJoint", acrobot1));
@@ -222,11 +220,11 @@ GTEST_TEST(MultibodyPlantSdfParserTest, ModelInstanceTest) {
   EXPECT_EQ(acrobot2_joint.model_instance(), acrobot2);
 
   DRAKE_EXPECT_THROWS_MESSAGE(
-      plant.GetJointByName("ShoulderJoint"), std::logic_error,
+      plant.GetJointByName("ShoulderJoint"),
       ".*Joint.*ShoulderJoint.*multiple model instances.*");
 
   DRAKE_EXPECT_THROWS_MESSAGE(
-      plant.HasJointActuatorNamed("ElbowJoint"), std::logic_error,
+      plant.HasJointActuatorNamed("ElbowJoint"),
       ".*JointActuator.*ElbowJoint.*multiple model instances.*");
 
   const JointActuator<double>& acrobot1_actuator =
@@ -236,7 +234,7 @@ GTEST_TEST(MultibodyPlantSdfParserTest, ModelInstanceTest) {
   EXPECT_NE(acrobot1_actuator.index(), acrobot2_actuator.index());
 
   DRAKE_EXPECT_THROWS_MESSAGE(
-      plant.GetJointActuatorByName("ElbowJoint"), std::logic_error,
+      plant.GetJointActuatorByName("ElbowJoint"),
       ".*JointActuator.*ElbowJoint.*multiple model instances.*");
 
   const Frame<double>& acrobot1_link1_frame =
@@ -246,7 +244,7 @@ GTEST_TEST(MultibodyPlantSdfParserTest, ModelInstanceTest) {
   EXPECT_NE(acrobot1_link1_frame.index(), acrobot2_link1_frame.index());
 
   DRAKE_EXPECT_THROWS_MESSAGE(
-      plant.GetFrameByName("Link1"), std::logic_error,
+      plant.GetFrameByName("Link1"),
       ".*Frame.*Link1.*multiple model instances.*");
 
   // Check model scope frames.
@@ -437,9 +435,7 @@ GTEST_TEST(SdfParser, ZeroMassNonZeroInertia) {
 
 GTEST_TEST(SdfParserDeathTest, ZeroMassNonZeroInertia) {
   // Test that attempt to parse links with zero mass and non-zero inertia fails.
-  const std::string expected_message =
-      "RotationalInertia::SetFromRotationalInertia\\(\\):"
-      " Division by zero mass or negative mass.";
+  const std::string expected_message = ".*condition 'mass > 0' failed.";
   DRAKE_EXPECT_THROWS_MESSAGE(
       ParseZeroMassNonZeroInertia(), expected_message);
 }
@@ -623,7 +619,7 @@ GTEST_TEST(SdfParser, StaticModelWithJoints) {
   };
   // The message contains the elaborate joint name inserted by the parser.
   DRAKE_EXPECT_THROWS_MESSAGE(
-      weld_and_finalize(), std::exception,
+      weld_and_finalize(),
       ".*sdformat_model_static.*");
 
   // Drake does not support "frozen" joints (#12227).
@@ -641,7 +637,6 @@ GTEST_TEST(SdfParser, StaticModelWithJoints) {
     </axis>
   </joint>
 </model>)"""),
-    std::exception,
     "Only fixed joints are permitted in static models.");
 }
 
@@ -652,11 +647,9 @@ GTEST_TEST(SdfParserThrowsWhen, JointDampingIsNegative) {
       "drake/multibody/parsing/test/sdf_parser_test/"
       "negative_damping_joint.sdf");
   PackageMap package_map;
-  package_map.PopulateUpstreamToDrake(sdf_file_path);
   MultibodyPlant<double> plant(0.0);
   DRAKE_EXPECT_THROWS_MESSAGE(
       AddModelFromSdfFile(sdf_file_path, "", package_map, &plant),
-      std::exception,
       /* Verify this method is throwing for the right reasons. */
       "Joint damping is negative for joint '.*'. "
           "Joint damping must be a non-negative number.");
@@ -738,7 +731,6 @@ GTEST_TEST(SdfParser, TestOptionalSceneGraph) {
       "drake/multibody/parsing/test/"
       "links_with_visuals_and_collisions.sdf");
   PackageMap package_map;
-  package_map.PopulateUpstreamToDrake(full_name);
 
   int num_visuals_explicit{};
   {
@@ -770,7 +762,6 @@ GTEST_TEST(MultibodyPlantSdfParserTest, JointParsingTest) {
       "drake/multibody/parsing/test/sdf_parser_test/"
       "joint_parsing_test.sdf");
   PackageMap package_map;
-  package_map.PopulateUpstreamToDrake(full_name);
 
   // Read in the SDF file.
   const std::vector<ModelInstanceIndex> instances =
@@ -927,7 +918,6 @@ GTEST_TEST(MultibodyPlantSdfParserTest, JointActuatorParsingTest) {
       "drake/multibody/parsing/test/sdf_parser_test/"
       "joint_actuator_parsing_test.sdf");
   PackageMap package_map;
-  package_map.PopulateUpstreamToDrake(full_name);
 
   // Read in the SDF file.
   AddModelFromSdfFile(full_name, "", package_map, &plant, nullptr);
@@ -951,7 +941,7 @@ GTEST_TEST(MultibodyPlantSdfParserTest, JointActuatorParsingTest) {
   // actuation.
   DRAKE_EXPECT_THROWS_MESSAGE(
       plant.GetJointActuatorByName("prismatic_joint_zero_limit"),
-      std::logic_error, ".*There is no JointActuator named.*");
+      ".*There is no JointActuator named.*");
 }
 
 // Verifies that the SDF parser parses the revolute spring parameters correctly.
@@ -962,7 +952,6 @@ GTEST_TEST(MultibodyPlantSdfParserTest, RevoluteSpringParsingTest) {
       "drake/multibody/parsing/test/sdf_parser_test/"
       "revolute_spring_parsing_test.sdf");
   PackageMap package_map;
-  package_map.PopulateUpstreamToDrake(full_name);
 
   // Reads in the SDF file.
   AddModelFromSdfFile(full_name, "", package_map, &plant, nullptr);
@@ -1052,7 +1041,6 @@ void FailWithRelativeToNotDefined(const std::string& inner) {
   SCOPED_TRACE(inner);
   DRAKE_EXPECT_THROWS_MESSAGE(
       ParseTestString(inner),
-      std::exception,
       R"([\s\S]*XML Attribute\[relative_to\] in element\[pose\] not )"
       R"(defined in SDF.\n)");
 }
@@ -1061,7 +1049,6 @@ void FailWithInvalidWorld(const std::string& inner) {
   SCOPED_TRACE(inner);
   DRAKE_EXPECT_THROWS_MESSAGE(
       ParseTestString(inner),
-      std::exception,
       R"([\s\S]*(attached_to|relative_to) name\[world\] specified by frame )"
       R"(with name\[.*\] does not match a nested model, link, joint, or )"
       R"(frame name in model with name\[bad\][\s\S]*)");
@@ -1071,7 +1058,6 @@ void FailWithReservedName(const std::string& inner) {
   SCOPED_TRACE(inner);
   DRAKE_EXPECT_THROWS_MESSAGE(
       ParseTestString(inner),
-      std::exception,
       R"([\s\S]*The supplied frame name \[.*\] is reserved.[\s\S]*)");
 }
 
@@ -1128,7 +1114,6 @@ GTEST_TEST(SdfParser, TestSdformatParserPolicies) {
   <link name='a'/>
 </model>
 )"""),
-      std::exception,
       R"([\s\S]*XML Attribute\[bad_attribute\] in element\[model\] not )"
       R"(defined in SDF.[\s\S]*)");
 
@@ -1225,7 +1210,6 @@ template <typename ShapeType>
 void TestForParsedGeometry(const char* sdf_name, geometry::Role role) {
   const std::string full_name = FindResourceOrThrow(sdf_name);
   PackageMap package_map;
-  package_map.PopulateUpstreamToDrake(full_name);
   MultibodyPlant<double> plant(0.0);
   SceneGraph<double> scene_graph;
   plant.RegisterAsSourceForSceneGraph(&scene_graph);
@@ -1349,7 +1333,6 @@ GTEST_TEST(SdfParser, BushingParsing) {
         <drake:bushing_force_damping>10 11 12</drake:bushing_force_damping>
       </drake:linear_bushing_rpy>
     </model>)"),
-                              std::exception,
                               "<drake:linear_bushing_rpy>: Unable to find the "
                               "<drake:bushing_frameC> child tag.");
 
@@ -1371,7 +1354,6 @@ GTEST_TEST(SdfParser, BushingParsing) {
         <drake:bushing_force_damping>10 11 12</drake:bushing_force_damping>
       </drake:linear_bushing_rpy>
     </model>)"),
-      std::exception,
       "<drake:linear_bushing_rpy>: Frame 'frameZ' specified for "
       "<drake:bushing_frameC> does not exist in "
       "the model.");
@@ -1392,7 +1374,6 @@ GTEST_TEST(SdfParser, BushingParsing) {
         <drake:bushing_force_damping>10 11 12</drake:bushing_force_damping>
       </drake:linear_bushing_rpy>
     </model>)"),
-                              std::exception,
                               "<drake:linear_bushing_rpy>: Unable to find the "
                               "<drake:bushing_torque_damping> child tag.");
 }
@@ -1474,7 +1455,6 @@ GTEST_TEST(SdfParser, LoadDirectlyNestedModelsInWorld) {
   ASSERT_EQ(plant.num_joints(), 0);
 
   PackageMap package_map;
-  package_map.PopulateUpstreamToDrake(full_name);
   AddModelsFromSdfFile(full_name, package_map, &plant);
   plant.Finalize();
 
@@ -1533,7 +1513,6 @@ GTEST_TEST(SdfParser, LoadDirectlyNestedModelsInModel) {
   ASSERT_EQ(plant.num_joints(), 0);
 
   PackageMap package_map;
-  package_map.PopulateUpstreamToDrake(full_name);
   AddModelsFromSdfFile(full_name, package_map, &plant);
   plant.Finalize();
 
@@ -1961,7 +1940,6 @@ GTEST_TEST(SdfParser, FramesAsJointParentOrChild) {
   MultibodyPlant<double> plant(0.0);
 
   PackageMap package_map;
-  package_map.PopulateUpstreamToDrake(full_name);
   AddModelsFromSdfFile(full_name, package_map, &plant);
   ASSERT_TRUE(plant.HasModelInstanceNamed("parent_model"));
 
@@ -2016,7 +1994,9 @@ GTEST_TEST(SdfParser, InterfaceAPI) {
       "drake/multibody/parsing/test/sdf_parser_test/interface_api_test/"
       "top.sdf");
   PackageMap package_map;
-  package_map.PopulateUpstreamToDrake(sdf_file_path);
+  package_map.AddPackageXml(FindResourceOrThrow(
+      "drake/multibody/parsing/test/sdf_parser_test/interface_api_test/"
+      "package.xml"));
   MultibodyPlant<double> plant(0.0);
 
   DRAKE_ASSERT_NO_THROW(AddModelFromSdfFile(sdf_file_path, "", package_map,
@@ -2123,7 +2103,6 @@ GTEST_TEST(SdfParser, CollisionFilterGroupParsingTest) {
   MultibodyPlant<double> plant(0.0);
   SceneGraph<double> scene_graph;
   PackageMap package_map;
-  package_map.PopulateUpstreamToDrake(full_sdf_filename);
 
   // Read in the SDF file.
   AddModelFromSdfFile(full_sdf_filename, "", package_map, &plant, &scene_graph);
@@ -2190,7 +2169,6 @@ GTEST_TEST(SdfParser, CollisionFilterGroupParsingErrorsTest) {
   <link name='a'/>
   <drake:collision_filter_group/>
 </model>)"""),
-      std::exception,
       ".*The tag <drake:collision_filter_group> is "
       "missing the required attribute "
       "\"name\".*");
@@ -2203,7 +2181,6 @@ GTEST_TEST(SdfParser, CollisionFilterGroupParsingErrorsTest) {
     <drake:member></drake:member>
   </drake:collision_filter_group>
 </model>)"""),
-      std::exception,
       ".*The tag <drake:member> is missing a required string value.*");
 
   DRAKE_EXPECT_THROWS_MESSAGE(
@@ -2215,7 +2192,6 @@ GTEST_TEST(SdfParser, CollisionFilterGroupParsingErrorsTest) {
     </drake:ignored_collision_filter_group>
   </drake:collision_filter_group>
 </model>)"""),
-      std::exception,
       ".*The tag <drake:ignored_collision_filter_group> is missing a "
       "required string value.*");
 }

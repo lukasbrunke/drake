@@ -14,6 +14,9 @@ namespace drake {
 namespace systems {
 namespace {
 
+using Eigen::MatrixXd;
+using Eigen::VectorXd;
+
 template <typename T>
 void BasicTest() {
   MultilayerPerceptron<T> mlp({1, 2, 3, 4}, PerceptronActivationType::kReLU);
@@ -61,12 +64,61 @@ void BasicTest() {
   mlp.SetBiases(&params, 1, b);
   EXPECT_TRUE(CompareMatrices(mlp.GetWeights(params, 1), W));
   EXPECT_TRUE(CompareMatrices(mlp.GetBiases(params, 1), b));
+
+  VectorX<T> expected = VectorX<T>::Constant(mlp.num_parameters(), .3);
+  mlp.GetMutableParameters(context.get()) = expected;
+  EXPECT_TRUE(CompareMatrices(mlp.GetParameters(*context), expected));
 }
 
 GTEST_TEST(MultilayerPerceptronTest, Basic) {
   BasicTest<double>();
   BasicTest<AutoDiffXd>();
   BasicTest<symbolic::Expression>();
+}
+
+GTEST_TEST(MultilayerPerceptronTest, RandomParameters) {
+  MultilayerPerceptron<double> mlp({1, 100, 1},
+                                   PerceptronActivationType::kIdentity);
+  auto context = mlp.CreateDefaultContext();
+  RandomGenerator generator(243);
+
+  // Generate N sets of random parameters.
+  int N = 100;
+  VectorXd mean = VectorXd::Zero(mlp.num_parameters());
+  VectorXd var = VectorXd::Zero(mlp.num_parameters());
+  for (int i = 0; i < N; ++i) {
+    mlp.SetRandomContext(context.get(), &generator);
+    mean += mlp.GetParameters(*context);
+    // Compute the variance with the true mean (zero) instead of the empirical
+    // mean, for tighter statistics. This reduces to E[x^2].
+    var += mlp.GetParameters(*context).array().square().matrix();
+  }
+  mean /= N;
+  var /= N;
+  VectorXd std_dev = var.array().sqrt();
+
+  // Note: The large tolerances below are due to the small N and the fact that
+  // it is a worse-case bound over 100 parameters (each). The order of magnitude
+  // differences between the first and second layers confirms that the logic is
+  // correct.
+
+  // First layer should have mean≈0, std_dev≈1.
+  EXPECT_TRUE(
+      CompareMatrices(mlp.GetWeights(mean, 0), VectorXd::Zero(N), 0.3));
+  EXPECT_TRUE(
+      CompareMatrices(mlp.GetBiases(mean, 0), VectorXd::Zero(N), 0.3));
+  EXPECT_TRUE(CompareMatrices(mlp.GetWeights(std_dev, 0),
+                              VectorXd::Constant(N, 1.0), 0.2));
+  EXPECT_TRUE(CompareMatrices(mlp.GetBiases(std_dev, 0),
+                              VectorXd::Constant(N, 1.0), 0.2));
+  // Second layer should have mean≈0, std_dev≈0.1.
+  EXPECT_TRUE(CompareMatrices(mlp.GetWeights(mean, 1),
+                              Eigen::RowVectorXd::Zero(N), 0.03));
+  EXPECT_TRUE(CompareMatrices(mlp.GetBiases(mean, 1), VectorXd::Zero(1), 0.03));
+  EXPECT_TRUE(CompareMatrices(mlp.GetWeights(std_dev, 1),
+                              Eigen::RowVectorXd::Constant(N, 0.1), 0.02));
+  EXPECT_TRUE(CompareMatrices(mlp.GetBiases(std_dev, 1),
+                              VectorXd::Constant(1, 0.1), 0.02));
 }
 
 template <typename T>
@@ -177,9 +229,29 @@ GTEST_TEST(MultilayerPerceptionTest, Backprop) {
   }
 }
 
+GTEST_TEST(MultilayerPereceptronTest, BatchOutput) {
+  for (const auto& type : {kIdentity, kReLU, kTanh}) {
+    std::vector<int> layers({2, 3, 3, 2});
+    MultilayerPerceptron<double> mlp(layers, type);
+    auto context = mlp.CreateDefaultContext();
+
+    RandomGenerator generator(243);
+    mlp.SetRandomContext(context.get(), &generator);
+
+    Eigen::Matrix<double, 2, 3> X, Y, Y_desired;
+    X << 0.1, 0.2, 0.3, 0.4, 0.5, 0.6;
+    for (int i = 0; i < 3; ++i) {
+      mlp.get_input_port().FixValue(context.get(), X.col(i));
+      Y_desired.col(i) = mlp.get_output_port().Eval(*context);
+    }
+    mlp.BatchOutput(*context, X, &Y);
+
+    EXPECT_TRUE(CompareMatrices(Y, Y_desired, 1e-14));
+  }
+}
+
 GTEST_TEST(MultilayerPerceptronTest, ScalarConversion) {
-  MultilayerPerceptron<double> mlp({1, 2, 3, 4},
-                                   PerceptronActivationType::kReLU);
+  MultilayerPerceptron<double> mlp({1, 2, 3, 4}, kReLU);
 
   auto mlp_ad = mlp.ToAutoDiffXd();
   EXPECT_EQ(mlp_ad->get_input_port().size(), 1);
