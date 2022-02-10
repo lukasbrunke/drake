@@ -3,7 +3,10 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <fstream>
 #include <future>
+#include <iomanip>
+#include <iostream>
 #include <limits>
 #include <list>
 #include <optional>
@@ -2357,7 +2360,100 @@ double CalcCspacePolytopeVolume(const Eigen::MatrixXd& C,
         fmt::format("Qhull terminated with status {} and message:\n{}",
                     qhull.qhullStatus(), qhull.qhullMessage()));
   }
-  return qhull.volume();
+  double volume{NAN};
+  try {
+    volume = qhull.volume();
+  } catch (const orgQhull::QhullError& e) {
+    drake::log()->warn("Qhull fails to compute the volume");
+  }
+  return volume;
+}
+
+void WriteCspacePolytopeToFile(const Eigen::Ref<const Eigen::MatrixXd>& C,
+                               const Eigen::Ref<const Eigen::VectorXd>& d,
+                               const Eigen::Ref<const Eigen::VectorXd>& t_lower,
+                               const Eigen::Ref<const Eigen::VectorXd>& t_upper,
+                               const std::string& file_name, int precision) {
+  std::ofstream myfile;
+  myfile.open(file_name, std::ios::out);
+  if (myfile.is_open()) {
+    myfile << fmt::format("{} {}\n", C.rows(), C.cols());
+    for (int i = 0; i < C.rows(); ++i) {
+      for (int j = 0; j < C.cols(); ++j) {
+        myfile << std::setprecision(precision) << C(i, j) << " ";
+      }
+      myfile << "\n";
+    }
+    myfile << "\n";
+    for (int i = 0; i < d.rows(); ++i) {
+      myfile << std::setprecision(precision) << d(i) << " ";
+    }
+    myfile << "\n";
+    for (int i = 0; i < t_lower.rows(); ++i) {
+      myfile << std::setprecision(precision) << t_lower(i) << " ";
+    }
+    myfile << "\n";
+    for (int i = 0; i < t_upper.rows(); ++i) {
+      myfile << std::setprecision(precision) << t_upper(i) << " ";
+    }
+    myfile.close();
+  }
+}
+
+void ReadCspacePolytopeFromFile(const std::string& filename, Eigen::MatrixXd* C,
+                                Eigen::VectorXd* d, Eigen::VectorXd* t_lower,
+                                Eigen::VectorXd* t_upper) {
+  std::ifstream infile;
+  infile.open(filename, std::ios::in);
+  std::string line;
+  if (infile.is_open()) {
+    // Read the size of C, d
+    std::getline(infile, line);
+    std::istringstream ss(line);
+    std::string word;
+    ss >> word;
+    const int C_rows = std::stoi(word);
+    ss >> word;
+    const int C_cols = std::stoi(word);
+    C->resize(C_rows, C_cols);
+    for (int i = 0; i < C_rows; ++i) {
+      std::getline(infile, line);
+      ss = std::istringstream(line);
+      for (int j = 0; j < C_cols; ++j) {
+        ss >> word;
+        (*C)(i, j) = std::stod(word);
+      }
+    }
+    std::getline(infile, line);
+    // get d.
+    std::getline(infile, line);
+    d->resize(C_rows);
+    ss = std::istringstream(line);
+    for (int i = 0; i < C_rows; ++i) {
+      ss >> word;
+      (*d)(i) = std::stod(word);
+    }
+    // get t_lower;
+    std::getline(infile, line);
+    t_lower->resize(C_cols);
+    ss = std::istringstream(line);
+    for (int i = 0; i < C_cols; ++i) {
+      ss >> word;
+      (*t_lower)(i) = std::stod(word);
+    }
+    // get t_upper;
+    std::getline(infile, line);
+    t_upper->resize(C_cols);
+    ss = std::istringstream(line);
+    for (int i = 0; i < C_cols; ++i) {
+      ss >> word;
+      (*t_upper)(i) = std::stod(word);
+    }
+  } else {
+    throw std::runtime_error(
+        fmt::format("Cannot open file {} for c-space polytope.", filename));
+  }
+  infile.close();
 }
 
 // Explicit instantiation.
