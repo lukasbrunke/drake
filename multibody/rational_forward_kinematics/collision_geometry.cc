@@ -8,6 +8,29 @@
 
 namespace drake {
 namespace multibody {
+
+std::ostream& operator<<(std::ostream& os, const CollisionGeometryType& type) {
+  switch (type) {
+    case CollisionGeometryType::kCapsule: {
+      os << "capsule";
+      break;
+    }
+    case CollisionGeometryType::kCylinder: {
+      os << "cylinder";
+      break;
+    }
+    case CollisionGeometryType::kSphere: {
+      os << "sphere";
+      break;
+    }
+    case CollisionGeometryType::kPolytope: {
+      os << "polytope";
+      break;
+    }
+  }
+  return os;
+}
+
 CollisionGeometry::CollisionGeometry(CollisionGeometryType type,
                                      const geometry::Shape* geometry,
                                      multibody::BodyIndex body_index,

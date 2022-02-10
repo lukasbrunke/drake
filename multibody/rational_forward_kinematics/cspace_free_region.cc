@@ -15,6 +15,7 @@
 #include <fmt/format.h>
 #include <libqhullcpp/Qhull.h>
 
+#include "drake/common/symbolic_monomial_util.h"
 #include "drake/geometry/optimization/vpolytope.h"
 #include "drake/multibody/rational_forward_kinematics/collision_geometry.h"
 #include "drake/multibody/rational_forward_kinematics/generate_monomial_basis_util.h"
@@ -260,9 +261,10 @@ CspaceFreeRegion::CspaceFreeRegion(
     : rational_forward_kinematics_(*plant),
       scene_graph_{scene_graph},
       link_geometries_{GetCollisionGeometries(diagram, plant, scene_graph)},
-      plane_order_for_polytope_{plane_order},
+      plane_order_{plane_order},
       cspace_region_type_{cspace_region_type},
-      separating_polytope_delta_{separating_polytope_delta} {
+      separating_polytope_delta_{separating_polytope_delta},
+      y_dummy_{std::nullopt} {
   DRAKE_DEMAND(separating_polytope_delta_ > 0);
   // Now create the separating planes.
   std::map<SortedPair<BodyIndex>,
@@ -310,19 +312,16 @@ CspaceFreeRegion::CspaceFreeRegion(
     }
   }
   separating_planes_.reserve(num_collision_pairs);
+  // If we have a non-polytopic collision geometry and the separating plane
+  // order is not constant, then we need y_dummy.
+  bool need_y_dummy = false;
   for (const auto& [link_pair, geometry_pairs] : collision_pairs) {
     for (const auto& geometry_pair : geometry_pairs) {
       Vector3<symbolic::Expression> a;
       symbolic::Expression b;
       const symbolic::Monomial monomial_one{};
       VectorX<symbolic::Variable> plane_decision_vars;
-      SeparatingPlaneOrder plane_order_geometry_pair =
-          SeparatingPlaneOrder::kConstant;
-      if (geometry_pair.first->type() == CollisionGeometryType::kPolytope &&
-          geometry_pair.second->type() == CollisionGeometryType::kPolytope) {
-        plane_order_geometry_pair = plane_order_for_polytope_;
-      }
-      if (plane_order_geometry_pair == SeparatingPlaneOrder::kConstant) {
+      if (plane_order_ == SeparatingPlaneOrder::kConstant) {
         plane_decision_vars.resize(4);
         for (int i = 0; i < 3; ++i) {
           plane_decision_vars(i) = symbolic::Variable(
@@ -334,8 +333,8 @@ CspaceFreeRegion::CspaceFreeRegion(
             plane_decision_vars,
             GetTForPlane(link_pair.first(), link_pair.second(),
                          rational_forward_kinematics_, cspace_region_type),
-            plane_order_geometry_pair, &a, &b);
-      } else if (plane_order_geometry_pair == SeparatingPlaneOrder::kAffine) {
+            plane_order_, &a, &b);
+      } else if (plane_order_== SeparatingPlaneOrder::kAffine) {
         const VectorX<symbolic::Variable> t_for_plane =
             GetTForPlane(link_pair.first(), link_pair.second(),
                          rational_forward_kinematics_, cspace_region_type);
@@ -345,19 +344,28 @@ CspaceFreeRegion::CspaceFreeRegion(
               symbolic::Variable(fmt::format("plane_var{}", i));
         }
         CalcPlane<symbolic::Variable, symbolic::Variable, symbolic::Expression>(
-            plane_decision_vars, t_for_plane, plane_order_geometry_pair, &a,
+            plane_decision_vars, t_for_plane, plane_order_, &a,
             &b);
+        if (geometry_pair.first->type() != CollisionGeometryType::kPolytope ||
+            geometry_pair.second->type() != CollisionGeometryType::kPolytope) {
+          need_y_dummy = true;
+        }
       }
       separating_planes_.emplace_back(
           a, b, geometry_pair.first, geometry_pair.second,
           internal::FindBodyInTheMiddleOfChain(*plant, link_pair.first(),
                                                link_pair.second()),
-          plane_order_geometry_pair, plane_decision_vars);
+          plane_order_, plane_decision_vars);
       map_geometries_to_separating_planes_.emplace(
           SortedPair<geometry::GeometryId>(geometry_pair.first->id(),
                                            geometry_pair.second->id()),
           static_cast<int>(separating_planes_.size()) - 1);
     }
+  }
+  if (need_y_dummy) {
+    y_dummy_.emplace(Vector3<symbolic::Variable>(
+        symbolic::Variable("y_dummy0"), symbolic::Variable("y_dummy1"),
+        symbolic::Variable("y_dummy2")));
   }
 }
 
@@ -618,6 +626,74 @@ bool CspaceFreeRegion::IsPostureInCollision(
   return false;
 }
 
+namespace {
+// Return a vector s such that s[i] = lagrangian_start + i * gram_lower_size, 0
+// <= i < num_lagrangians. At the end of the function call, increment
+// lagrangian_start by gram_lower_size * num_lagrangians.
+std::vector<int> FillLagrangianGramLowerStart(int* lagrangian_start,
+                                              int gram_lower_size,
+                                              int num_lagrangians) {
+  std::vector<int> s(num_lagrangians);
+  for (int i = 0; i < num_lagrangians; ++i) {
+    s[i] = *lagrangian_start + i * gram_lower_size;
+  }
+  *lagrangian_start += gram_lower_size * num_lagrangians;
+  return s;
+}
+
+// We need to impose the constraint C*t<=d, t_lower<=t<=t_upper implies
+// |P*a|<=1, which is equivalent to the SOS-condition
+// y̅ᵀy̅ + 2a(t)ᵀPᵀy̅+1 -p(y̅)ᵀ*[d−C*t; t-t_lower; t_upper-t] is SOS,
+// p(y̅) is SOS
+// where we set each entry of p(y̅) be a quadratic polynomial of y̅.
+// @param y_bar_monomial_basis The monomial basis [y̅ 1].
+CspaceFreeRegion::CspacePolytopeTuple GenerateTupleForANormLessOne(
+    const LinkOnPlaneSideRational& rational, int C_rows,
+    int* lagrangian_gram_lower_start, int* verified_polynomial_gram_lower_start,
+    const VectorX<symbolic::Variable>& y_bar,
+    const VectorX<symbolic::Variable>& t) {
+  DRAKE_DEMAND(rational.plane_order != SeparatingPlaneOrder::kConstant);
+  DRAKE_DEMAND(rational.P.has_value());
+  DRAKE_DEMAND(y_bar.rows() == rational.P->rows());
+  symbolic::Polynomial::MapType verified_polynomial_map;
+  for (int i = 0; i < y_bar.rows(); ++i) {
+    verified_polynomial_map.emplace_hint(verified_polynomial_map.end(),
+                                         symbolic::Monomial(y_bar(i), 2), 1);
+  }
+  verified_polynomial_map.emplace_hint(verified_polynomial_map.end(),
+                                       symbolic::Monomial(), 1);
+  symbolic::Polynomial verified_polynomial{verified_polynomial_map};
+  symbolic::Variables t_and_y_bar(t);
+  t_and_y_bar.insert(symbolic::Variables(y_bar));
+  verified_polynomial += symbolic::Polynomial(
+      2 * y_bar.dot(rational.P.value() * rational.a_A), t_and_y_bar);
+
+  const int gram_rows = y_bar.rows() + 1;
+  const int gram_lower_size = gram_rows * (gram_rows + 1) / 2;
+  const std::vector<int> polytope_lagrangian_gram_lower_start =
+      FillLagrangianGramLowerStart(lagrangian_gram_lower_start, gram_lower_size,
+                                   C_rows);
+  const std::vector<int> t_lower_lagrangian_lower_start =
+      FillLagrangianGramLowerStart(lagrangian_gram_lower_start, gram_lower_size,
+                                   t.rows());
+  const std::vector<int> t_upper_lagrangian_lower_start =
+      FillLagrangianGramLowerStart(lagrangian_gram_lower_start, gram_lower_size,
+                                   t.rows());
+  const int m_verified_polynomial_gram_lower_start =
+      *verified_polynomial_gram_lower_start;
+  *verified_polynomial_gram_lower_start += gram_lower_size;
+  VectorX<symbolic::Monomial> y_bar_monomial_basis(y_bar.rows() + 1);
+  for (int i = 0; i < y_bar.rows(); ++i) {
+    y_bar_monomial_basis(i) = symbolic::Monomial(y_bar(i));
+  }
+  y_bar_monomial_basis(y_bar_monomial_basis.rows() - 1) = symbolic::Monomial();
+  return CspaceFreeRegion::CspacePolytopeTuple(
+      verified_polynomial, polytope_lagrangian_gram_lower_start,
+      t_lower_lagrangian_lower_start, t_upper_lagrangian_lower_start,
+      m_verified_polynomial_gram_lower_start, y_bar_monomial_basis);
+}
+}  // namespace
+
 void CspaceFreeRegion::GenerateTuplesForBilinearAlternation(
     const Eigen::Ref<const Eigen::VectorXd>& q_star,
     const FilteredCollisionPairs& filtered_collision_pairs, int C_rows,
@@ -679,41 +755,40 @@ void CspaceFreeRegion::GenerateTuplesForBilinearAlternation(
     FindMonomialBasisForPolytopicRegion(
         rational_forward_kinematics_, rationals[i],
         &map_chain_to_monomial_basis, &monomial_basis_chain);
-    std::vector<int> polytope_lagrangian_gram_lower_start(C->rows());
     const int gram_lower_size =
         monomial_basis_chain.rows() * (monomial_basis_chain.rows() + 1) / 2;
-    for (int j = 0; j < C->rows(); ++j) {
-      polytope_lagrangian_gram_lower_start[j] =
-          lagrangian_gram_vars_count + j * gram_lower_size;
-    }
-    std::vector<int> t_lower_lagrangian_gram_lower_start(t.rows());
-    for (int j = 0; j < t.rows(); ++j) {
-      t_lower_lagrangian_gram_lower_start[j] =
-          lagrangian_gram_vars_count + (C->rows() + j) * gram_lower_size;
-    }
-    std::vector<int> t_upper_lagrangian_gram_lower_start(t.rows());
-    for (int j = 0; j < t.rows(); ++j) {
-      t_upper_lagrangian_gram_lower_start[j] =
-          lagrangian_gram_vars_count +
-          (C->rows() + t.rows() + j) * gram_lower_size;
-    }
+    const std::vector<int> polytope_lagrangian_gram_lower_start =
+        FillLagrangianGramLowerStart(&lagrangian_gram_vars_count,
+                                     gram_lower_size, C_rows);
+    const std::vector<int> t_lower_lagrangian_gram_lower_start =
+        FillLagrangianGramLowerStart(&lagrangian_gram_vars_count,
+                                     gram_lower_size, t.rows());
+    const std::vector<int> t_upper_lagrangian_gram_lower_start =
+        FillLagrangianGramLowerStart(&lagrangian_gram_vars_count,
+                                     gram_lower_size, t.rows());
     alternation_tuples->emplace_back(
         rationals[i].rational.numerator(), polytope_lagrangian_gram_lower_start,
         t_lower_lagrangian_gram_lower_start,
         t_upper_lagrangian_gram_lower_start, verified_gram_vars_count,
         monomial_basis_chain);
-    (*separating_plane_to_tuples)[this->map_geometries_to_separating_planes_.at(
-                                      SortedPair<geometry::GeometryId>(
-                                          rationals[i].link_geometry->id(),
-                                          rationals[i]
-                                              .other_side_link_geometry->id()))]
-        .push_back(alternation_tuples->size() - 1);
-    // Each Gram matrix is of size monomial_basis_chain.rows() *
-    // (monomial_basis_chain.rows() + 1) / 2. Each rational needs C.rows() + 2 *
-    // t.rows() Lagrangians.
-    lagrangian_gram_vars_count += gram_lower_size * (C_rows + 2 * t.rows());
-    verified_gram_vars_count +=
-        monomial_basis_chain.rows() * (monomial_basis_chain.rows() + 1) / 2;
+    const int plane_index = this->map_geometries_to_separating_planes_.at(
+        SortedPair<geometry::GeometryId>(
+            rationals[i].link_geometry->id(),
+            rationals[i].other_side_link_geometry->id()));
+    (*separating_plane_to_tuples)[plane_index].push_back(
+        alternation_tuples->size() - 1);
+    verified_gram_vars_count += gram_lower_size;
+
+    if (rationals[i].plane_order != SeparatingPlaneOrder::kConstant &&
+        rationals[i].P.has_value()) {
+      alternation_tuples->push_back(GenerateTupleForANormLessOne(
+          rationals[i], C_rows, &lagrangian_gram_vars_count,
+          &verified_gram_vars_count,
+          this->y_dummy_->head(rationals[i].P->rows()),
+          rational_forward_kinematics_.t()));
+      (*separating_plane_to_tuples)[plane_index].push_back(
+          alternation_tuples->size() - 1);
+    }
   }
   lagrangian_gram_vars->resize(lagrangian_gram_vars_count);
   for (int i = 0; i < lagrangian_gram_vars_count; ++i) {
@@ -1258,82 +1333,81 @@ bool FindLagrangianAndSeparatingPlanesMultiThread(
   // This lambda function formulates and solves a small SOS program for each
   // separating plane. It finds the separating plane and the Lagrangian
   // multiplier for a pair of collision geometries.
-  auto solve_small_sos = [&cspace_free_region, &alternation_tuples, &C, &d,
-                          &lagrangian_gram_vars, &verified_gram_vars,
-                          &separating_plane_vars,
-                          &separating_plane_to_lorentz_cone_constraints,
-                          &t_lower, &t_upper, &verification_option,
-                          &redundant_tighten, &solver_options,
-                          &separating_plane_to_tuples,
-                          &separating_plane_var_indices,
-                          &active_plane_count_to_plane_index,
-                          lagrangian_gram_var_vals, separating_planes_sol,
-                          verified_gram_var_vals, separating_plane_var_vals,
-                          &is_success](int active_plane_count) {
-    const int plane_index =
-        active_plane_count_to_plane_index[active_plane_count];
-    const std::vector<int>& tuple_indices =
-        separating_plane_to_tuples[plane_index];
-    std::vector<CspaceFreeRegion::CspacePolytopeTuple> plane_tuples;
-    plane_tuples.reserve(tuple_indices.size());
-    for (const int tuple_index : tuple_indices) {
-      plane_tuples.push_back(alternation_tuples[tuple_index]);
-    }
-    auto prog = cspace_free_region.ConstructLagrangianProgram(
-        plane_tuples, C, d, lagrangian_gram_vars, verified_gram_vars,
-        separating_plane_vars,
-        separating_plane_to_lorentz_cone_constraints[plane_index], t_lower,
-        t_upper, verification_option, redundant_tighten, nullptr, nullptr);
-    const auto result = solvers::Solve(*prog, std::nullopt, solver_options);
-    is_success[active_plane_count] = result.is_success();
-    if (result.is_success()) {
-      // Now fill in lagrangian_gram_var_vals;
-      for (const int tuple_index : tuple_indices) {
-        const int gram_rows =
-            alternation_tuples[tuple_index].monomial_basis.rows();
-        const int gram_lower_size = gram_rows * (gram_rows + 1) / 2;
+  auto solve_small_sos =
+      [&cspace_free_region, &alternation_tuples, &C, &d, &lagrangian_gram_vars,
+       &verified_gram_vars, &separating_plane_vars,
+       &separating_plane_to_lorentz_cone_constraints, &t_lower, &t_upper,
+       &verification_option, &redundant_tighten, &solver_options,
+       &separating_plane_to_tuples, &separating_plane_var_indices,
+       &active_plane_count_to_plane_index, lagrangian_gram_var_vals,
+       separating_planes_sol, verified_gram_var_vals, separating_plane_var_vals,
+       &is_success](int active_plane_count) {
+        const int plane_index =
+            active_plane_count_to_plane_index[active_plane_count];
+        const std::vector<int>& tuple_indices =
+            separating_plane_to_tuples[plane_index];
+        std::vector<CspaceFreeRegion::CspacePolytopeTuple> plane_tuples;
+        plane_tuples.reserve(tuple_indices.size());
+        for (const int tuple_index : tuple_indices) {
+          plane_tuples.push_back(alternation_tuples[tuple_index]);
+        }
+        auto prog = cspace_free_region.ConstructLagrangianProgram(
+            plane_tuples, C, d, lagrangian_gram_vars, verified_gram_vars,
+            separating_plane_vars,
+            separating_plane_to_lorentz_cone_constraints[plane_index], t_lower,
+            t_upper, verification_option, redundant_tighten, nullptr, nullptr);
+        const auto result = solvers::Solve(*prog, std::nullopt, solver_options);
+        is_success[active_plane_count] = result.is_success();
+        if (result.is_success()) {
+          // Now fill in lagrangian_gram_var_vals;
+          for (const int tuple_index : tuple_indices) {
+            const int gram_rows =
+                alternation_tuples[tuple_index].monomial_basis.rows();
+            const int gram_lower_size = gram_rows * (gram_rows + 1) / 2;
 
-        auto fill_lagrangian =
-            [gram_lower_size, lagrangian_gram_var_vals, &result,
-             &lagrangian_gram_vars](
-                const std::vector<int>& lagrangian_gram_start) {
-              for (int start : lagrangian_gram_start) {
-                lagrangian_gram_var_vals->segment(start, gram_lower_size) =
-                    result.GetSolution(
-                        lagrangian_gram_vars.segment(start, gram_lower_size));
-              }
-            };
-        fill_lagrangian(alternation_tuples[tuple_index]
-                            .polytope_lagrangian_gram_lower_start);
-        fill_lagrangian(alternation_tuples[tuple_index]
-                            .t_lower_lagrangian_gram_lower_start);
-        fill_lagrangian(alternation_tuples[tuple_index]
-                            .t_upper_lagrangian_gram_lower_start);
-        verified_gram_var_vals->segment(
-            alternation_tuples[tuple_index]
-                .verified_polynomial_gram_lower_start,
-            gram_lower_size) =
-            result.GetSolution(verified_gram_vars.segment(
+            auto fill_lagrangian =
+                [gram_lower_size, lagrangian_gram_var_vals, &result,
+                 &lagrangian_gram_vars](
+                    const std::vector<int>& lagrangian_gram_start) {
+                  for (int start : lagrangian_gram_start) {
+                    lagrangian_gram_var_vals->segment(start, gram_lower_size) =
+                        result.GetSolution(lagrangian_gram_vars.segment(
+                            start, gram_lower_size));
+                  }
+                };
+            fill_lagrangian(alternation_tuples[tuple_index]
+                                .polytope_lagrangian_gram_lower_start);
+            fill_lagrangian(alternation_tuples[tuple_index]
+                                .t_lower_lagrangian_gram_lower_start);
+            fill_lagrangian(alternation_tuples[tuple_index]
+                                .t_upper_lagrangian_gram_lower_start);
+            verified_gram_var_vals->segment(
                 alternation_tuples[tuple_index]
                     .verified_polynomial_gram_lower_start,
-                gram_lower_size));
-      }
-      // Now get the solution for separating_plane.
-      (*separating_planes_sol)[active_plane_count] = GetSeparatingPlaneSolution(
-          cspace_free_region.separating_planes()[plane_index], result);
-      // Set separating_plane_var_vals.
-      for (int i = 0; i < cspace_free_region.separating_planes()[plane_index]
-                              .decision_variables.rows();
-           ++i) {
-        const symbolic::Variable& var =
-            cspace_free_region.separating_planes()[plane_index]
-                .decision_variables(i);
-        (*separating_plane_var_vals)(separating_plane_var_indices.at(
-            var.get_id())) = result.GetSolution(var);
-      }
-    }
-    return active_plane_count;
-  };
+                gram_lower_size) =
+                result.GetSolution(verified_gram_vars.segment(
+                    alternation_tuples[tuple_index]
+                        .verified_polynomial_gram_lower_start,
+                    gram_lower_size));
+          }
+          // Now get the solution for separating_plane.
+          (*separating_planes_sol)[active_plane_count] =
+              GetSeparatingPlaneSolution(
+                  cspace_free_region.separating_planes()[plane_index], result);
+          // Set separating_plane_var_vals.
+          for (int i = 0;
+               i < cspace_free_region.separating_planes()[plane_index]
+                       .decision_variables.rows();
+               ++i) {
+            const symbolic::Variable& var =
+                cspace_free_region.separating_planes()[plane_index]
+                    .decision_variables(i);
+            (*separating_plane_var_vals)(separating_plane_var_indices.at(
+                var.get_id())) = result.GetSolution(var);
+          }
+        }
+        return active_plane_count;
+      };
   if (num_threads > 0) {
     // We implement the "thread pool" idea here, by following
     // MonteCarloSimulationParallel class. This implementation doesn't use
@@ -1951,16 +2025,13 @@ void CspaceFreeRegion::CspacePolytopeBinarySearch(
 // Get the Lorentz cone constraint for |P*a|<=1
 // Note that each symbolic expression a(i) should just be a symbolic variable.
 template <typename Derived>
-std::enable_if_t<Derived::RowsAtCompileTime != Eigen::Dynamic &&
-                     Derived::ColsAtCompileTime == 3,
+std::enable_if_t<Derived::ColsAtCompileTime == 3,
                  std::vector<solvers::Binding<solvers::LorentzConeConstraint>>>
 GetNormLessThan1Constraint(const Eigen::MatrixBase<Derived>& P,
                            const Vector3<symbolic::Expression>& a_A) {
-  Eigen::Matrix<double, Derived::RowsAtCompileTime + 1, 3> A_lorentz =
-      Eigen::Matrix<double, Derived::RowsAtCompileTime + 1, 3>::Zero();
-  A_lorentz.template bottomRows<Derived::RowsAtCompileTime>() = P;
-  Eigen::Matrix<double, Derived::RowsAtCompileTime + 1, 1> b_lorentz =
-      Eigen::Matrix<double, Derived::RowsAtCompileTime + 1, 1>::Zero();
+  Eigen::MatrixX3d A_lorentz = Eigen::MatrixX3d::Zero(P.rows() + 1, 3);
+  A_lorentz.bottomRows(P.rows()) = P;
+  Eigen::VectorXd b_lorentz = Eigen::VectorXd::Zero(P.rows() + 1);
   b_lorentz(0) = 1;
   Vector3<symbolic::Variable> a_var;
   for (int i = 0; i < 3; ++i) {
@@ -2003,31 +2074,48 @@ GenerateLinkOnOneSideOfPlaneRationalFunction(
   // Compute the rational for a.dot(p_AQ)+b-offset on the positive side, and
   // -offset - a.dot(p_AQ)-b on the negative side, add this rational to
   // rational_fun.
-  auto compute_rational =
-      [&rational_fun, &X_AB_multilinear, &a_A_poly, &b_poly,
-       &rational_forward_kinematics, plane_side, &a_A, &b, link_geometry,
-       other_side_geometry, plane_order](
-          const Eigen::Vector3d& p_BQ, double offset,
-          const std::vector<solvers::Binding<solvers::LorentzConeConstraint>>&
-              lorentz_cone_constraints) {
-        // Step 1: Compute p_AQ.
-        const Vector3<drake::symbolic::Polynomial> p_AQ =
-            X_AB_multilinear.p_AB + X_AB_multilinear.R_AB * p_BQ;
+  auto compute_rational = [&rational_fun, &X_AB_multilinear, &a_A_poly, &b_poly,
+                           &rational_forward_kinematics, plane_side, &a_A, &b,
+                           link_geometry, other_side_geometry, plane_order](
+                              const Eigen::Vector3d& p_BQ, double offset,
+                              const std::optional<Eigen::MatrixX3d>& P_val) {
+    // Step 1: Compute p_AQ.
+    const Vector3<drake::symbolic::Polynomial> p_AQ =
+        X_AB_multilinear.p_AB + X_AB_multilinear.R_AB * p_BQ;
 
-        // Step 2: Compute a_A.dot(p_AQ) + b
-        const drake::symbolic::Polynomial point_on_hyperplane_side =
-            a_A_poly.dot(p_AQ) + b_poly;
+    // Step 2: Compute a_A.dot(p_AQ) + b
+    const drake::symbolic::Polynomial point_on_hyperplane_side =
+        a_A_poly.dot(p_AQ) + b_poly;
 
-        // Step 3: Convert the multilinear polynomial to rational function.
-        rational_fun.emplace_back(
-            rational_forward_kinematics
-                .ConvertMultilinearPolynomialToRationalFunction(
-                    plane_side == PlaneSide::kPositive
-                        ? point_on_hyperplane_side - offset
-                        : -offset - point_on_hyperplane_side),
-            link_geometry, X_AB_multilinear.frame_A_index, other_side_geometry,
-            a_A, b, plane_side, plane_order, lorentz_cone_constraints);
-      };
+    // Step 3: Set the Lorentz cone constraint and P.
+    std::vector<solvers::Binding<solvers::LorentzConeConstraint>>
+        lorentz_cone_constraints{};
+    std::optional<Eigen::MatrixX3d> P{std::nullopt};
+    if (plane_order == SeparatingPlaneOrder::kConstant && P_val.has_value()) {
+      lorentz_cone_constraints = GetNormLessThan1Constraint(P_val.value(), a_A);
+    } else {
+      P = P_val;
+    }
+
+    // Step 4: Convert the multilinear polynomial to rational function.
+    rational_fun.emplace_back(
+        rational_forward_kinematics
+            .ConvertMultilinearPolynomialToRationalFunction(
+                plane_side == PlaneSide::kPositive
+                    ? point_on_hyperplane_side - offset
+                    : -offset - point_on_hyperplane_side),
+        link_geometry, X_AB_multilinear.frame_A_index, other_side_geometry, a_A,
+        b, plane_side, plane_order, lorentz_cone_constraints, P);
+  };
+
+  // When the collision geometry is sphere or capsule, we need to impose the
+  // constraint |a|<=1. When both sides of the collision geometries are sphere
+  // or capsule, we only need to impose |a|<=1 for one side (to avoid increasing
+  // the size of the optimization program).
+  const bool skip_a_norm_constraint =
+      (other_side_geometry->type() == CollisionGeometryType::kSphere ||
+       other_side_geometry->type() == CollisionGeometryType::kCapsule) &&
+      (link_geometry->id() < other_side_geometry->id());
 
   switch (link_geometry->type()) {
     case CollisionGeometryType::kPolytope: {
@@ -2039,7 +2127,7 @@ GenerateLinkOnOneSideOfPlaneRationalFunction(
           link_geometry->X_BG() * GetVertices(link_geometry->geometry());
       rational_fun.reserve(p_BV.cols());
       for (int i = 0; i < p_BV.cols(); ++i) {
-        compute_rational(p_BV.col(i), separating_delta, {});
+        compute_rational(p_BV.col(i), separating_delta, std::nullopt);
       }
       break;
     }
@@ -2047,16 +2135,21 @@ GenerateLinkOnOneSideOfPlaneRationalFunction(
       // We will generate the rational for
       // aᵀc + b − r (positive side) or -r − b − aᵀc(negative side)
       // where c is the center of the sphere, r is the radius of the sphere.
-      // Additionally we will need to add the constraint |a|≤1 as a
-      // second-order cone constraint.
+      // Additionally we will need to add the constraint |a|≤1
       const auto link_sphere =
           dynamic_cast<const geometry::Sphere*>(&link_geometry->geometry());
       rational_fun.reserve(1);
       const double radius = link_sphere->radius();
-      DRAKE_DEMAND(plane_order == SeparatingPlaneOrder::kConstant);
-      compute_rational(
-          link_geometry->X_BG().translation(), radius,
-          GetNormLessThan1Constraint(Eigen::Matrix3d::Identity(), a_A));
+      std::optional<Eigen::MatrixX3d> P{std::nullopt};
+      // If the other side is also sphere or capsule, then it will also impose
+      // the constraint |a|<=1. To avoid duplicating the constraint we only
+      // impose |a|<=1 for one side of the geometry.
+      if (skip_a_norm_constraint) {
+        P = std::nullopt;
+      } else {
+        P.emplace(Eigen::Matrix3d::Identity());
+      }
+      compute_rational(link_geometry->X_BG().translation(), radius, P);
       break;
     }
     case CollisionGeometryType::kCapsule: {
@@ -2064,7 +2157,7 @@ GenerateLinkOnOneSideOfPlaneRationalFunction(
       // aᵀc₁ + b − r, aᵀc₂ + b − r (positive side) or -r − b − aᵀc₁, -r − b −
       // aᵀc₂ (negative side) where c₁, c₂ are the centers of the capsule
       // spheres, r is the radius of the capsule. Additionally we will need to
-      // add the constraint |a|≤1 as a second-order cone constraint.
+      // add the constraint |a|≤1.
       const auto link_capsule =
           dynamic_cast<const geometry::Capsule*>(&link_geometry->geometry());
       rational_fun.reserve(2);
@@ -2074,17 +2167,15 @@ GenerateLinkOnOneSideOfPlaneRationalFunction(
       p_BC.col(1) = link_geometry->X_BG() *
                     Eigen::Vector3d(0, 0, link_capsule->length() / 2);
       for (int i = 0; i < 2; ++i) {
-        DRAKE_DEMAND(plane_order == SeparatingPlaneOrder::kConstant);
         std::vector<solvers::Binding<solvers::LorentzConeConstraint>>
             lorentz_cone_constraints;
+        std::optional<Eigen::MatrixX3d> P{std::nullopt};
         if (i == 0) {
-          // We only need to impose the Lorentz cone constraint |a|<=1 for
-          // once, no need to do that for both spheres on the capsule.
-          lorentz_cone_constraints =
-              GetNormLessThan1Constraint(Eigen::Matrix3d::Identity(), a_A);
+          if (!skip_a_norm_constraint) {
+            P.emplace(Eigen::Matrix3d::Identity());
+          }
         }
-        compute_rational(p_BC.col(i), link_capsule->radius(),
-                         lorentz_cone_constraints);
+        compute_rational(p_BC.col(i), link_capsule->radius(), P);
       }
       break;
     }
@@ -2106,22 +2197,20 @@ GenerateLinkOnOneSideOfPlaneRationalFunction(
       p_BC.col(1) = link_geometry->X_BG() *
                     Eigen::Vector3d(0, 0, link_cylinder->length() / 2);
       for (int i = 0; i < 2; ++i) {
-        DRAKE_DEMAND(plane_order == SeparatingPlaneOrder::kConstant);
         std::vector<solvers::Binding<solvers::LorentzConeConstraint>>
             lorentz_cone_constraints;
+        std::optional<Eigen::MatrixX3d> P{std::nullopt};
         if (i == 0) {
-          // We only need to impose the Lorentz cone constraint |R₁₂ᵀa|<=1 for
+          // We only need to impose the constraint |R₁₂ᵀa|<=1 for
           // once, no need to do that for both spheres on the cylinder.
-          lorentz_cone_constraints =
-              GetNormLessThan1Constraint(link_geometry->X_BG()
-                                             .rotation()
-                                             .matrix()
-                                             .leftCols<2>()
-                                             .transpose(),
-                                         a_A);
+          const Eigen::Matrix<double, 2, 3> P_val = link_geometry->X_BG()
+                                                        .rotation()
+                                                        .matrix()
+                                                        .leftCols<2>()
+                                                        .transpose();
+          P.emplace(P_val);
         }
-        compute_rational(p_BC.col(i), link_cylinder->radius(),
-                         lorentz_cone_constraints);
+        compute_rational(p_BC.col(i), link_cylinder->radius(), P);
       }
       break;
     }

@@ -183,47 +183,56 @@ struct CspaceFreeRegionSolution {
   std::vector<SeparatingPlane<double>> separating_planes;
 };
 
- /**
-  * The rational function representing that a link is on the desired
-  * side of the plane. If the link is on the positive side of the plane, then
-  * the rational is aᵀx + b - δ, otherwise it is -δ - aᵀx - b
-  */
- struct LinkOnPlaneSideRational {
-   LinkOnPlaneSideRational(
-       symbolic::RationalFunction m_rational,
-       const CollisionGeometry* m_link_geometry,
-       multibody::BodyIndex m_expressed_body_index,
-       const CollisionGeometry* m_other_side_link_geometry,
-       Vector3<symbolic::Expression> m_a_A, symbolic::Expression m_b,
-       PlaneSide m_plane_side, SeparatingPlaneOrder m_plane_order,
-       std::vector<solvers::Binding<solvers::LorentzConeConstraint>>
-           m_lorentz_cone_constraints)
-       : rational{std::move(m_rational)},
-         link_geometry{m_link_geometry},
-         expressed_body_index{m_expressed_body_index},
-         other_side_link_geometry{m_other_side_link_geometry},
-         a_A{std::move(m_a_A)},
-         b{std::move(m_b)},
-         plane_side{m_plane_side},
-         plane_order{m_plane_order},
-         lorentz_cone_constraints{std::move(m_lorentz_cone_constraints)} {}
-   const symbolic::RationalFunction rational;
-   const CollisionGeometry* const link_geometry;
-   const multibody::BodyIndex expressed_body_index;
-   const CollisionGeometry* const other_side_link_geometry;
+/**
+ * The rational function representing that a link is on the desired
+ * side of the plane. If the link is on the positive side of the plane, then
+ * the rational is aᵀx + b - δ, otherwise it is -δ - aᵀx - b
+ *
+ * Note that if the geometry is not a polytope, but a sphere/cylinder/capsule,
+ * then we will need to impose the constraint |P*a|<=1. Depending on
+ * `plane_order`, this constraint may be a Lorentz cone constraint or a SOS
+ * constraint.
+ */
+struct LinkOnPlaneSideRational {
+  LinkOnPlaneSideRational(
+      symbolic::RationalFunction m_rational,
+      const CollisionGeometry* m_link_geometry,
+      multibody::BodyIndex m_expressed_body_index,
+      const CollisionGeometry* m_other_side_link_geometry,
+      Vector3<symbolic::Expression> m_a_A, symbolic::Expression m_b,
+      PlaneSide m_plane_side, SeparatingPlaneOrder m_plane_order,
+      std::vector<solvers::Binding<solvers::LorentzConeConstraint>>
+          m_lorentz_cone_constraints,
+      std::optional<Eigen::MatrixX3d> m_P)
+      : rational{std::move(m_rational)},
+        link_geometry{m_link_geometry},
+        expressed_body_index{m_expressed_body_index},
+        other_side_link_geometry{m_other_side_link_geometry},
+        a_A{std::move(m_a_A)},
+        b{std::move(m_b)},
+        plane_side{m_plane_side},
+        plane_order{m_plane_order},
+        lorentz_cone_constraints{std::move(m_lorentz_cone_constraints)},
+        P{std::move(m_P)} {}
+  const symbolic::RationalFunction rational;
+  const CollisionGeometry* const link_geometry;
+  const multibody::BodyIndex expressed_body_index;
+  const CollisionGeometry* const other_side_link_geometry;
    /**
     * a_A is the normal vector of the separating plane expressed in the frame A
     * (namely exprssed_body_index).
     */
-   const Vector3<symbolic::Expression> a_A;
-   const symbolic::Expression b;
-   const PlaneSide plane_side;
-   const SeparatingPlaneOrder plane_order;
-   // Some geometries (ellipsoid, capsules, etc) require imposing
-   // additional Lorentz cone constraints.
-   const std::vector<solvers::Binding<drake::solvers::LorentzConeConstraint>>
-       lorentz_cone_constraints;
- };
+  const Vector3<symbolic::Expression> a_A;
+  const symbolic::Expression b;
+  const PlaneSide plane_side;
+  const SeparatingPlaneOrder plane_order;
+  // Some geometries (ellipsoid, capsules, etc) require imposing
+  // additional constraints |P*a|<=1, when plane_order=kConstant, this is a
+  // Lorentz cone constraint, otherwise this is a SOS constraint..
+  const std::vector<solvers::Binding<drake::solvers::LorentzConeConstraint>>
+      lorentz_cone_constraints;
+  const std::optional<Eigen::MatrixX3d> P;
+};
 
 enum class CspaceRegionType { kGenericPolytope, kAxisAlignedBoundingBox };
 
@@ -661,6 +670,10 @@ class CspaceFreeRegion {
     return separating_polytope_delta_;
   }
 
+  const std::optional<Vector3<symbolic::Variable>>& y_dummy() const {
+    return y_dummy_;
+  }
+
  private:
   RationalForwardKinematics rational_forward_kinematics_;
   const geometry::SceneGraph<double>* scene_graph_;
@@ -668,7 +681,7 @@ class CspaceFreeRegion {
            std::vector<std::unique_ptr<CollisionGeometry>>>
       link_geometries_;
 
-  SeparatingPlaneOrder plane_order_for_polytope_;
+  SeparatingPlaneOrder plane_order_;
   CspaceRegionType cspace_region_type_;
   double separating_polytope_delta_;
   std::vector<SeparatingPlane<symbolic::Variable>> separating_planes_;
@@ -677,6 +690,11 @@ class CspaceFreeRegion {
   // that separates geometry1 and geometry 2.
   std::unordered_map<SortedPair<geometry::GeometryId>, int>
       map_geometries_to_separating_planes_;
+
+  // Dummy indeterminate variable used for imposing the SOS constraint
+  // |P*a(t)|<=1 when the collision geometries include
+  // spheres/capsules/cylinders and the separating plane order is not constant.
+  std::optional<Vector3<symbolic::Variable>> y_dummy_;
 };
 
 /**

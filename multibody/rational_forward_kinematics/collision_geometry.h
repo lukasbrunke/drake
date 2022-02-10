@@ -18,6 +18,8 @@ enum class CollisionGeometryType {
   kCylinder,
 };
 
+std::ostream& operator<<(std::ostream& os, const CollisionGeometryType& type);
+
 class CollisionGeometry {
  public:
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(CollisionGeometry)
