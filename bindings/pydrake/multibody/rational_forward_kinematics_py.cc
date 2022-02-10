@@ -385,25 +385,25 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
           [](const CspaceFreeRegion* self,
               const std::vector<CspaceFreeRegion::CspacePolytopeTuple>&
                   alternation_tuples,
+              const std::vector<int>& separating_plane_indices,
               const Eigen::Ref<const Eigen::MatrixXd>& C,
               const Eigen::Ref<const Eigen::VectorXd>& d,
               const VectorX<symbolic::Variable>& lagrangian_gram_vars,
               const VectorX<symbolic::Variable>& verified_gram_vars,
-              const VectorX<symbolic::Variable>& separating_plane_vars,
               const Eigen::Ref<const Eigen::VectorXd>& t_lower,
               const Eigen::Ref<const Eigen::VectorXd>& t_upper,
               const VerificationOption& option,
               std::optional<double> redundant_tighten) {
-            auto prog = self->ConstructLagrangianProgram(alternation_tuples, C,
-                d, lagrangian_gram_vars, verified_gram_vars,
-                separating_plane_vars, t_lower, t_upper, option,
-                redundant_tighten, nullptr, nullptr);
+            auto prog = self->ConstructLagrangianProgram(alternation_tuples,
+                separating_plane_indices, C, d, lagrangian_gram_vars,
+                verified_gram_vars, t_lower, t_upper, option, redundant_tighten,
+                nullptr, nullptr);
             return prog;
           },
-          py::arg("alternation_tuples"), py::arg("C"), py::arg("d"),
-          py::arg("lagrangian_gram_vars"), py::arg("verified_gram_vars"),
-          py::arg("separating_plane_vars"), py::arg("t_lower"),
-          py::arg("t_upper"), py::arg("option"), py::arg("redundant_tighten"),
+          py::arg("alternation_tuples"), py::arg("separating_plane_indices"),
+          py::arg("C"), py::arg("d"), py::arg("lagrangian_gram_vars"),
+          py::arg("verified_gram_vars"), py::arg("t_lower"), py::arg("t_upper"),
+          py::arg("option"), py::arg("redundant_tighten"),
           doc.CspaceFreeRegion.ConstructLagrangianProgram.doc)
       .def("ConstructPolytopeProgram",
           &CspaceFreeRegion::ConstructPolytopeProgram,
@@ -549,6 +549,21 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
   m.def("CalcCspacePolytopeVolume", &CalcCspacePolytopeVolume, py::arg("C"),
       py::arg("d"), py::arg("t_lower"), py::arg("t_upper"),
       doc.CalcCspacePolytopeVolume.doc);
+  m.def(
+      "ReadCspacePolytopeFromFile",
+      [](const std::string& filename, const MultibodyPlant<double>& plant,
+          const geometry::SceneGraphInspector<double>& inspector) {
+        Eigen::MatrixXd C;
+        Eigen::VectorXd d;
+        std::unordered_map<SortedPair<geometry::GeometryId>,
+            std::pair<BodyIndex, Eigen::VectorXd>>
+            separating_planes;
+        ReadCspacePolytopeFromFile(
+            filename, plant, inspector, &C, &d, &separating_planes);
+        return std::make_tuple(C, d, separating_planes);
+      },
+      py::arg("filename"), py::arg("plant"), py::arg("scene_graph"),
+      doc.ReadCspacePolytopeFromFile.doc);
 
   py::module::import("pydrake.solvers.mathematicalprogram");
 

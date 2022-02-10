@@ -345,6 +345,11 @@ class CspaceFreeRegion {
               m_verified_polynomial_gram_lower_start},
           monomial_basis{std::move(m_monomial_basis)} {}
 
+    int gram_lower_size() const {
+      const int gram_rows = monomial_basis.rows();
+      return gram_rows * (gram_rows + 1) / 2;
+    }
+
     // This is the numerator of the rational
     // aᵀx+b-1 or -1-aᵀx-b
     symbolic::Polynomial rational_numerator;
@@ -412,11 +417,12 @@ class CspaceFreeRegion {
    * l_lower(t), l_upper(t), the inscribed ellipsoid parameter P, q
    * @param alternation_tuples computed from
    * GenerateTuplesForBilinearAlternation.
+   * @param separating_plane_indices This SOS program verifies the existence of
+   * the separating planes separating_planes_[separating_plane_indices] and the
+   * associated Lagrangian multipliers.
    * @param lagrangian_gram_vars computed from
    * GenerateTuplesForBilinearAlternation.
    * @param verified_gram_vars computed from
-   * GenerateTuplesForBilinearAlternation.
-   * @param separating_plane_vars computed from
    * GenerateTuplesForBilinearAlternation.
    * @param t_lower The lower bounds of t computed from joint limits.
    * @param t_upper The upper bounds of t computed from joint limits.
@@ -433,11 +439,11 @@ class CspaceFreeRegion {
    */
   std::unique_ptr<solvers::MathematicalProgram> ConstructLagrangianProgram(
       const std::vector<CspacePolytopeTuple>& alternation_tuples,
+      const std::vector<int>& separating_plane_indices,
       const Eigen::Ref<const Eigen::MatrixXd>& C,
       const Eigen::Ref<const Eigen::VectorXd>& d,
       const VectorX<symbolic::Variable>& lagrangian_gram_vars,
       const VectorX<symbolic::Variable>& verified_gram_vars,
-      const VectorX<symbolic::Variable>& separating_plane_vars,
       const Eigen::Ref<const Eigen::VectorXd>& t_lower,
       const Eigen::Ref<const Eigen::VectorXd>& t_upper,
       const VerificationOption& option, std::optional<double> redundant_tighten,
@@ -572,6 +578,8 @@ class CspaceFreeRegion {
     // The objective function used in maximizing the volume of the inscribed
     // ellipsoid.
     EllipsoidVolume ellipsoid_volume{EllipsoidVolume::kNthRoot};
+    // Whether to check the Lagrangian program for C*t <=d + epsilon_min.
+    bool check_epsilon_min = true;
   };
 
   /**

@@ -717,26 +717,37 @@ void CspaceFreeRegion::GenerateTuplesForBilinearAlternation(
   // Set separating_plane_vars.
   int separating_plane_vars_count = 0;
   for (const auto& separating_plane : separating_planes_) {
-    separating_plane_vars_count += separating_plane.decision_variables.rows();
+    if (!IsGeometryPairCollisionIgnored(
+            separating_plane.positive_side_polytope->get_id(),
+            separating_plane.negative_side_polytope->get_id(),
+            filtered_collision_pairs)) {
+      separating_plane_vars_count += separating_plane.decision_variables.rows();
+    }
   }
   separating_plane_vars->resize(separating_plane_vars_count);
   separating_plane_vars_count = 0;
   for (const auto& separating_plane : separating_planes_) {
-    separating_plane_vars->segment(separating_plane_vars_count,
-                                   separating_plane.decision_variables.rows()) =
-        separating_plane.decision_variables;
-    separating_plane_vars_count += separating_plane.decision_variables.rows();
+    if (!IsGeometryPairCollisionIgnored(
+            separating_plane.positive_side_polytope->get_id(),
+            separating_plane.negative_side_polytope->get_id(),
+            filtered_collision_pairs)) {
+      separating_plane_vars->segment(
+          separating_plane_vars_count,
+          separating_plane.decision_variables.rows()) =
+          separating_plane.decision_variables;
+      separating_plane_vars_count += separating_plane.decision_variables.rows();
+    }
   }
 }
 
 std::unique_ptr<solvers::MathematicalProgram>
 CspaceFreeRegion::ConstructLagrangianProgram(
     const std::vector<CspacePolytopeTuple>& alternation_tuples,
+    const std::vector<int>& separating_plane_indices,
     const Eigen::Ref<const Eigen::MatrixXd>& C,
     const Eigen::Ref<const Eigen::VectorXd>& d,
     const VectorX<symbolic::Variable>& lagrangian_gram_vars,
     const VectorX<symbolic::Variable>& verified_gram_vars,
-    const VectorX<symbolic::Variable>& separating_plane_vars,
     const Eigen::Ref<const Eigen::VectorXd>& t_lower,
     const Eigen::Ref<const Eigen::VectorXd>& t_upper,
     const VerificationOption& option, std::optional<double> redundant_tighten,
@@ -752,8 +763,57 @@ CspaceFreeRegion::ConstructLagrangianProgram(
   }
   auto prog = std::make_unique<solvers::MathematicalProgram>();
   // Adds decision variables.
-  prog->AddDecisionVariables(lagrangian_gram_vars);
-  prog->AddDecisionVariables(verified_gram_vars);
+  // Only add the variables in alternation_tuples.
+  // To avoid repeated dynamic memory allocation, first collect all the
+  // variables in alternation_tuples to a single vector of variables
+  int tuple_variable_count = 0;
+  for (const auto& tuple : alternation_tuples) {
+    tuple_variable_count +=
+        (tuple.polytope_lagrangian_gram_lower_start.size() +
+         tuple.t_lower_lagrangian_gram_lower_start.size() +
+         tuple.t_upper_lagrangian_gram_lower_start.size() + 1) *
+        tuple.gram_lower_size();
+  }
+  VectorX<symbolic::Variable> tuple_variables(tuple_variable_count);
+  tuple_variable_count = 0;
+  auto fill_tuple_vars =
+      [&tuple_variables, &tuple_variable_count, &lagrangian_gram_vars](
+          const std::vector<int>& lagrangian_var_start, int gram_lower_size) {
+        for (int start : lagrangian_var_start) {
+          tuple_variables.segment(tuple_variable_count, gram_lower_size) =
+              lagrangian_gram_vars.segment(start, gram_lower_size);
+          tuple_variable_count += gram_lower_size;
+        }
+      };
+  for (const auto& tuple : alternation_tuples) {
+    const int gram_lower_size = tuple.gram_lower_size();
+    fill_tuple_vars(tuple.polytope_lagrangian_gram_lower_start,
+                    gram_lower_size);
+    fill_tuple_vars(tuple.t_lower_lagrangian_gram_lower_start, gram_lower_size);
+    fill_tuple_vars(tuple.t_upper_lagrangian_gram_lower_start, gram_lower_size);
+    tuple_variables.segment(tuple_variable_count, gram_lower_size) =
+        verified_gram_vars.segment(tuple.verified_polynomial_gram_lower_start,
+                                   gram_lower_size);
+    tuple_variable_count += gram_lower_size;
+  }
+  prog->AddDecisionVariables(tuple_variables);
+  // Now collect all the variables for the separating planes  in
+  // separating_plane_indices.
+  int separating_plane_var_count = 0;
+  for (int plane_index : separating_plane_indices) {
+    separating_plane_var_count +=
+        separating_planes_[plane_index].decision_variables.rows();
+  }
+  VectorX<symbolic::Variable> separating_plane_vars(separating_plane_var_count);
+  separating_plane_var_count = 0;
+  for (int plane_index : separating_plane_indices) {
+    separating_plane_vars.segment(
+        separating_plane_var_count,
+        separating_planes_[plane_index].decision_variables.rows()) =
+        separating_planes_[plane_index].decision_variables;
+    separating_plane_var_count +=
+        separating_planes_[plane_index].decision_variables.rows();
+  }
   prog->AddDecisionVariables(separating_plane_vars);
 
   // Compute d-C*t, t - t_lower and t_upper - t.
@@ -811,11 +871,11 @@ CspaceFreeRegion::ConstructLagrangianProgram(
                           const symbolic::Polynomial& constraint_polynomial,
                           bool redundant) {
           if (redundant) {
-            prog->AddBoundingBoxConstraint(
-                0, 0,
-                lagrangian_gram_vars.segment(lagrangian_gram_lower_start,
-                                             gram_lower_size));
-
+            // To avoid excessive memory usage, add each entry of
+            // lagrangian_gram_vars separately. See Drake Issue 16580
+            for (int i = 0; i < gram_lower_size; ++i) {
+              prog->AddBoundingBoxConstraint(0, 0, lagrangian_gram_vars(lagrangian_gram_lower_start + i));
+            }
           } else {
             SymmetricMatrixFromLower<symbolic::Variable>(
                 gram_mat.rows(),
@@ -1085,9 +1145,17 @@ bool FindLagrangianAndSeparatingPlanesSingleThread(
     Eigen::VectorXd* verified_gram_var_vals,
     Eigen::VectorXd* separating_plane_var_vals,
     std::vector<SeparatingPlane<double>>* separating_planes_sol) {
+  std::vector<int> separating_plane_indices;
+  for (int i = 0;
+       i < static_cast<int>(cspace_free_region.separating_planes().size());
+       ++i) {
+    if (is_plane_active[i]) {
+      separating_plane_indices.push_back(i);
+    }
+  }
   auto prog_lagrangian = cspace_free_region.ConstructLagrangianProgram(
-      alternation_tuples, C, d, lagrangian_gram_vars, verified_gram_vars,
-      separating_plane_vars, t_lower, t_upper, verification_option,
+      alternation_tuples, separating_plane_indices, C, d, lagrangian_gram_vars,
+      verified_gram_vars, t_lower, t_upper, verification_option,
       redundant_tighten, nullptr, nullptr);
   auto result_lagrangian =
       solvers::Solve(*prog_lagrangian, std::nullopt, solver_options);
@@ -1208,17 +1276,19 @@ bool FindLagrangianAndSeparatingPlanesMultiThread(
       plane_tuples.push_back(alternation_tuples[tuple_index]);
     }
     auto prog = cspace_free_region.ConstructLagrangianProgram(
-        plane_tuples, C, d, lagrangian_gram_vars, verified_gram_vars,
-        separating_plane_vars, t_lower, t_upper, verification_option,
-        redundant_tighten, nullptr, nullptr);
+        plane_tuples, std::vector<int>({plane_index}), C, d,
+        lagrangian_gram_vars, verified_gram_vars, t_lower, t_upper,
+        verification_option, redundant_tighten, nullptr, nullptr);
     const auto result = solvers::Solve(*prog, std::nullopt, solver_options);
+    drake::log()->debug(
+        "SOS {} Mosek time {}s", active_plane_count,
+        result.get_solver_details<solvers::MosekSolver>().optimizer_time);
     is_success[active_plane_count] = result.is_success();
     if (result.is_success()) {
       // Now fill in lagrangian_gram_var_vals;
       for (const int tuple_index : tuple_indices) {
-        const int gram_rows =
-            alternation_tuples[tuple_index].monomial_basis.rows();
-        const int gram_lower_size = gram_rows * (gram_rows + 1) / 2;
+        const int gram_lower_size =
+            alternation_tuples[tuple_index].gram_lower_size();
 
         auto fill_lagrangian =
             [gram_lower_size, lagrangian_gram_var_vals, &result,
@@ -1282,8 +1352,8 @@ bool FindLagrangianAndSeparatingPlanesMultiThread(
           // thrown during SOS setup/solve.
           const int active_plane_count = operation->get();
           drake::log()->debug("SOS {} completed, is_success {}",
-                              active_plane_count,
-                              is_success[active_plane_count].value());
+                             active_plane_count,
+                             is_success[active_plane_count].value());
           if (!(is_success[active_plane_count].value())) {
             found_infeasible = true;
             break;
@@ -1805,6 +1875,7 @@ void CspaceFreeRegion::CspacePolytopeBinarySearch(
               Eigen::VectorXd::Ones(d_without_epsilon.rows()))) {
     return;
   }
+  if (binary_search_option.check_epsilon_min) {
   if (!is_polytope_collision_free(
           d_without_epsilon +
           binary_search_option.epsilon_min *
@@ -1812,6 +1883,7 @@ void CspaceFreeRegion::CspacePolytopeBinarySearch(
     throw std::runtime_error(
         fmt::format("binary search: the initial epsilon {} is infeasible",
                     binary_search_option.epsilon_min));
+  }
   }
   double eps_max = binary_search_option.epsilon_max;
   double eps_min = binary_search_option.epsilon_min;
@@ -2361,16 +2433,40 @@ void WriteCspacePolytopeToFile(
     // Write separating planes.
     myfile << solution.separating_planes.size() << "\n";
     for (const auto& plane : solution.separating_planes) {
+      // positive side.
+      // model instance name
+      myfile << plant.GetModelInstanceName(
+                    plant.get_body(plane.positive_side_polytope->body_index())
+                        .model_instance())
+             << "\n";
+      // body name
       myfile
           << plant.get_body(plane.positive_side_polytope->body_index()).name()
           << "\n";
+      // geometry name
       myfile << inspector.GetName(plane.positive_side_polytope->get_id())
              << "\n";
+      // negative side
+      // model instance name
+      myfile << plant.GetModelInstanceName(
+                    plant.get_body(plane.negative_side_polytope->body_index())
+                        .model_instance())
+             << "\n";
+      // body name
       myfile
           << plant.get_body(plane.negative_side_polytope->body_index()).name()
           << "\n";
+      // geometry name.
       myfile << inspector.GetName(plane.negative_side_polytope->get_id())
              << "\n";
+
+      // Experessed
+      // model instance
+      myfile << plant.GetModelInstanceName(
+                    plant.get_body(plane.expressed_link)
+                        .model_instance())
+             << "\n";
+      // body name
       myfile << plant.get_body(plane.expressed_link).name() << "\n";
       myfile << plane.decision_variables.rows() << "\n";
       for (int i = 0; i < plane.decision_variables.rows(); ++i) {
@@ -2427,11 +2523,19 @@ void ReadCspacePolytopeFromFile(
     const int num_separating_planes = std::stoi(word);
     for (int i = 0; i < num_separating_planes; ++i) {
       // positive side.
+      // model instance
       std::getline(infile, line);
       ss = std::istringstream(line);
       ss >> word;
-      const geometry::FrameId positive_frame =
-          plant.GetBodyFrameIdOrThrow(plant.GetBodyByName(word).index());
+      const ModelInstanceIndex positive_model =
+          plant.GetModelInstanceByName(word);
+      // body 
+      std::getline(infile, line);
+      ss = std::istringstream(line);
+      ss >> word;
+      const geometry::FrameId positive_frame = plant.GetBodyFrameIdOrThrow(
+          plant.GetBodyByName(word, positive_model).index());
+      // geometry 
       std::getline(infile, line);
       ss = std::istringstream(line);
       ss >> word;
@@ -2440,11 +2544,18 @@ void ReadCspacePolytopeFromFile(
                                         geometry::Role::kProximity, word);
 
       // negative side
+      // model instance
+      std::getline(infile, line);
+      ss = std::istringstream(line);
+      ss >> word;
+      const ModelInstanceIndex negative_model = plant.GetModelInstanceByName(word);
+      // body 
       std::getline(infile, line);
       ss = std::istringstream(line);
       ss >> word;
       const geometry::FrameId negative_frame =
-          plant.GetBodyFrameIdOrThrow(plant.GetBodyByName(word).index());
+          plant.GetBodyFrameIdOrThrow(plant.GetBodyByName(word, negative_model).index());
+      // geometry
       std::getline(infile, line);
       ss = std::istringstream(line);
       ss >> word;
@@ -2452,11 +2563,17 @@ void ReadCspacePolytopeFromFile(
           inspector.GetGeometryIdByName(negative_frame,
                                         geometry::Role::kProximity, word);
 
+      // expressed
+      // expressed model instance
+      std::getline(infile, line);
+      ss = std::istringstream(line);
+      ss >> word;
+      const ModelInstanceIndex expressed_model = plant.GetModelInstanceByName(word);
       // expressed link
       std::getline(infile, line);
       ss = std::istringstream(line);
       ss >> word;
-      const BodyIndex expressed_link = plant.GetBodyByName(word).index();
+      const BodyIndex expressed_link = plant.GetBodyByName(word, expressed_model).index();
 
       // plane decision variable values.
       std::getline(infile, line);

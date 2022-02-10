@@ -375,15 +375,14 @@ void VisualizePostures(const std::string& read_file) {
   Eigen::MatrixXd q_sol = 2 * (t_sol.array().atan().matrix());
   std::cout << "postures\n" << q_sol.transpose() << "\n";
 
-  IiwaDiagram iiwa_diagram(num_postures);
-  auto diagram_context = iiwa_diagram.diagram().CreateDefaultContext();
-  auto& plant_context =
-      iiwa_diagram.plant().GetMyMutableContextFromRoot(diagram_context.get());
+  auto diagram_context = single_iiwa_diagram.diagram().CreateDefaultContext();
+  auto& plant_context = single_iiwa_diagram.plant().GetMyMutableContextFromRoot(
+      diagram_context.get());
   for (int i = 0; i < num_postures; ++i) {
-    iiwa_diagram.plant().SetPositions(
-        &plant_context, iiwa_diagram.iiwa_instances()[i], q_sol.col(i));
+    single_iiwa_diagram.plant().SetPositions(
+        &plant_context, single_iiwa_diagram.iiwa_instances()[i], q_sol.col(i));
   }
-  iiwa_diagram.diagram().Publish(*diagram_context);
+  single_iiwa_diagram.diagram().Publish(*diagram_context);
   std::cout << "Type to continue\n";
   std::cin.get();
 }

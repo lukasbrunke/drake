@@ -585,10 +585,12 @@ TEST_F(IiwaCspaceTest, GenerateTuplesForBilinearAlternation) {
   VectorX<symbolic::Variable> d_var, lagrangian_gram_vars, verified_gram_vars,
       separating_plane_vars;
   std::vector<std::vector<int>> separating_plane_to_tuples;
+  const CspaceFreeRegion::FilteredCollisionPairs filtered_collision_pairs{};
   dut.GenerateTuplesForBilinearAlternation(
-      q_star, {}, C_rows, &alternation_tuples, &d_minus_Ct, &t_lower, &t_upper,
-      &t_minus_t_lower, &t_upper_minus_t, &C_var, &d_var, &lagrangian_gram_vars,
-      &verified_gram_vars, &separating_plane_vars, &separating_plane_to_tuples);
+      q_star, filtered_collision_pairs, C_rows, &alternation_tuples,
+      &d_minus_Ct, &t_lower, &t_upper, &t_minus_t_lower, &t_upper_minus_t,
+      &C_var, &d_var, &lagrangian_gram_vars, &verified_gram_vars,
+      &separating_plane_vars, &separating_plane_to_tuples);
   int rational_count = 0;
   for (const auto& separating_plane : dut.separating_planes()) {
     rational_count += separating_plane.positive_side_polytope->p_BV().cols() +
@@ -643,7 +645,12 @@ TEST_F(IiwaCspaceTest, GenerateTuplesForBilinearAlternation) {
                 (C_rows + 2 * dut.rational_forward_kinematics().t().rows()));
   int separating_plane_vars_count = 0;
   for (const auto& separating_plane : dut.separating_planes()) {
-    separating_plane_vars_count += separating_plane.decision_variables.rows();
+    if (!IsGeometryPairCollisionIgnored(
+            separating_plane.positive_side_polytope->get_id(),
+            separating_plane.negative_side_polytope->get_id(),
+            filtered_collision_pairs)) {
+      separating_plane_vars_count += separating_plane.decision_variables.rows();
+    }
   }
   EXPECT_EQ(separating_plane_vars.rows(), separating_plane_vars_count);
   const symbolic::Variables separating_plane_vars_set{separating_plane_vars};
@@ -777,9 +784,17 @@ TEST_F(IiwaCspaceTest, ConstructLagrangianAndPolytopeProgram) {
   VectorX<symbolic::Variable> q;
   auto clock_start = std::chrono::system_clock::now();
   double redundant_tighten = 0;
+  const std::vector<bool> is_plane_active = internal::IsPlaneActive(
+      dut.separating_planes(), filtered_collision_pairs);
+  std::vector<int> separating_plane_indices;
+  for (int i = 0; i < static_cast<int>(dut.separating_planes().size()); ++i) {
+    if (is_plane_active[i]) {
+      separating_plane_indices.push_back(i);
+    }
+  }
   auto prog = dut.ConstructLagrangianProgram(
-      alternation_tuples, C, d, lagrangian_gram_vars, verified_gram_vars,
-      separating_plane_vars, t_lower, t_upper, {}, redundant_tighten, &P, &q);
+      alternation_tuples, separating_plane_indices, C, d, lagrangian_gram_vars,
+      verified_gram_vars, t_lower, t_upper, {}, redundant_tighten, &P, &q);
   auto clock_finish = std::chrono::system_clock::now();
   std::cout << "ConstructLagrangianProgram takes "
             << static_cast<float>(
@@ -810,8 +825,6 @@ TEST_F(IiwaCspaceTest, ConstructLagrangianAndPolytopeProgram) {
                        t_minus_t_lower, t_upper_minus_t,
                        lagrangian_gram_var_vals, verified_gram_var_vals,
                        separating_plane_var_vals, 1E-5);
-  const std::vector<bool> is_plane_active = internal::IsPlaneActive(
-      dut.separating_planes(), filtered_collision_pairs);
   const std::vector<SeparatingPlane<double>> separating_planes_sol =
       internal::GetSeparatingPlanesSolution(dut, is_plane_active, result);
   CspaceFreeRegionSolution cspace_free_region_solution(C, d, P_sol, q_sol,
