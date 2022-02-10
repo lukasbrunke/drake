@@ -85,107 +85,114 @@ struct VerificationOption {
 };
 
 /**
- * A verified region is a polytope C*t <= d along with the multiplier polynomials acting as the certificate,
- * the planes for all the collision pairs, and the inscribed ellipsoid approximating the volume of the polytope
+ * A verified region is a polytope C*t <= d along with the multiplier
+ * polynomials acting as the certificate, the planes for all the collision
+ * pairs, and the inscribed ellipsoid approximating the volume of the polytope
  */
-struct CspaceFreeRegionSolution{
-   public:
-    DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(CspaceFreeRegionSolution)
-    CspaceFreeRegionSolution() = default;
+struct CspaceFreeRegionSolution {
+ public:
+  DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(CspaceFreeRegionSolution)
+  CspaceFreeRegionSolution() = default;
 
-   CspaceFreeRegionSolution(
-     Eigen::MatrixXd m_C,
-     Eigen::MatrixXd m_d,
-     Eigen::MatrixXd m_P,
-     Eigen::MatrixXd m_q,
-//     const std::vector<VectorX<symbolic::Polynomial>> m_polytope_lagrangians,
-//     const std::vector<VectorX<symbolic::Polynomial>> m_t_lower_lagrangians,
-//     const std::vector<VectorX<symbolic::Polynomial>> m_t_upper_lagrangians,
-//     const std::vector<symbolic::Polynomial> m_verified_polynomials,
-     std::vector<SeparatingPlane> m_separating_planes)
+  CspaceFreeRegionSolution(
+      Eigen::MatrixXd m_C, Eigen::MatrixXd m_d, Eigen::MatrixXd m_P,
+      Eigen::MatrixXd m_q,
+      //     const std::vector<VectorX<symbolic::Polynomial>>
+      //     m_polytope_lagrangians, const
+      //     std::vector<VectorX<symbolic::Polynomial>> m_t_lower_lagrangians,
+      //     const std::vector<VectorX<symbolic::Polynomial>>
+      //     m_t_upper_lagrangians, const std::vector<symbolic::Polynomial>
+      //     m_verified_polynomials,
+      std::vector<SeparatingPlane> m_separating_planes)
       : C{std::move(m_C)},
         d{std::move(m_d)},
         P{std::move(m_P)},
         q{std::move(m_q)},
-//        polytope_lagrangians{m_polytope_lagrangians},
-//        t_lower_lagrangians{m_t_lower_lagrangians},
-//        t_upper_lagrangians{m_t_upper_lagrangians},
-//        verified_polynomials{m_verified_polynomials},
+        //        polytope_lagrangians{m_polytope_lagrangians},
+        //        t_lower_lagrangians{m_t_lower_lagrangians},
+        //        t_upper_lagrangians{m_t_upper_lagrangians},
+        //        verified_polynomials{m_verified_polynomials},
         separating_planes{std::move(m_separating_planes)} {}
-//
-   CspaceFreeRegionSolution(
-     Eigen::MatrixXd m_C,
-     Eigen::MatrixXd m_d)
+  //
+  CspaceFreeRegionSolution(Eigen::MatrixXd m_C, Eigen::MatrixXd m_d)
       : C{m_C},
-        d{m_d}
-//        polytope_lagrangians{num_pairs},
-//        t_lower_lagrangians{num_pairs},
-//        t_upper_lagrangians{num_pairs},
-//        verified_polynomials{num_pairs},
-//        separating_planes{num_pairs}
-        { }
+        d{m_d}  //        polytope_lagrangians{num_pairs},
+                //        t_lower_lagrangians{num_pairs},
+                //        t_upper_lagrangians{num_pairs},
+                //        verified_polynomials{num_pairs},
+                //        separating_planes{num_pairs}
+  {}
 
-   // values defining Hpolyhedron Ct <= d
-   Eigen::MatrixXd C;
-   Eigen::VectorXd d;
+  // values defining Hpolyhedron Ct <= d
+  Eigen::MatrixXd C;
+  Eigen::VectorXd d;
 
-   // values defining Inscribed ellipsoid {t | t = Ps + q , norm(s) <= 1}
-   Eigen::MatrixXd P;
-   Eigen::VectorXd q;
+  // values defining Inscribed ellipsoid {t | t = Ps + q , norm(s) <= 1}
+  Eigen::MatrixXd P;
+  Eigen::VectorXd q;
 
+  // TODO (Alex.Amice) add these polynomials back in one I figure out how to
+  // extract them
+  //    // multipliers for C*t <= d
+  //    std::vector<VectorX<symbolic::Polynomial>> polytope_lagrangians;
+  //    // multiplier for t >= t_lower
+  //    std::vector<VectorX<symbolic::Polynomial>> t_lower_lagrangians;
+  //    // multiplier for t <= t_upper
+  //    std::vector<VectorX<symbolic::Polynomial>> t_upper_lagrangians;
+  //    // verified_polynomial[i] is p(t) - l_polytope(t)ᵀ(d - C*t) -
+  //    // l_lower(t)ᵀ(t-t_lower) - l_upper(t)ᵀ(t_upper-t)
+  //    std::vector<symbolic::Polynomial> verified_polynomials;
 
-   // TODO (Alex.Amice) add these polynomials back in one I figure out how to extract them
-//    // multipliers for C*t <= d
-//    std::vector<VectorX<symbolic::Polynomial>> polytope_lagrangians;
-//    // multiplier for t >= t_lower
-//    std::vector<VectorX<symbolic::Polynomial>> t_lower_lagrangians;
-//    // multiplier for t <= t_upper
-//    std::vector<VectorX<symbolic::Polynomial>> t_upper_lagrangians;
-//    // verified_polynomial[i] is p(t) - l_polytope(t)ᵀ(d - C*t) -
-//    // l_lower(t)ᵀ(t-t_lower) - l_upper(t)ᵀ(t_upper-t)
-//    std::vector<symbolic::Polynomial> verified_polynomials;
+  // Separating hyperplanes that are the certificate
+  std::vector<SeparatingPlane> separating_planes;
+};
 
-    // Separating hyperplanes that are the certificate
-    std::vector<SeparatingPlane> separating_planes;
- };
-
- /**
-  * The rational function representing that a link is on the desired
-  * side of the plane. If the link is on the positive side of the plane, then
-  * the rational is aᵀx + b - δ, otherwise it is -δ - aᵀx - b
-  */
- struct LinkOnPlaneSideRational {
-   LinkOnPlaneSideRational(
-       symbolic::RationalFunction m_rational,
-       const CollisionGeometry* m_link_geometry,
-       multibody::BodyIndex m_expressed_body_index,
-       const CollisionGeometry* m_other_side_link_geometry,
-       Vector3<symbolic::Expression> m_a_A, symbolic::Expression m_b,
-       PlaneSide m_plane_side, SeparatingPlaneOrder m_plane_order,
-       std::vector<solvers::Binding<solvers::LorentzConeConstraint>>
-           m_lorentz_cone_constraints)
-       : rational{std::move(m_rational)},
-         link_geometry{m_link_geometry},
-         expressed_body_index{m_expressed_body_index},
-         other_side_link_geometry{m_other_side_link_geometry},
-         a_A{std::move(m_a_A)},
-         b{std::move(m_b)},
-         plane_side{m_plane_side},
-         plane_order{m_plane_order},
-         lorentz_cone_constraints{std::move(m_lorentz_cone_constraints)} {}
-   const symbolic::RationalFunction rational;
-   const CollisionGeometry* const link_geometry;
-   const multibody::BodyIndex expressed_body_index;
-   const CollisionGeometry* const other_side_link_geometry;
-   const Vector3<symbolic::Expression> a_A;
-   const symbolic::Expression b;
-   const PlaneSide plane_side;
-   const SeparatingPlaneOrder plane_order;
-   // Some geometries (ellipsoid, capsules, etc) require imposing
-   // additional Lorentz cone constraints.
-   const std::vector<solvers::Binding<drake::solvers::LorentzConeConstraint>>
-       lorentz_cone_constraints;
- };
+/**
+ * The rational function representing that a link is on the desired
+ * side of the plane. If the link is on the positive side of the plane, then
+ * the rational is aᵀx + b - δ, otherwise it is -δ - aᵀx - b
+ *
+ * Note that if the geometry is not a polytope, but a sphere/cylinder/capsule,
+ * then we will need to impose the constraint |P*a|<=1. Depending on
+ * `plane_order`, this constraint may be a Lorentz cone constraint or a SOS
+ * constraint.
+ */
+struct LinkOnPlaneSideRational {
+  LinkOnPlaneSideRational(
+      symbolic::RationalFunction m_rational,
+      const CollisionGeometry* m_link_geometry,
+      multibody::BodyIndex m_expressed_body_index,
+      const CollisionGeometry* m_other_side_link_geometry,
+      Vector3<symbolic::Expression> m_a_A, symbolic::Expression m_b,
+      PlaneSide m_plane_side, SeparatingPlaneOrder m_plane_order,
+      std::vector<solvers::Binding<solvers::LorentzConeConstraint>>
+          m_lorentz_cone_constraints,
+      std::optional<Eigen::MatrixX3d> m_P)
+      : rational{std::move(m_rational)},
+        link_geometry{m_link_geometry},
+        expressed_body_index{m_expressed_body_index},
+        other_side_link_geometry{m_other_side_link_geometry},
+        a_A{std::move(m_a_A)},
+        b{std::move(m_b)},
+        plane_side{m_plane_side},
+        plane_order{m_plane_order},
+        lorentz_cone_constraints{std::move(m_lorentz_cone_constraints)},
+        P{std::move(m_P)} {}
+  const symbolic::RationalFunction rational;
+  const CollisionGeometry* const link_geometry;
+  const multibody::BodyIndex expressed_body_index;
+  const CollisionGeometry* const other_side_link_geometry;
+  const Vector3<symbolic::Expression> a_A;
+  const symbolic::Expression b;
+  const PlaneSide plane_side;
+  const SeparatingPlaneOrder plane_order;
+  // Some geometries (ellipsoid, capsules, etc) require imposing
+  // additional constraints |P*a|<=1, when plane_order=kConstant, this is a
+  // Lorentz cone constraint, otherwise this is a SOS constraint..
+  const std::vector<solvers::Binding<drake::solvers::LorentzConeConstraint>>
+      lorentz_cone_constraints;
+  const std::optional<Eigen::MatrixX3d> P;
+};
 
 enum class CspaceRegionType { kGenericPolytope, kAxisAlignedBoundingBox };
 
@@ -614,6 +621,10 @@ class CspaceFreeRegion {
     return separating_polytope_delta_;
   }
 
+  const std::optional<Vector3<symbolic::Variable>>& y_dummy() const {
+    return y_dummy_;
+  }
+
  private:
   RationalForwardKinematics rational_forward_kinematics_;
   const geometry::SceneGraph<double>* scene_graph_;
@@ -621,7 +632,7 @@ class CspaceFreeRegion {
            std::vector<std::unique_ptr<CollisionGeometry>>>
       link_geometries_;
 
-  SeparatingPlaneOrder plane_order_for_polytope_;
+  SeparatingPlaneOrder plane_order_;
   CspaceRegionType cspace_region_type_;
   double separating_polytope_delta_;
   std::vector<SeparatingPlane> separating_planes_;
@@ -630,6 +641,11 @@ class CspaceFreeRegion {
   // that separates geometry1 and geometry 2.
   std::unordered_map<SortedPair<geometry::GeometryId>, int>
       map_collisions_to_separating_planes_;
+
+  // Dummy indeterminate variable used for imposing the SOS constraint
+  // |P*a(t)|<=1 when the collision geometries include
+  // spheres/capsules/cylinders and the separating plane order is not constant.
+  std::optional<Vector3<symbolic::Variable>> y_dummy_;
 };
 
 /**

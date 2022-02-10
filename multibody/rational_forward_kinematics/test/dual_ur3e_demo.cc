@@ -92,6 +92,7 @@ class DualUr3Diagram {
     plant_->Finalize();
     geometry::MeshcatVisualizerParams meshcat_params{};
     meshcat_params.role = geometry::Role::kProximity;
+    meshcat_->SetProperty("/drake/visualizer/left_ur/ur_base_link/21", "top_color", {1., 0., 0.});
     visualizer_ = &geometry::MeshcatVisualizer<double>::AddToBuilder(
         &builder, *scene_graph_, meshcat_, meshcat_params);
     diagram_ = builder.Build();
@@ -136,7 +137,7 @@ Eigen::VectorXd FindInitialPosture(const MultibodyPlant<double>& plant,
       right_wrist_3_link, Eigen::Vector3d::Zero(), plant.world_frame(),
       Eigen::Vector3d(-kInf, 0, -kInf), Eigen::Vector3d::Constant(kInf));
 
-  ik.AddMinimumDistanceConstraint(0.02);
+  ik.AddMinimumDistanceConstraint(0.03);
 
   Eigen::Matrix<double, 12, 1> q_init;
   q_init << 0.1, 0.2, 0.1, -0.1, 0.2, -0.1, 0.1, -0.2, 0.2, -0.1, 0.1, -0.1;
@@ -197,7 +198,10 @@ void BuildCandidateCspacePolytope(const Eigen::VectorXd& q_free,
   }
 }
 
-void SearchCspacePolytope(const std::string& write_file) {
+void SearchCspacePolytope(
+    const std::string& write_file,
+    const std::optional<std::string>& read_file = std::nullopt,
+    bool do_bisection = true) {
   // Ensure that we have the MOSEK license for the entire duration of this test,
   // so that we do not have to release and re-acquire the license for every
   // test.
@@ -212,22 +216,29 @@ void SearchCspacePolytope(const std::string& write_file) {
                          dual_ur_diagram.right_ur(), &plant_context);
   dual_ur_diagram.plant().SetPositions(&plant_context, q0);
   dual_ur_diagram.diagram().Publish(*diagram_context);
+  std::cout << "Type to continue\n";
   std::cin.get();
 
   Eigen::MatrixXd C_init;
   Eigen::VectorXd d_init;
-  BuildCandidateCspacePolytope(q0, &C_init, &d_init);
+  Eigen::VectorXd t_lower_dummy, t_upper_dummy;
+  if (read_file.has_value()) {
+    ReadCspacePolytopeFromFile(read_file.value(), &C_init, &d_init,
+                               &t_lower_dummy, &t_upper_dummy);
+  } else {
+    BuildCandidateCspacePolytope(q0, &C_init, &d_init);
+  }
 
   const double separating_polytope_delta{0.01};
   const CspaceFreeRegion dut(
       dual_ur_diagram.diagram(), &(dual_ur_diagram.plant()),
-      &(dual_ur_diagram.scene_graph()), SeparatingPlaneOrder::kConstant,
+      &(dual_ur_diagram.scene_graph()), SeparatingPlaneOrder::kAffine,
       CspaceRegionType::kGenericPolytope, separating_polytope_delta);
 
   CspaceFreeRegion::FilteredCollisionPairs filtered_collision_pairs{};
 
   CspaceFreeRegion::BinarySearchOption binary_search_option{
-      .epsilon_max = 0.05,
+      .epsilon_max = 0.2,
       .epsilon_min = 1E-6,
       .max_iters = 2,
       .compute_polytope_volume = false,
@@ -236,17 +247,29 @@ void SearchCspacePolytope(const std::string& write_file) {
   solver_options.SetOption(solvers::CommonSolverOption::kPrintToConsole, false);
   CspaceFreeRegionSolution cspace_free_region_solution;
   Eigen::VectorXd q_star = Eigen::Matrix<double, 12, 1>::Zero();
-  dut.CspacePolytopeBinarySearch(
-      q_star, filtered_collision_pairs, C_init, d_init, binary_search_option,
-      solver_options, q0, std::nullopt, &cspace_free_region_solution);
+  if (do_bisection) {
+    drake::log()->info("Start bisection");
+    dut.CspacePolytopeBinarySearch(
+        q_star, filtered_collision_pairs, C_init, d_init, binary_search_option,
+        solver_options, q0, std::nullopt, &cspace_free_region_solution);
+  }
   CspaceFreeRegion::BilinearAlternationOption bilinear_alternation_option{
       .max_iters = 10,
-      .convergence_tol = 0.001,
+      .convergence_tol = 0.000,
+      .lagrangian_backoff_scale = 0.001,
       .redundant_tighten = 0.5,
       .compute_polytope_volume = false,
       .num_threads = 20};
-  const Eigen::MatrixXd C0 = cspace_free_region_solution.C;
-  const Eigen::VectorXd d0 = cspace_free_region_solution.d;
+  Eigen::MatrixXd C0;
+  Eigen::VectorXd d0;
+  if (do_bisection) {
+    C0 = cspace_free_region_solution.C;
+    d0 = cspace_free_region_solution.d;
+  } else {
+    C0 = C_init;
+    d0 = d_init;
+  }
+  drake::log()->info("Start bilinear alternation");
   dut.CspacePolytopeBilinearAlternation(
       q_star, filtered_collision_pairs, C0, d0, bilinear_alternation_option,
       solver_options, q0, std::nullopt, &cspace_free_region_solution);
@@ -266,9 +289,56 @@ void SearchCspacePolytope(const std::string& write_file) {
                             write_file, 10);
 }
 
+void VisualizaPostures(const std::string& cspace_polytope_file) {
+  const DualUr3Diagram dual_ur_diagram{};
+  auto diagram_context = dual_ur_diagram.diagram().CreateDefaultContext();
+  auto& plant_context = dual_ur_diagram.plant().GetMyMutableContextFromRoot(
+      diagram_context.get());
+  Eigen::MatrixXd C;
+  Eigen::VectorXd d, t_lower, t_upper;
+  ReadCspacePolytopeFromFile(cspace_polytope_file, &C, &d, &t_lower, &t_upper);
+
+  solvers::MathematicalProgram prog;
+  auto t1 = prog.NewContinuousVariables(12);
+  auto t2 = prog.NewContinuousVariables(12);
+  prog.AddLinearConstraint(C, Eigen::VectorXd::Constant(d.rows(), -kInf), d,
+                           t1);
+  prog.AddLinearConstraint(C, Eigen::VectorXd::Constant(d.rows(), -kInf), d,
+                           t2);
+  prog.AddBoundingBoxConstraint(t_lower, t_upper, t1);
+  prog.AddBoundingBoxConstraint(t_lower, t_upper, t2);
+  // Add the cost max (t1-t2)^2 = (A*[t1;t2])^2;
+  Eigen::Matrix<double, 12, 24> A;
+  A << Eigen::Matrix<double, 12, 12>::Identity(),
+      -Eigen::Matrix<double, 12, 12>::Identity();
+  prog.AddQuadraticCost(-A.transpose() * A, Eigen::VectorXd::Zero(24), {t1, t2},
+                        false /*is_convex=false*/);
+  prog.SetInitialGuess(t1, Eigen::VectorXd::Ones(12));
+  prog.SetInitialGuess(t2, -Eigen::VectorXd::Ones(12));
+  const auto result = solvers::Solve(prog);
+  DRAKE_DEMAND(result.is_success());
+  std::cout << result.get_optimal_cost() << "\n";
+  const Eigen::VectorXd t1_val = result.GetSolution(t1);
+  const Eigen::VectorXd t2_val = result.GetSolution(t2);
+  const Eigen::MatrixXd q1_val = 2 * t1_val.array().atan().matrix();
+  const Eigen::MatrixXd q2_val = 2 * t2_val.array().atan().matrix();
+  std::cout << q1_val.transpose() << "\n";
+  std::cout << q2_val.transpose() << "\n";
+  dual_ur_diagram.plant().SetPositions(&plant_context, q1_val);
+  dual_ur_diagram.diagram().Publish(*diagram_context);
+  std::cout << fmt::format("Posture 1, type to continue\n");
+  std::cin.get();
+  dual_ur_diagram.plant().SetPositions(&plant_context, q2_val);
+  dual_ur_diagram.diagram().Publish(*diagram_context);
+  std::cin.get();
+  std::cin.get();
+}
+
 int DoMain() {
-  const std::string cspace_polytope_file = "dual_ur_cspace_polytope.txt";
-  SearchCspacePolytope(cspace_polytope_file);
+  const std::string cspace_polytope_read_file = "dual_ur_cspace_polytope.txt";
+  const std::string cspace_polytope_write_file = "dual_ur_cspace_polytope1.txt";
+  //SearchCspacePolytope(cspace_polytope_write_file);
+  VisualizaPostures(cspace_polytope_read_file);
   return 0;
 }
 }  // namespace multibody
