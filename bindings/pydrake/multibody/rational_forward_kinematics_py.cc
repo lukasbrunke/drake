@@ -396,11 +396,14 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
               const std::optional<std::pair<Eigen::MatrixXd, Eigen::VectorXd>>&
                   inner_polytope) {
             CspaceFreeRegionSolution cspace_free_region_solution;
+            std::vector<double> polytope_volumes, ellipsoid_determinants;
             self->CspacePolytopeBilinearAlternation(q_star,
                 filtered_collision_pairs, C_init, d_init,
                 bilinear_alternation_option, solver_options, q_inner_pts,
-                inner_polytope, &cspace_free_region_solution);
-            return cspace_free_region_solution;
+                inner_polytope, &cspace_free_region_solution, &polytope_volumes,
+                &ellipsoid_determinants);
+            return std::make_tuple(cspace_free_region_solution,
+                polytope_volumes, ellipsoid_determinants);
           },
           py::arg("q_star"), py::arg("filtered_collision_pairs"),
           py::arg("C_init"), py::arg("d_init"),

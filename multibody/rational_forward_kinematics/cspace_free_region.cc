@@ -1484,7 +1484,9 @@ void CspaceFreeRegion::CspacePolytopeBilinearAlternation(
     const std::optional<Eigen::MatrixXd>& q_inner_pts,
     const std::optional<std::pair<Eigen::MatrixXd, Eigen::VectorXd>>&
         inner_polytope,
-    CspaceFreeRegionSolution* cspace_free_region_solution) const {
+    CspaceFreeRegionSolution* cspace_free_region_solution,
+    std::vector<double>* polytope_volumes,
+    std::vector<double>* ellipsoid_determinants) const {
   if (bilinear_alternation_option.lagrangian_backoff_scale < 0) {
     throw std::invalid_argument(
         fmt::format("lagrangian_backoff_scale={}, should be non-negative",
@@ -1499,6 +1501,10 @@ void CspaceFreeRegion::CspacePolytopeBilinearAlternation(
   const int C_rows = C_init.rows();
   DRAKE_DEMAND(d_init.rows() == C_rows);
   DRAKE_DEMAND(C_init.cols() == rational_forward_kinematics_.t().rows());
+  DRAKE_DEMAND(polytope_volumes != nullptr);
+  polytope_volumes->clear();
+  DRAKE_DEMAND(ellipsoid_determinants != nullptr);
+  ellipsoid_determinants->clear();
 
   // First normalize each row of C and d, such that each row of C has a unit
   // norm. This is important as later when we search for polytope, we impose the
@@ -1575,8 +1581,7 @@ void CspaceFreeRegion::CspacePolytopeBilinearAlternation(
         (cspace_free_region_solution->C), (cspace_free_region_solution->d),
         t_lower, t_upper, bilinear_alternation_option.lagrangian_backoff_scale,
         bilinear_alternation_option.ellipsoid_volume, solver_options,
-        bilinear_alternation_option.verbose,
-        &(cspace_free_region_solution->P),
+        bilinear_alternation_option.verbose, &(cspace_free_region_solution->P),
         &(cspace_free_region_solution->q), &ellipsoid_cost_val);
     // Update the cost.
     cost_improvement = ellipsoid_cost_val - previous_cost;
@@ -1590,9 +1595,8 @@ void CspaceFreeRegion::CspacePolytopeBilinearAlternation(
         t_upper_minus_t, verification_option);
     // Add the constraint that the polytope contains the ellipsoid
     margin = prog_polytope->NewContinuousVariables(C_var.rows(), "margin");
-    AddOuterPolytope(
-        prog_polytope.get(), (cspace_free_region_solution->P),
-        (cspace_free_region_solution->q), C_var, d_var, margin);
+    AddOuterPolytope(prog_polytope.get(), (cspace_free_region_solution->P),
+                     (cspace_free_region_solution->q), C_var, d_var, margin);
 
     // We know that the verified polytope has to be contained in the box t_lower
     // <= t <= t_upper. Hence there is no point to grow the polytope such that
@@ -1670,12 +1674,14 @@ void CspaceFreeRegion::CspacePolytopeBilinearAlternation(
     (cspace_free_region_solution->C) = result_polytope.GetSolution(C_var);
     (cspace_free_region_solution->d) = result_polytope.GetSolution(d_var);
     if (bilinear_alternation_option.compute_polytope_volume) {
+      polytope_volumes->push_back(CalcCspacePolytopeVolume(
+          (cspace_free_region_solution->C), (cspace_free_region_solution->d),
+          t_lower, t_upper));
       drake::log()->info(
-          fmt::format("Polytope volume {}",
-                      CalcCspacePolytopeVolume((cspace_free_region_solution->C),
-                                               (cspace_free_region_solution->d),
-                                               t_lower, t_upper)));
+          fmt::format("Polytope volume {}", polytope_volumes->back()));
     }
+    ellipsoid_determinants->push_back(
+        cspace_free_region_solution->P.determinant());
 
     (cspace_free_region_solution->separating_planes) =
         GetSeparatingPlanesSolution(*this, is_plane_active, result_polytope);
@@ -1776,8 +1782,7 @@ void CspaceFreeRegion::CspacePolytopeBinarySearch(
           (cspace_free_region_solution->C), (cspace_free_region_solution->d),
           t_lower, t_upper, binary_search_option.lagrangian_backoff_scale,
           binary_search_option.ellipsoid_volume, solver_options,
-          binary_search_option.verbose,
-          &(cspace_free_region_solution->P),
+          binary_search_option.verbose, &(cspace_free_region_solution->P),
           &(cspace_free_region_solution->q), &ellipsoid_cost_val);
       if (binary_search_option.search_d) {
         // Now fix the Lagrangian and C, and search for d.
@@ -1821,8 +1826,7 @@ void CspaceFreeRegion::CspacePolytopeBinarySearch(
               (cspace_free_region_solution->d), t_lower, t_upper,
               binary_search_option.lagrangian_backoff_scale,
               binary_search_option.ellipsoid_volume, solver_options,
-              binary_search_option.verbose,
-              &(cspace_free_region_solution->P),
+              binary_search_option.verbose, &(cspace_free_region_solution->P),
               &(cspace_free_region_solution->q), &ellipsoid_cost_val);
         }
       }
@@ -1837,14 +1841,14 @@ void CspaceFreeRegion::CspacePolytopeBinarySearch(
 
   if (is_polytope_collision_free(
           d_without_epsilon +
-              binary_search_option.epsilon_max *
-                  Eigen::VectorXd::Ones(d_without_epsilon.rows()))) {
+          binary_search_option.epsilon_max *
+              Eigen::VectorXd::Ones(d_without_epsilon.rows()))) {
     return;
   }
   if (!is_polytope_collision_free(
           d_without_epsilon +
-              binary_search_option.epsilon_min *
-                  Eigen::VectorXd::Ones(d_without_epsilon.rows()))) {
+          binary_search_option.epsilon_min *
+              Eigen::VectorXd::Ones(d_without_epsilon.rows()))) {
     throw std::runtime_error(
         fmt::format("binary search: the initial epsilon {} is infeasible",
                     binary_search_option.epsilon_min));
@@ -2353,12 +2357,17 @@ double CalcCspacePolytopeVolume(const Eigen::MatrixXd& C,
   const geometry::optimization::VPolytope v_poly(h_poly);
   // TODO(hongkai.dai) call v_poly.CalcVolume() when Drake PR 16409 is merged.
   orgQhull::Qhull qhull;
-  qhull.runQhull("", nt, v_poly.vertices().cols(), v_poly.vertices().data(),
-                 "");
-  if (qhull.qhullStatus() != 0) {
-    throw std::runtime_error(
-        fmt::format("Qhull terminated with status {} and message:\n{}",
-                    qhull.qhullStatus(), qhull.qhullMessage()));
+  try {
+    qhull.runQhull("", nt, v_poly.vertices().cols(), v_poly.vertices().data(),
+                   "");
+    if (qhull.qhullStatus() != 0) {
+      throw std::runtime_error(
+          fmt::format("Qhull terminated with status {} and message:\n{}",
+                      qhull.qhullStatus(), qhull.qhullMessage()));
+    }
+  } catch (const orgQhull::QhullError& e) {
+    drake::log()->warn("Qhull::runQhull fails.");
+    return NAN;
   }
   double volume{NAN};
   try {
