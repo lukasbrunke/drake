@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include "drake/common/temp_directory.h"
 #include "drake/common/test_utilities/eigen_matrix_compare.h"
 #include "drake/common/test_utilities/symbolic_test_util.h"
 #include "drake/geometry/collision_filter_declaration.h"
@@ -1545,6 +1546,25 @@ GTEST_TEST(AddCspacePolytopeContainment, Test2) {
     EXPECT_TRUE(
         ((C_sol * inner_pts.col(i)).array() <= d_sol.array() + 1E-6).all());
   }
+}
+
+GTEST_TEST(ReadAndWriteCspacePolytopeFile, Test) {
+  Eigen::Matrix<double, 2, 3> C;
+  C << 1.0, -0.000001, 0.5, -0.2, 5E3, 0.001;
+  Eigen::Vector2d d(1, 100000000000);
+  Eigen::Vector3d t_lower(1, -0.005, 10000);
+  Eigen::Vector3d t_upper(1000, 1E-8, 100000);
+  const std::string file_name = temp_directory() + "/cspace_polytope.txt";
+  WriteCspacePolytopeToFile(C, d, t_lower, t_upper, file_name, 10);
+  Eigen::MatrixXd C_read;
+  Eigen::VectorXd d_read, t_lower_read, t_upper_read;
+  ReadCspacePolytopeFromFile(file_name, &C_read, &d_read, &t_lower_read,
+                             &t_upper_read);
+  const double tol = 1E-9;
+  EXPECT_TRUE(CompareMatrices(C, C_read, tol));
+  EXPECT_TRUE(CompareMatrices(d, d_read, tol));
+  EXPECT_TRUE(CompareMatrices(t_lower, t_lower_read, tol));
+  EXPECT_TRUE(CompareMatrices(t_upper, t_upper_read, tol));
 }
 
 }  // namespace multibody

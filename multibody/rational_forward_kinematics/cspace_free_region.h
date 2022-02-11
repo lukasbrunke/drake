@@ -812,6 +812,16 @@ void AddCspacePolytopeContainment(
                                               const Eigen::VectorXd& t_lower,
                                               const Eigen::VectorXd& t_upper);
 
+void WriteCspacePolytopeToFile(const Eigen::Ref<const Eigen::MatrixXd>& C,
+                               const Eigen::Ref<const Eigen::VectorXd>& d,
+                               const Eigen::Ref<const Eigen::VectorXd>& t_lower,
+                               const Eigen::Ref<const Eigen::VectorXd>& t_upper,
+                               const std::string& file_name, int precision);
+
+void ReadCspacePolytopeFromFile(const std::string& filename, Eigen::MatrixXd* C,
+                                Eigen::VectorXd* d, Eigen::VectorXd* t_lower,
+                                Eigen::VectorXd* t_upper);
+
 namespace internal {
 // Some of the separating planes will be ignored by filtered_collision_pairs.
 // Returns std::vector<bool> to indicate if each plane is active or not.
