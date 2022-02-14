@@ -242,9 +242,11 @@ void SearchCspacePolytope(
   solver_options.SetOption(solvers::CommonSolverOption::kPrintToConsole, false);
   CspaceFreeRegionSolution cspace_free_region_solution;
   Eigen::VectorXd q_star = Eigen::Matrix<double, 7, 1>::Zero();
+  const Eigen::VectorXd t0 =
+      dut.rational_forward_kinematics().ComputeTValue(q0, q_star);
   dut.CspacePolytopeBinarySearch(
       q_star, filtered_collision_pairs, C_init, d_init, binary_search_option,
-      solver_options, q0, std::nullopt, &cspace_free_region_solution);
+      solver_options, t0, std::nullopt, &cspace_free_region_solution);
   CspaceFreeRegion::BilinearAlternationOption bilinear_alternation_option{
       .max_iters = 50,
       .convergence_tol = 0.001,
@@ -257,7 +259,7 @@ void SearchCspacePolytope(
   dut.CspacePolytopeBilinearAlternation(
       q_star, filtered_collision_pairs, cspace_free_region_solution.C,
       cspace_free_region_solution.d, bilinear_alternation_option,
-      solver_options, q0, std::nullopt, &cspace_free_region_solution,
+      solver_options, t0, std::nullopt, &cspace_free_region_solution,
       &polytope_volumes, &ellipsoid_determinants);
   Eigen::MatrixXd C_final(cspace_free_region_solution.C);
   Eigen::VectorXd d_final(cspace_free_region_solution.d);

@@ -392,14 +392,14 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
               const CspaceFreeRegion::BilinearAlternationOption&
                   bilinear_alternation_option,
               const solvers::SolverOptions& solver_options,
-              const std::optional<Eigen::MatrixXd>& q_inner_pts,
+              const std::optional<Eigen::MatrixXd>& t_inner_pts,
               const std::optional<std::pair<Eigen::MatrixXd, Eigen::VectorXd>>&
                   inner_polytope) {
             CspaceFreeRegionSolution cspace_free_region_solution;
             std::vector<double> polytope_volumes, ellipsoid_determinants;
             self->CspacePolytopeBilinearAlternation(q_star,
                 filtered_collision_pairs, C_init, d_init,
-                bilinear_alternation_option, solver_options, q_inner_pts,
+                bilinear_alternation_option, solver_options, t_inner_pts,
                 inner_polytope, &cspace_free_region_solution, &polytope_volumes,
                 &ellipsoid_determinants);
             return std::make_tuple(cspace_free_region_solution,
@@ -408,7 +408,7 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
           py::arg("q_star"), py::arg("filtered_collision_pairs"),
           py::arg("C_init"), py::arg("d_init"),
           py::arg("bilinear_alternation_option"), py::arg("solver_options"),
-          py::arg("q_inner_pts") = std::nullopt,
+          py::arg("t_inner_pts") = std::nullopt,
           py::arg("inner_polytope") = std::nullopt,
           doc.CspaceFreeRegion.CspacePolytopeBilinearAlternation.doc)
       .def(
@@ -421,18 +421,18 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
               const Eigen::Ref<const Eigen::VectorXd>& d_init,
               const CspaceFreeRegion::BinarySearchOption& binary_search_option,
               const solvers::SolverOptions& solver_options,
-              const std::optional<Eigen::MatrixXd>& q_inner_pts,
+              const std::optional<Eigen::MatrixXd>& t_inner_pts,
               const std::optional<std::pair<Eigen::MatrixXd, Eigen::VectorXd>>&
                   inner_polytope) {
             CspaceFreeRegionSolution cspace_free_region_solution;
             self->CspacePolytopeBinarySearch(q_star, filtered_collision_pairs,
-                C, d_init, binary_search_option, solver_options, q_inner_pts,
+                C, d_init, binary_search_option, solver_options, t_inner_pts,
                 inner_polytope, &cspace_free_region_solution);
             return cspace_free_region_solution;
           },
           py::arg("q_star"), py::arg("filtered_collision_pairs"), py::arg("C"),
           py::arg("d_init"), py::arg("binary_search_option"),
-          py::arg("solver_options"), py::arg("q_inner_pts") = std::nullopt,
+          py::arg("solver_options"), py::arg("t_inner_pts") = std::nullopt,
           py::arg("inner_polytope") = std::nullopt,
           doc.CspaceFreeRegion.CspacePolytopeBinarySearch.doc)
       .def("IsPostureInCollision", &CspaceFreeRegion::IsPostureInCollision,
