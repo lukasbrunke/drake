@@ -66,5 +66,19 @@ void AddDualArmIiwa(const drake::math::RigidTransformd& X_WL,
                     drake::multibody::ModelInstanceIndex* left_iiwa_instance,
                     drake::multibody::ModelInstanceIndex* right_iiwa_instance);
 
+/**
+ * Set diffuse for all the illustration geometries on a given body_index.
+ * If geometry_name is not std::nullopt, then we only set the diffuse for the
+ * geometry on that body with the maching name.
+ * @param rgba_r If not std::nullopt, then set red to this value, otherwise keep
+ * it unchanged.
+ */
+void SetDiffuse(const MultibodyPlant<double>& plant,
+                geometry::SceneGraph<double>* scene_graph,
+                const BodyIndex body_index,
+                const std::optional<std::string>& geometry_name,
+                std::optional<double> rgba_r, std::optional<double> rgba_g,
+                std::optional<double> rgba_b, std::optional<double> rgba_a);
+
 }  // namespace multibody
 }  // namespace drake

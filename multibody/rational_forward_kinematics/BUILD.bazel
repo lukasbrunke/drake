@@ -164,7 +164,6 @@ drake_cc_library(
 
 drake_cc_library(
     name = "rational_forward_kinematics_test_utilities2",
-    testonly = 1,
     srcs = ["test/rational_forward_kinematics_test_utilities2.cc"],
     hdrs = ["test/rational_forward_kinematics_test_utilities2.h"],
     data = [
@@ -261,6 +260,7 @@ drake_cc_binary(
     ],
     deps = [
         ":cspace_free_region",
+        ":rational_forward_kinematics_test_utilities2",
         "//common:find_resource",
         "//geometry:meshcat_visualizer",
         "//geometry/optimization:polytope_cover",
