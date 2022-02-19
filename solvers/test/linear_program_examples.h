@@ -5,6 +5,7 @@
 #include <tuple>
 #include <vector>
 
+#include "drake/common/drake_copyable.h"
 #include "drake/solvers/test/optimization_examples.h"
 
 namespace drake {
@@ -205,6 +206,22 @@ class UnboundedLinearProgramTest1 : public ::testing::Test {
 
  protected:
   std::unique_ptr<MathematicalProgram> prog_;
+};
+
+/**
+ * An unbounded linear program with no constraints.
+ * min x[0] + x[1]
+ */
+class UnboundedLinearProgramTest2 : public ::testing::Test {
+ public:
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(UnboundedLinearProgramTest2)
+
+  UnboundedLinearProgramTest2();
+
+  ~UnboundedLinearProgramTest2() override {}
+
+ protected:
+  std::unique_ptr<solvers::MathematicalProgram> prog_;
 };
 
 /**

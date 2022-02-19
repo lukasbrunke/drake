@@ -421,6 +421,12 @@ UnboundedLinearProgramTest1::UnboundedLinearProgramTest1()
   prog_->AddBoundingBoxConstraint(0, 1, VectorDecisionVariable<2>(x(0), x(2)));
 }
 
+UnboundedLinearProgramTest2::UnboundedLinearProgramTest2()
+    : prog_(std::make_unique<MathematicalProgram>()) {
+  auto x = prog_->NewContinuousVariables<2>("x");
+  prog_->AddLinearCost(Eigen::Vector2d(1, 1), x);
+}
+
 void TestLPDualSolution1(const SolverInterface& solver, double tol) {
   MathematicalProgram prog;
   auto x = prog.NewContinuousVariables<2>();
