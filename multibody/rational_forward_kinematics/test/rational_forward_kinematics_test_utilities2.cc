@@ -155,5 +155,52 @@ void AddDualArmIiwa(const RigidTransformd& X_WL, const RigidTransformd& X_WR,
                     plant->GetFrameByName("body", right_schunk_instance), X_7S);
 }
 
+void SetDiffuse(const MultibodyPlant<double>& plant,
+                geometry::SceneGraph<double>* scene_graph,
+                const BodyIndex body_index,
+                const std::optional<std::string>& geometry_name,
+                std::optional<double> rgba_r, std::optional<double> rgba_g,
+                std::optional<double> rgba_b, std::optional<double> rgba_a) {
+  const auto& inspector = scene_graph->model_inspector();
+  const std::optional<geometry::FrameId> frame_id =
+      plant.GetBodyFrameIdIfExists(body_index);
+  if (frame_id.has_value()) {
+    for (const auto& geometry_id : inspector.GetGeometries(
+             frame_id.value(), geometry::Role::kIllustration)) {
+      if (geometry_name.has_value()) {
+        if (inspector.GetName(geometry_id) != *geometry_name) {
+          continue;
+        }
+      }
+      const geometry::GeometryProperties* props =
+          inspector.GetProperties(geometry_id, geometry::Role::kIllustration);
+      if (props == nullptr || !props->HasProperty("phong", "diffuse")) {
+        DRAKE_DEMAND(rgba_r.has_value());
+        DRAKE_DEMAND(rgba_g.has_value());
+        DRAKE_DEMAND(rgba_b.has_value());
+        DRAKE_DEMAND(rgba_a.has_value());
+        geometry::IllustrationProperties new_props =
+            geometry::MakePhongIllustrationProperties(
+                Eigen::Vector4d(rgba_r.value(), rgba_g.value(), rgba_b.value(),
+                                rgba_a.value()));
+        scene_graph->AssignRole(*plant.get_source_id(), geometry_id, new_props,
+                                geometry::RoleAssign::kReplace);
+      } else {
+        const auto old_rgba =
+            props->GetProperty<geometry::Rgba>("phong", "diffuse");
+        double rgba_r_val = rgba_r.has_value() ? rgba_r.value() : old_rgba.r();
+        double rgba_g_val = rgba_g.has_value() ? rgba_g.value() : old_rgba.g();
+        double rgba_b_val = rgba_b.has_value() ? rgba_b.value() : old_rgba.b();
+        double rgba_a_val = rgba_a.has_value() ? rgba_a.value() : old_rgba.a();
+        geometry::IllustrationProperties new_props =
+            geometry::MakePhongIllustrationProperties(Eigen::Vector4d(
+                rgba_r_val, rgba_g_val, rgba_b_val, rgba_a_val));
+        scene_graph->AssignRole(*plant.get_source_id(), geometry_id, new_props,
+                                geometry::RoleAssign::kReplace);
+      }
+    }
+  }
+}
+
 }  // namespace multibody
 }  // namespace drake
