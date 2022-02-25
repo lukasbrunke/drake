@@ -70,8 +70,22 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
         .def("t", &Class::t
             //             cls_doc.CalcLinkPoses
             )
-        .def("ComputeTValue", &Class::ComputeTValue, py::arg("q_val"),
-            py::arg("q_star_val"), py::arg("clamp_angle") = false
+        .def("ComputeTValue",
+            overload_cast_explicit<Eigen::VectorXd,
+                const Eigen::Ref<const Eigen::VectorXd>&,
+                const Eigen::Ref<const Eigen::VectorXd>&, bool>(
+                &Class::ComputeTValue),
+            py::arg("q_val"), py::arg("q_star_val"),
+            py::arg("clamp_angle") = false
+            //             cls_doc.CalcLinkPoses
+            )
+
+        .def("ComputeQValue",
+            overload_cast_explicit<Eigen::VectorXd,
+                const Eigen::Ref<const Eigen::VectorXd>&,
+                const Eigen::Ref<const Eigen::VectorXd>&>(
+                &Class::ComputeQValue),
+            py::arg("t_val"), py::arg("q_star_val")
             //             cls_doc.CalcLinkPoses
             )
         .def(
@@ -282,7 +296,10 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
       .def("GenerateLinkOnOneSideOfPlaneRationals",
           &CspaceFreeRegion::GenerateLinkOnOneSideOfPlaneRationals,
           py::arg("q_star"), py::arg("filtered_collision_pairs"),
-          doc.CspaceFreeRegion.GenerateLinkOnOneSideOfPlaneRationals.doc);
+          doc.CspaceFreeRegion.GenerateLinkOnOneSideOfPlaneRationals.doc)
+      .def_property_readonly("rational_forward_kinematics",
+          &CspaceFreeRegion::rational_forward_kinematics,
+          doc.CspaceFreeRegion.rational_forward_kinematics.doc);
 
   // CspacePolytopeTuple
   py::class_<CspaceFreeRegion::CspacePolytopeTuple>(cspace_cls,
