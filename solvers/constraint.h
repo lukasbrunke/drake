@@ -697,17 +697,20 @@ class LinearEqualityConstraint : public LinearConstraint {
  *
  * @ingroup solver_evaluators
  */
-class BoundingBoxConstraint : public LinearConstraint {
+class BoundingBoxConstraint : public Constraint {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(BoundingBoxConstraint)
 
   template <typename DerivedLB, typename DerivedUB>
   BoundingBoxConstraint(const Eigen::MatrixBase<DerivedLB>& lb,
                         const Eigen::MatrixBase<DerivedUB>& ub)
-      : LinearConstraint(Eigen::MatrixXd::Identity(lb.rows(), lb.rows()), lb,
-                         ub) {}
+      : Constraint(lb.rows(), lb.rows(), lb, ub) {}
 
   ~BoundingBoxConstraint() override {}
+
+  using Constraint::set_bounds;
+  using Constraint::UpdateLowerBound;
+  using Constraint::UpdateUpperBound;
 
  private:
   template <typename DerivedX, typename ScalarY>

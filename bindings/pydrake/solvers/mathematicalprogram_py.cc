@@ -1776,13 +1776,32 @@ void BindEvaluatorsAndBindings(py::module m) {
           py::arg("Aeq"), py::arg("beq"),
           doc.LinearEqualityConstraint.UpdateCoefficients.doc);
 
-  py::class_<BoundingBoxConstraint, LinearConstraint,
+  py::class_<BoundingBoxConstraint, Constraint,
       std::shared_ptr<BoundingBoxConstraint>>(
       m, "BoundingBoxConstraint", doc.BoundingBoxConstraint.doc)
       .def(py::init([](const Eigen::VectorXd& lb, const Eigen::VectorXd& ub) {
         return std::make_unique<BoundingBoxConstraint>(lb, ub);
       }),
-          py::arg("lb"), py::arg("ub"), doc.BoundingBoxConstraint.ctor.doc);
+          py::arg("lb"), py::arg("ub"), doc.BoundingBoxConstraint.ctor.doc)
+      .def(
+          "UpdateLowerBound",
+          [](BoundingBoxConstraint& self, const Eigen::VectorXd& new_lb) {
+            self.UpdateLowerBound(new_lb);
+          },
+          py::arg("new_lb"), doc.Constraint.UpdateLowerBound.doc)
+      .def(
+          "UpdateUpperBound",
+          [](BoundingBoxConstraint& self, const Eigen::VectorXd& new_ub) {
+            self.UpdateUpperBound(new_ub);
+          },
+          py::arg("new_ub"), doc.Constraint.UpdateUpperBound.doc)
+      .def(
+          "set_bounds",
+          [](BoundingBoxConstraint& self, const Eigen::VectorXd& new_lb,
+              const Eigen::VectorXd& new_ub) {
+            self.set_bounds(new_lb, new_ub);
+          },
+          py::arg("new_lb"), py::arg("new_ub"), doc.Constraint.set_bounds.doc);
 
   py::class_<QuadraticConstraint, Constraint,
       std::shared_ptr<QuadraticConstraint>>(

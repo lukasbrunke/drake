@@ -1737,8 +1737,6 @@ int MathematicalProgram::RemoveConstraint(
         ProgramAttribute::kLinearEqualityConstraint,
         &linear_equality_constraints_);
   } else if (dynamic_cast<BoundingBoxConstraint*>(constraint_evaluator)) {
-    // BoundingBoxConstraint is derived from LinearConstraint. Put this branch
-    // before the LinearConstraint branch.
     return RemoveCostOrConstraintImpl(
         internal::BindingDynamicCast<BoundingBoxConstraint>(constraint),
         ProgramAttribute::kLinearConstraint, &bbox_constraints_);
