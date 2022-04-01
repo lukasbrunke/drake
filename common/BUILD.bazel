@@ -16,6 +16,12 @@ load(
 load("@drake//tools/install:install.bzl", "install")
 load("//tools/lint:lint.bzl", "add_lint_tests")
 
+load(
+    "@drake//tools/performance:defs.bzl",
+    "drake_cc_googlebench_binary",
+    "drake_py_experiment_binary",
+)
+
 package(default_visibility = ["//visibility:public"])
 
 drake_cc_package_library(
@@ -1499,6 +1505,20 @@ drake_cc_googletest(
         "//common/test_utilities:expect_throws_message",
         "//systems/framework/test_utilities:my_vector",
     ],
+)
+
+drake_cc_googlebench_binary(
+    name = "symbolic_decompose_benchmark",
+    srcs = ["test/symbolic_decompose_benchmark.cc"],
+    deps = [
+        ":symbolic_decompose",
+        "//tools/performance:fixture_common",
+    ],
+)
+
+drake_py_experiment_binary(
+    name = "symbolic_decompose_experiment",
+    googlebench_binary = ":symbolic_decompose_benchmark",
 )
 
 add_lint_tests(
