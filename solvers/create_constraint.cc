@@ -48,10 +48,14 @@ Binding<Constraint> ParseConstraint(
   // Setup map_var_to_index and var_vec.
   // such that map_var_to_index[var(i)] = i
   unordered_map<Variable::Id, int> map_var_to_index;
-  VectorXDecisionVariable vars(0);
+  std::vector<symbolic::Variable> vars_vec;
   for (int i = 0; i < v.size(); ++i) {
-    symbolic::ExtractAndAppendVariablesFromExpression(v(i), &vars,
+    symbolic::ExtractAndAppendVariablesFromExpression(v(i), &vars_vec,
                                                       &map_var_to_index);
+  }
+  VectorXDecisionVariable vars(vars_vec.size());
+  for (int i = 0; i < static_cast<int>(vars_vec.size()); ++i) {
+    vars(i) = vars_vec[i];
   }
 
   // Construct A, new_lb, new_ub. map_var_to_index is used here.
