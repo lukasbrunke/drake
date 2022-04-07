@@ -44,7 +44,6 @@ class RationalForwardKinematics {
     Eigen::Matrix<T, 3, 3> R_AB;
 
     drake::multibody::BodyIndex frame_A_index;
-    int one() { return 1; }
     drake::math::RigidTransform<drake::symbolic::Expression>
     asRigidTransformExpression() const {
       Eigen::Matrix<drake::symbolic::Expression, 3, 3> R_AB_expr;
@@ -60,19 +59,6 @@ class RationalForwardKinematics {
                                              p_AB.coeff(2).ToExpression()};
       return drake::math::RigidTransform(R, p);
     }
-    // drake::math::RigidTransform<T> asRigidTransform() const{
-    //     Eigen::Matrix<T,3,3>  R_AB_expr;
-    //     R_AB_expr <<
-    //         R_AB.coeff(0,0), R_AB.coeff(0,1), R_AB.coeff(0,2),
-    //         R_AB.coeff(1,0), R_AB.coeff(1,1), R_AB.coeff(1,2),
-    //         R_AB.coeff(2,0), R_AB.coeff(2,1), R_AB.coeff(2,2)
-    //         ;
-    //     math::RotationMatrix<T>  R(R_AB_expr);
-
-    //     Vector3<T> p {
-    //     p_AB.coeff(0), p_AB.coeff(1), p_AB.coeff(2)
-    //     };
-    // return drake::math::RigidTransform(R, p);
   };
 
   struct LinkPoints {
@@ -138,7 +124,6 @@ class RationalForwardKinematics {
     return map_t_to_mobilizer_;
   }
 
-
   /**
    * compute t = tan((q_val - q_star_val / 2)), while handling the index
    * matching between q and t. If @p clamp_angle = true, then t = infinity if
@@ -160,24 +145,24 @@ class RationalForwardKinematics {
       bool clamp_angle = false) const;
 
   /**
-   * compute q = arctan2(2*t/(1+t**2), (1-t**2)/(1+t**2)) + q_star, while handling the index
-   * matching between q and t.
+   * compute q = arctan2(2*t/(1+t**2), (1-t**2)/(1+t**2)) + q_star, while
+   * handling the index matching between q and t.
    */
   Eigen::VectorXd ComputeQValue(
       const Eigen::Ref<const Eigen::VectorXd>& t_val,
       const Eigen::Ref<const Eigen::VectorXd>& q_star_val) const;
 
   /**
-   * compute q = arctan2(2*t/(1+t**2), (1-t**2)/(1+t**2)) + q_star, while handling the index
-   * matching between q and t.
+   * compute q = arctan2(2*t/(1+t**2), (1-t**2)/(1+t**2)) + q_star, while
+   * handling the index matching between q and t.
    */
   VectorX<symbolic::Expression> ComputeQValue(
       const Eigen::Ref<const VectorX<symbolic::Expression>>& t_val,
       const Eigen::Ref<const Eigen::VectorXd>& q_star_val) const;
 
   /**
-   * compute q = arctan2(2*t/(1+t**2), (1-t**2)/(1+t**2)) + q_star, while handling the index
-   * matching between q and t.
+   * compute q = arctan2(2*t/(1+t**2), (1-t**2)/(1+t**2)) + q_star, while
+   * handling the index matching between q and t.
    */
   VectorX<AutoDiffXd> ComputeQValue(
       const Eigen::Ref<const VectorX<AutoDiffXd>>& t_val,

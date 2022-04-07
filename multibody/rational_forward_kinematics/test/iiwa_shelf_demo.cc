@@ -9,7 +9,7 @@
 #include "drake/multibody/inverse_kinematics/inverse_kinematics.h"
 #include "drake/multibody/parsing/parser.h"
 #include "drake/multibody/rational_forward_kinematics/cspace_free_region.h"
-#include "drake/multibody/rational_forward_kinematics/test/rational_forward_kinematics_test_utilities2.h"
+#include "drake/multibody/rational_forward_kinematics/test/rational_forward_kinematics_test_utilities.h"
 #include "drake/solvers/common_solver_option.h"
 #include "drake/solvers/gurobi_solver.h"
 #include "drake/solvers/mosek_solver.h"
@@ -25,7 +25,7 @@ class IiwaDiagram {
   // @param num_iiwas We use num_iiwas != 1 purely for visualizaing multiple
   // postures of the same IIWA simultaneously. Don't use num_iiwas!=1 for
   // computing cspace region
-  IiwaDiagram(int num_iiwas = 1)
+  explicit IiwaDiagram(int num_iiwas = 1)
       : meshcat_{std::make_shared<geometry::Meshcat>()} {
     systems::DiagramBuilder<double> builder;
     auto [plant, sg] = AddMultibodyPlantSceneGraph(&builder, 0.);
@@ -99,7 +99,8 @@ class IiwaDiagram {
     }
 
     const std::string shelf_file_path =
-        FindResourceOrThrow("drake/sos_iris_certifier/shelves.sdf");
+        FindResourceOrThrow("drake/multibody/"
+                            "rational_forward_kinematics/test/shelves.sdf");
     const auto shelf_instance =
         parser.AddModelFromFile(shelf_file_path, "shelves");
     const auto& shelf_frame =

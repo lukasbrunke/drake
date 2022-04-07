@@ -1,8 +1,5 @@
 import numpy as np
 from pydrake.geometry import SceneGraph
-from pydrake.systems.framework import DiagramBuilder
-from pydrake.common import FindResourceOrThrow
-from pydrake.multibody.plant import MultibodyPlant, AddMultibodyPlantSceneGraph
 from pydrake.multibody.parsing import Parser, LoadModelDirectives, ProcessModelDirectives
 from pydrake.all import GeometrySet
 from functools import partial
@@ -12,10 +9,7 @@ from pydrake.all import GenerateMonomialBasisOrderAllUpToOneExceptOneUpToTwo, Ge
 import pydrake.symbolic as sym
 import iris_utils
 import time
-from joblib import Parallel, delayed
 from contextlib import contextmanager
-import logging
-
 
 do_timing = True
 @contextmanager
@@ -34,6 +28,11 @@ def _log_time_usage(prefix=""):
         # logging.debug('%s: elapsed seconds: %s', prefix, elapsed_seconds)
 
 class CertifiedIrisRegionGenerator():
+    """
+    This class provides an Implementation of C-IRIS that is written purely in Python. It is provided for the purposes
+    of readability. While correct, it is not designed to be scaled up to larger problems in the way that the bound
+    C++ implementation can.
+    """
     def __init__(self, diagram, plant, scene_graph, **kwargs):
         self.diagram = diagram
         self.plant = plant
@@ -49,15 +48,16 @@ class CertifiedIrisRegionGenerator():
 
         # Construct Rational Forward Kinematics
         self.forward_kin = RationalForwardKinematics(plant)
-        self.t_variables = sym.Variables(self.forward_kin.t())
+        self.s_variables = sym.Variables(self.forward_kin.t())
 
         self.num_joints = self.plant.num_positions()
+
         # the point around which we construct the stereographic projection
         self.q_star = kwargs.get('q_star', np.zeros(self.num_joints))
         self.q_lower_limits = plant.GetPositionLowerLimits()
-        self.t_lower_limits = self.forward_kin.ComputeTValue(self.q_lower_limits, self.q_star)
+        self.s_lower_limits = self.forward_kin.ComputeTValue(self.q_lower_limits, self.q_star)
         self.q_upper_limits = plant.GetPositionUpperLimits()
-        self.t_upper_limits = self.forward_kin.ComputeTValue(self.q_upper_limits, self.q_star)
+        self.s_upper_limits = self.forward_kin.ComputeTValue(self.q_upper_limits, self.q_star)
 
         # initialize Solvers
         self.snopt = SnoptSolver()
@@ -75,6 +75,7 @@ class CertifiedIrisRegionGenerator():
         self.ellipses = None
 
         #construct certification problems
+        # Dictionary mapping HPolyhedron Object -> RegionCertificationProblem
         self.certification_problems = None
 
         self.linesearch_regions = None
@@ -84,7 +85,7 @@ class CertifiedIrisRegionGenerator():
         self.alternation_search_regions_to_certificates_by_collision_pair_map = None
 
     #region IRIS
-    def iris_in_rational_space(self, seed_points, termination_threshold=2e-2, iteration_limit=1000):
+    def generate_initial_regions(self, seed_points, termination_threshold=2e-2, iteration_limit=1000):
         """
         Create IRIS regions in the rational parametrization of the forward kinematics. Calling this method will
         overwrite any stored seedpoints, regions, and ellipses stored in the class member variables
@@ -118,7 +119,7 @@ class CertifiedIrisRegionGenerator():
         E = Hyperellipsoid(np.eye(self.num_joints) / self._iris_starting_ellipse_vol, point)
         best_volume = E.Volume()
 
-        P = HPolyhedron.MakeBox(self.t_lower_limits, self.t_upper_limits)
+        P = HPolyhedron.MakeBox(self.s_lower_limits, self.s_upper_limits)
         A = np.vstack((P.A(), np.zeros((self._iris_default_num_faces * len(self.pairs), self.num_joints))))
         b = np.concatenate((P.b(), np.zeros(self._iris_default_num_faces * len(self.pairs))))
 
@@ -135,18 +136,18 @@ class CertifiedIrisRegionGenerator():
                     X_WB = self.X_WA_list[int(self.body_indexes_by_geom_id[geomB])]
                     hpoly_A = self.hpoly_sets_in_self_frame_by_geom_id[geomA]
                     hpoly_B = self.hpoly_sets_in_self_frame_by_geom_id[geomB]
-                    success, growth, t_sol = self.GrowthVolumeRational(E,
+                    success, growth, s_sol = self.GrowthVolumeRational(E,
                                                                   X_WA, X_WB,
                                                                   hpoly_A, hpoly_B,
                                                                   A[:num_faces, :], b[:num_faces] - self._iris_plane_pullback,
                                                                   point)
                     if success:
-                        print(f"snopt_example={t_sol}, growth = {growth}")
+                        print(f"snopt_example={s_sol}, growth = {growth}")
                         # Add a face to the polytope
-                        A[num_faces, :], b[num_faces] = self.TangentPlaneOfEllipse(E,t_sol)
+                        A[num_faces, :], b[num_faces] = self.TangentPlaneOfEllipse(E,s_sol)
                         num_faces += 1
 
-                        if self._iris_max_faces > 0 and num_faces > self._iris_max_faces+1:
+                        if self._iris_max_ineqs > 0 and num_faces > self._iris_max_ineqs+1:
                             break
                         if num_faces >= A.shape[0]-1:
                             # double number of faces if we exceed the number of faces preallocated
@@ -160,7 +161,7 @@ class CertifiedIrisRegionGenerator():
             if any([np.any(A[:num_faces, :] @ p > b[:num_faces]) for p in require_containment_points]):
                 print("terminating because a required containment point would have not been contained")
                 break
-            if self._iris_max_faces > 0 and num_faces > self._iris_max_faces+1:
+            if self._iris_max_ineqs > 0 and num_faces > self._iris_max_ineqs+1:
                 print("terminating because too many faces")
                 break
 
@@ -208,7 +209,6 @@ class CertifiedIrisRegionGenerator():
     #endregion
 
     # region certification
-    # region certification intialization
     def certify_and_adjust_regions_by_linesearch(self, convergence_threshold = 1e-5):
         if self.certification_problems is None:
             raise ValueError("initialize certifier before calling this method")
@@ -251,6 +251,7 @@ class CertifiedIrisRegionGenerator():
         self.alternation_search_regions = new_regions_by_alternation
         self.alternation_search_regions_to_certificates_by_collision_pair_map = certificates_by_new_region
 
+    # region certification intialization
     def initalize_certifier(self, plane_order = -1, strict_pos_tol = 1e-5, penalize_coeffs = True):
         if self.regions is None:
             raise ValueError("generate iris regions before attempting certification")
@@ -319,8 +320,8 @@ class CertifiedIrisRegionGenerator():
         b_poly = (b_coeffs @ basis).item()
 
         for i, p in enumerate(a_poly):
-            a_poly[i].SetIndeterminates(self.t_variables)
-        b_poly.SetIndeterminates(self.t_variables)
+            a_poly[i].SetIndeterminates(self.s_variables)
+        b_poly.SetIndeterminates(self.s_variables)
         return a_poly, b_poly, a_vars, b_vars
 
     def construct_separating_hyperplane_by_order(self, order, plane_name='', subset = None):
@@ -331,7 +332,7 @@ class CertifiedIrisRegionGenerator():
         :param subset: subset of variables t to use in dense monomial basis
         :return: program and tuple of the coefficient (a(t), b(t))
         """
-        t = self.t_variables[subset] if subset is not None else self.t_variables
+        t = self.s_variables[subset] if subset is not None else self.s_variables
         basis = sym.MonomialBasis(t, order)
         return self.construct_separating_hyperplane_by_basis(basis, plane_name=plane_name)
 
@@ -395,7 +396,7 @@ class CertifiedIrisRegionGenerator():
             else:
                 raise ValueError("leq_or_geq arg must be leq or geq not {}".format(leq_or_geq))
             plane_polys_per_vertex[i] -= strict_pos_tol
-            plane_polys_per_vertex[i].SetIndeterminates(self.t_variables)
+            plane_polys_per_vertex[i].SetIndeterminates(self.s_variables)
 
         return plane_polys_per_vertex
 
@@ -405,7 +406,8 @@ class CertifiedIrisRegionGenerator():
         geometries
         :param geomA: Geometry A
         :param geomB: Geometry B
-        :param plane_order:  order of desired separating hyperplane polynomial
+        :param plane_order:  polynomial degree of desired separating hyperplane polynomial.
+        -1 leads to the square of the multlinear basis
         :param strict_pos_tol: tolerance for p(x) >= strict_pos_tol > 0
         :return: (a_poly, b_poly) -> polynomials defining a^Tx+b = 0
         (plane_constraint_polynomials_A, plane_constraint_polynomials_B) -> polynomials which must be positive to certify
@@ -421,7 +423,7 @@ class CertifiedIrisRegionGenerator():
             a_poly, b_poly, a_vars, b_vars = self.construct_separating_hyperplane_by_order(plane_order)
         else:
             # TODO use only the subset of the variables that are currently present
-            basis = GenerateMonomialBasisOrderAllUpToOneExceptOneUpToTwo(self.t_variables)
+            basis = GenerateMonomialBasisOrderAllUpToOneExceptOneUpToTwo(self.s_variables)
             a_poly, b_poly, a_vars, b_vars = self.construct_separating_hyperplane_by_basis(basis)
         plane_constraint_polynomials_A = self.makeBodyHyperplaneSidePolynomial(a_poly, b_poly,
                                                                                VPolyA, R_WA, p_WA, 'leq',
@@ -442,11 +444,11 @@ class CertifiedIrisRegionGenerator():
         s_min1_basis = s_min1_basis if s_min1_basis is not None else basis
         multiplier_map = dict.fromkeys([-1] + [i for i in range(num_multipliers)])
         l, Q = dummy_prog.NewSosPolynomial(s_min1_basis)
-        l.SetIndeterminates(self.t_variables)
+        l.SetIndeterminates(self.s_variables)
         multiplier_map[-1] = (l,Q)
         for i in range(num_multipliers):
             l, Q = dummy_prog.NewSosPolynomial(basis)
-            l.SetIndeterminates(self.t_variables)
+            l.SetIndeterminates(self.s_variables)
             multiplier_map[i] = (l,Q)
         return multiplier_map
 
@@ -462,8 +464,8 @@ class CertifiedIrisRegionGenerator():
 
         self._iris_plane_pullback = kwargs.get('iris_plane_pullback', 1e-5)
 
-        self._iris_max_faces = kwargs.get('iris_max_faces', 10)
-        self._iris_default_num_faces = kwargs.get('iris_default_num_face', self._iris_max_faces if self._iris_max_faces > 0 else 10)
+        self._iris_max_ineqs = kwargs.get('iris_max_ineqs', 10)
+        self._iris_default_num_faces = kwargs.get('iris_default_num_face', self._iris_max_ineqs if self._iris_max_ineqs > 0 else 10)
 
     def _initialize_transform_logistics(self):
         #TODO: currently, we do everything in world pose. As hongkai points out this can make very high
@@ -503,18 +505,18 @@ class RegionCertificationProblem:
                  collision_pair_to_plane_variable_map,
                  collision_pair_to_plane_poly_map,
                  geom_id_and_vert_to_pos_poly_and_multiplier_variable_map,
-                 t_array,
+                 s_array,
                  solver,
                  penalize_plane_coeffs = True,
                  max_region_adjustment_tolerance = 1):
 
         self.certify_for_fixed_eps_prog = certify_for_fixed_eps_prog
         self.certify_for_fixed_multiplier_prog = certify_for_fixed_multiplier_prog
-        self.t_array = t_array
-        self.t_variables = sym.Variables(t_array)
+        self.s_array = s_array
+        self.s_variables = sym.Variables(s_array)
 
-        self.certify_for_fixed_eps_prog.AddIndeterminates(self.t_array)
-        self.certify_for_fixed_multiplier_prog.AddIndeterminates(self.t_array)
+        self.certify_for_fixed_eps_prog.AddIndeterminates(self.s_array)
+        self.certify_for_fixed_multiplier_prog.AddIndeterminates(self.s_array)
         self.solver = solver
 
 
@@ -736,7 +738,7 @@ class RegionCertificationProblem:
             for i in range(epsilon.shape[0]):
                 if np.abs(epsilon[i]) > 1e-5:
                     putinar_cone_poly += -epsilon[i]*multiplier_map[i][0]
-            putinar_cone_poly.SetIndeterminates(self.t_variables)
+            putinar_cone_poly.SetIndeterminates(self.s_variables)
 
             self.geom_id_and_vert_to_positive_poly_eq_constraints[geom_id_and_vert] =\
                 self.ManualAddEqualityConstraintsBetweenPolynomials(self.certify_for_fixed_eps_prog,
@@ -786,8 +788,8 @@ class RegionCertificationProblem:
                 l, Q = multiplier_map[i]
                 self.certify_for_fixed_eps_prog.AddDecisionVariables(Q[np.triu_indices(Q.shape[0])])
                 self.certify_for_fixed_eps_prog.AddSosConstraint(l)
-                putinar_cone_poly += l * sym.Polynomial(d[i] - C[i, :] @ self.t_array)
-            putinar_cone_poly.SetIndeterminates(self.t_variables)
+                putinar_cone_poly += l * sym.Polynomial(d[i] - C[i, :] @ self.s_array)
+            putinar_cone_poly.SetIndeterminates(self.s_variables)
             self.geom_id_and_vert_to_pos_poly_and_putinar_preallocated_cone[geom_id_and_vert] = \
                 (poly, putinar_cone_poly)
 
@@ -832,11 +834,11 @@ class RegionCertificationProblem:
             # rhs = multiplier_map[-1][0]
             for i in range(self.var_eps.shape[0]):
                 e = self.var_eps[i]
-                rtmp = sym.Polynomial(d[i] - e - C[i, :] @ self.t_array)
+                rtmp = sym.Polynomial(d[i] - e - C[i, :] @ self.s_array)
                 # ensures that eps isn't considered an indeterminate
-                rtmp.SetIndeterminates(self.t_variables)
+                rtmp.SetIndeterminates(self.s_variables)
                 rhs += multiplier_map[i][0] * rtmp
-            rhs.SetIndeterminates(self.t_variables)
+            rhs.SetIndeterminates(self.s_variables)
 
             self.geom_id_and_vert_to_positive_poly_eq_constraint_fixed_multiplier[geom_id_and_vert] = \
                 self.ManualAddEqualityConstraintsBetweenPolynomials(self.certify_for_fixed_multiplier_prog,
