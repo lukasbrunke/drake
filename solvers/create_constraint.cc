@@ -36,13 +36,18 @@ Binding<Constraint> ParseConstraint(
     const Eigen::Ref<const Eigen::VectorXd>& ub) {
   DRAKE_ASSERT(v.rows() == lb.rows() && v.rows() == ub.rows());
 
-  if (!IsAffine(v)) {
-    auto constraint = make_shared<ExpressionConstraint>(v, lb, ub);
+  VectorX<Expression> v_expanded(v.rows());
+  for (int i = 0; i < v.rows(); ++i) {
+    v_expanded(i) = v(i).Expand();
+  }
+
+  if (!IsAffine(v_expanded)) {
+    auto constraint = make_shared<ExpressionConstraint>(v_expanded, lb, ub);
     return CreateBinding(constraint, constraint->vars());
   }  // else, continue on to linear-specific version below.
 
   if ((ub - lb).isZero()) {
-    return ParseLinearEqualityConstraint(v, lb);
+    return ParseLinearEqualityConstraint(v_expanded, lb);
   }
 
   // Setup map_var_to_index and vars.
@@ -50,26 +55,26 @@ Binding<Constraint> ParseConstraint(
   VectorXDecisionVariable vars;
   unordered_map<Variable::Id, int> map_var_to_index;
   std::tie(vars, map_var_to_index) =
-      symbolic::ExtractVariablesFromExpression(v);
+      symbolic::ExtractVariablesFromExpression(v_expanded);
 
   // Construct A, new_lb, new_ub. map_var_to_index is used here.
-  Eigen::MatrixXd A{Eigen::MatrixXd::Zero(v.size(), vars.size())};
-  Eigen::VectorXd new_lb{v.size()};
-  Eigen::VectorXd new_ub{v.size()};
+  Eigen::MatrixXd A{Eigen::MatrixXd::Zero(v_expanded.size(), vars.size())};
+  Eigen::VectorXd new_lb{v_expanded.size()};
+  Eigen::VectorXd new_ub{v_expanded.size()};
   // We will determine if lb <= v <= ub is a bounding box constraint, namely
   // x_lb <= x <= x_ub.
   bool is_v_bounding_box = true;
-  for (int i = 0; i < v.size(); ++i) {
+  for (int i = 0; i < v_expanded.size(); ++i) {
     double constant_term = 0;
     int num_vi_variables = symbolic::DecomposeAffineExpression(
-        v(i), map_var_to_index, A.row(i), &constant_term);
+        v_expanded(i), map_var_to_index, A.row(i), &constant_term);
     if (num_vi_variables == 0 &&
         !(lb(i) <= constant_term && constant_term <= ub(i))) {
       // Unsatisfiable constraint with no variables, such as 1 <= 0 <= 2
       throw std::runtime_error(
           fmt::format("Constraint {} <= {} <= {} is unsatisfiable but called "
                       "with ParseConstraint.",
-                      lb(i), v(i).to_string(), ub(i)));
+                      lb(i), v_expanded(i).to_string(), ub(i)));
 
     } else {
       new_lb(i) = lb(i) - constant_term;
@@ -84,11 +89,11 @@ Binding<Constraint> ParseConstraint(
   if (is_v_bounding_box) {
     // If every lb(i) <= v(i) <= ub(i) is a bounding box constraint, then
     // formulate a bounding box constraint x_lb <= x <= x_ub
-    VectorXDecisionVariable bounding_box_x(v.size());
-    for (int i = 0; i < v.size(); ++i) {
+    VectorXDecisionVariable bounding_box_x(v_expanded.size());
+    for (int i = 0; i < v_expanded.size(); ++i) {
       // v(i) is in the form of c * x
       double x_coeff = 0;
-      for (const auto& x : v(i).GetVariables()) {
+      for (const auto& x : v_expanded(i).GetVariables()) {
         const double coeff = A(i, map_var_to_index[x.get_id()]);
         if (coeff != 0) {
           x_coeff += coeff;
@@ -470,17 +475,21 @@ Binding<LinearEqualityConstraint> ParseLinearEqualityConstraint(
 Binding<LinearEqualityConstraint> DoParseLinearEqualityConstraint(
     const Eigen::Ref<const VectorX<Expression>>& v,
     const Eigen::Ref<const Eigen::VectorXd>& b) {
+  VectorX<Expression> v_expanded(v.rows());
+  for (int i = 0; i < v.rows(); ++i) {
+    v_expanded(i) = v(i).Expand();
+  }
   DRAKE_DEMAND(v.rows() == b.rows());
   VectorX<symbolic::Variable> vars;
   unordered_map<Variable::Id, int> map_var_to_index;
   std::tie(vars, map_var_to_index) =
-      symbolic::ExtractVariablesFromExpression(v);
+      symbolic::ExtractVariablesFromExpression(v_expanded);
   // TODO(hongkai.dai): use sparse matrix.
-  Eigen::MatrixXd A = Eigen::MatrixXd::Zero(v.rows(), vars.rows());
-  Eigen::VectorXd beq = Eigen::VectorXd::Zero(v.rows());
-  for (int i = 0; i < v.rows(); ++i) {
+  Eigen::MatrixXd A = Eigen::MatrixXd::Zero(v_expanded.rows(), vars.rows());
+  Eigen::VectorXd beq = Eigen::VectorXd::Zero(v_expanded.rows());
+  for (int i = 0; i < v_expanded.rows(); ++i) {
     double constant_term(0);
-    symbolic::DecomposeAffineExpression(v(i), map_var_to_index, A.row(i),
+    symbolic::DecomposeAffineExpression(v_expanded(i), map_var_to_index, A.row(i),
                                         &constant_term);
     beq(i) = b(i) - constant_term;
   }
