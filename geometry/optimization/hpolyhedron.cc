@@ -137,15 +137,12 @@ HPolyhedron HPolyhedron::CartesianPower(int n) const {
   return {A_power, b_power};
 }
 
-HPolyhedron HPolyhedron::Intersection(const HPolyhedron& other) const {
-  DRAKE_DEMAND(ambient_dimension() == other.ambient_dimension());
-  MatrixXd A_intersect =
-      MatrixXd::Zero(A_.rows() + other.A().rows(), A_.cols());
-  A_intersect.topRows(A_.rows()) = A_;
-  A_intersect.bottomRows(other.A().rows()) = other.A();
-  VectorXd b_intersect(b_.size() + other.b().size());
-  b_intersect << b_, other.b();
-  return {A_intersect, b_intersect};
+HPolyhedron HPolyhedron::Intersection(const HPolyhedron& other,
+                                      bool check_for_redundancy) const {
+  if(check_for_redundancy){
+    return this->DoIntersectionWithChecks(other);
+  }
+  return this->DoIntersectionNoChecks(other);
 }
 
 HPolyhedron HPolyhedron::MakeBox(const Eigen::Ref<const VectorXd>& lb,
@@ -203,7 +200,7 @@ bool HPolyhedron::ContainedIn(const HPolyhedron& other) const {
   if (result.get_solution_result() ==
           solvers::SolutionResult::kInfeasibleConstraints ||
       result.get_solution_result() ==
-          solvers::SolutionResult::kInfeasible_Or_Unbounded) {
+          solvers::SolutionResult::kInfeasibleOrUnbounded) {
     return true;
   }
 
@@ -231,7 +228,7 @@ bool HPolyhedron::ContainedIn(const HPolyhedron& other) const {
         result.get_solution_result() ==
             solvers::SolutionResult::kInfeasibleConstraints ||
         result.get_solution_result() ==
-            solvers::SolutionResult::kInfeasible_Or_Unbounded;
+            solvers::SolutionResult::kInfeasibleOrUnbounded;
 
     // if -result.get_optimal_cost() > other.b()(i) then the inequality is not
     // redundant and so there is no containment added a numeric tolerance of
@@ -243,8 +240,19 @@ bool HPolyhedron::ContainedIn(const HPolyhedron& other) const {
   return true;
 }
 
-HPolyhedron HPolyhedron::Intersection(
-    const HPolyhedron& other) const {
+HPolyhedron HPolyhedron::DoIntersectionNoChecks(const HPolyhedron& other) const {
+  DRAKE_DEMAND(ambient_dimension() == other.ambient_dimension());
+  MatrixXd A_intersect =
+      MatrixXd::Zero(A_.rows() + other.A().rows(), A_.cols());
+  A_intersect.topRows(A_.rows()) = A_;
+  A_intersect.bottomRows(other.A().rows()) = other.A();
+  VectorXd b_intersect(b_.size() + other.b().size());
+  b_intersect << b_, other.b();
+  return {A_intersect, b_intersect};
+}
+
+HPolyhedron HPolyhedron::DoIntersectionWithChecks(
+    const HPolyhedron &other) const {
   DRAKE_DEMAND(other.A().cols() == A_.cols());
   const double kInf = std::numeric_limits<double>::infinity();
 
@@ -279,16 +287,17 @@ HPolyhedron HPolyhedron::Intersection(
     bool empty_set_condition =
         result.get_solution_result() ==
             solvers::SolutionResult::kInfeasibleConstraints ||
-        result.get_solution_result() ==
-            solvers::SolutionResult::kInfeasible_Or_Unbounded;
+            result.get_solution_result() ==
+                solvers::SolutionResult::kInfeasibleOrUnbounded;
     if (empty_set_condition || -result.get_optimal_cost() > other.b()(i)) {
       A.row(num_kept) = other.A().row(i);
       b.row(num_kept) = other.b().row(i);
       num_kept++;
     }
   }
-  return HPolyhedron(A.topRows(num_kept), b.topRows(num_kept));
+  return {A.topRows(num_kept), b.topRows(num_kept)};
 }
+
 
 HPolyhedron HPolyhedron::ReduceInequalities() const {
   const double kInf = std::numeric_limits<double>::infinity();
@@ -370,6 +379,26 @@ HPolyhedron::DoAddPointInNonnegativeScalingConstraints(
   constraints.emplace_back(prog->AddLinearConstraint(
       Abar, VectorXd::Constant(m, -std::numeric_limits<double>::infinity()),
       VectorXd::Zero(m), {x, Vector1<Variable>(t)}));
+  return constraints;
+}
+
+std::vector<Binding<Constraint>>
+HPolyhedron::DoAddPointInNonnegativeScalingConstraints(
+    MathematicalProgram* prog, const Eigen::Ref<const MatrixXd>& A_x,
+    const Eigen::Ref<const VectorXd>& b_x, const Eigen::Ref<const VectorXd>& c,
+    double d, const Eigen::Ref<const VectorXDecisionVariable>& x,
+    const Eigen::Ref<const VectorXDecisionVariable>& t) const {
+  std::vector<Binding<Constraint>> constraints;
+  // A (A_x x + b_x) ≤ (c' t + d) b, written as [A * A_x, -b * c'][x;t] ≤ d * b
+  // - A * b_x
+  const int m = A_.rows();
+  MatrixXd A_bar(m, x.size() + t.size());
+  A_bar.leftCols(x.size()) = A_ * A_x;
+  A_bar.rightCols(t.size()) = -b_ * c.transpose();
+  VectorXd b_bar = d * b_ - A_ * b_x;
+  constraints.emplace_back(prog->AddLinearConstraint(
+      A_bar, VectorXd::Constant(m, -std::numeric_limits<double>::infinity()),
+      b_bar, {x, t}));
   return constraints;
 }
 
