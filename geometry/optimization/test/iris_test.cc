@@ -401,7 +401,7 @@ GTEST_TEST(DeprecatedIrisInConfigurationSpaceTest, JointLimits) {
 namespace {
 
 // Helper method for testing IrisInConfigurationSpace from a urdf string.
-HPolyhedron IrisFromUrdf(const std::string urdf,
+HPolyhedron IrisFromUrdf(const std::string& urdf,
                          const Eigen::Ref<const Eigen::VectorXd>& sample,
                          const IrisOptions& options) {
   systems::DiagramBuilder<double> builder;
@@ -416,7 +416,6 @@ HPolyhedron IrisFromUrdf(const std::string urdf,
   return IrisInConfigurationSpace(plant, plant.GetMyContextFromRoot(*context),
                                   options);
 }
-
 }  // namespace
 
 // One prismatic link with joint limits.  Iris should return the joint limits.
