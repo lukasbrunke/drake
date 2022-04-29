@@ -2,8 +2,8 @@
 
 #include <limits>
 #include <memory>
-#include <unordered_set>
 #include <stdexcept>
+#include <unordered_set>
 
 #include <Eigen/Eigenvalues>
 #include <fmt/format.h>
@@ -139,7 +139,7 @@ HPolyhedron HPolyhedron::CartesianPower(int n) const {
 
 HPolyhedron HPolyhedron::Intersection(const HPolyhedron& other,
                                       bool check_for_redundancy) const {
-  if(check_for_redundancy){
+  if (check_for_redundancy) {
     return this->DoIntersectionWithChecks(other);
   }
   return this->DoIntersectionNoChecks(other);
@@ -240,7 +240,8 @@ bool HPolyhedron::ContainedIn(const HPolyhedron& other) const {
   return true;
 }
 
-HPolyhedron HPolyhedron::DoIntersectionNoChecks(const HPolyhedron& other) const {
+HPolyhedron HPolyhedron::DoIntersectionNoChecks(
+    const HPolyhedron& other) const {
   DRAKE_DEMAND(ambient_dimension() == other.ambient_dimension());
   MatrixXd A_intersect =
       MatrixXd::Zero(A_.rows() + other.A().rows(), A_.cols());
@@ -252,7 +253,7 @@ HPolyhedron HPolyhedron::DoIntersectionNoChecks(const HPolyhedron& other) const 
 }
 
 HPolyhedron HPolyhedron::DoIntersectionWithChecks(
-    const HPolyhedron &other) const {
+    const HPolyhedron& other) const {
   DRAKE_DEMAND(other.A().cols() == A_.cols());
   const double kInf = std::numeric_limits<double>::infinity();
 
@@ -287,8 +288,8 @@ HPolyhedron HPolyhedron::DoIntersectionWithChecks(
     bool empty_set_condition =
         result.get_solution_result() ==
             solvers::SolutionResult::kInfeasibleConstraints ||
-            result.get_solution_result() ==
-                solvers::SolutionResult::kInfeasibleOrUnbounded;
+        result.get_solution_result() ==
+            solvers::SolutionResult::kInfeasibleOrUnbounded;
     if (empty_set_condition || -result.get_optimal_cost() > other.b()(i)) {
       A.row(num_kept) = other.A().row(i);
       b.row(num_kept) = other.b().row(i);
@@ -297,7 +298,6 @@ HPolyhedron HPolyhedron::DoIntersectionWithChecks(
   }
   return {A.topRows(num_kept), b.topRows(num_kept)};
 }
-
 
 HPolyhedron HPolyhedron::ReduceInequalities() const {
   const double kInf = std::numeric_limits<double>::infinity();

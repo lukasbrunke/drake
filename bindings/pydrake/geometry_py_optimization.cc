@@ -122,6 +122,7 @@ void DefineGeometryOptimization(py::module m) {
         .def("ContainedIn", &HPolyhedron::ContainedIn, py::arg("other"),
              cls_doc.ContainedIn.doc)
         .def("Intersection", &HPolyhedron::Intersection, py::arg("other"),
+             py::arg("check_redundancy") = false,
              cls_doc.Intersection.doc)
         .def("ReduceInequalities", &HPolyhedron::ReduceInequalities,
              cls_doc.ReduceInequalities.doc)
@@ -134,8 +135,6 @@ void DefineGeometryOptimization(py::module m) {
             py::arg("other"), cls_doc.CartesianProduct.doc)
         .def("CartesianPower", &HPolyhedron::CartesianPower, py::arg("n"),
             cls_doc.CartesianPower.doc)
-        .def("Intersection", &HPolyhedron::Intersection, py::arg("other"),
-            cls_doc.Intersection.doc)
         .def_static("MakeBox", &HPolyhedron::MakeBox, py::arg("lb"),
             py::arg("ub"), cls_doc.MakeBox.doc)
         .def_static("MakeUnitBox", &HPolyhedron::MakeUnitBox, py::arg("dim"),
