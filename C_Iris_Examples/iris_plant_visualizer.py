@@ -3,13 +3,15 @@ import scipy
 from meshcat.servers.zmqserver import start_zmq_server_as_subprocess
 from meshcat import Visualizer
 import meshcat
-from pydrake.all import (ConnectMeshcatVisualizer, HPolyhedron, VPolytope, Sphere, Ellipsoid, InverseKinematics,
-                         RationalForwardKinematics, GeometrySet)
+from pydrake.all import (ConnectMeshcatVisualizer, HPolyhedron,
+                         VPolytope, Sphere, Ellipsoid, InverseKinematics,
+                         RationalForwardKinematics, GeometrySet, Role)
 from functools import partial
 import mcubes
-import sos_iris_certifier.visualizations_utils as viz_utils
+import C_Iris_Examples.visualizations_utils as viz_utils
 import pydrake.symbolic as sym
-import time
+from IPython.display import display
+
 
 
 class IrisPlantVisualizer:
@@ -38,9 +40,9 @@ class IrisPlantVisualizer:
         self.q_upper_limits = plant.GetPositionUpperLimits()
         self.s_upper_limits = self.forward_kin.ComputeTValue(self.q_upper_limits, self.q_star)
 
-
+        self.viz_role = kwargs.get('viz_role', Role.kIllustration)
         visualizer = ConnectMeshcatVisualizer(self.builder, scene_graph, zmq_url=zmq_url,
-                                      delete_prefix_on_load=False)
+                                              delete_prefix_on_load=False, role=self.viz_role)
         self.diagram = self.builder.Build()
         visualizer.load()
         self.diagram_context = self.diagram.CreateDefaultContext()
@@ -107,6 +109,10 @@ class IrisPlantVisualizer:
         #region -> (collision -> plane dictionary)
         self.region_to_collision_pair_to_plane_dictionary = None
 
+    def jupyter_cell(self,):
+        display(self.vis.jupyter_cell())
+        display(self.vis2.jupyter_cell())
+
     def eval_cons(self, q, c, tol):
         return 1 - 1 * float(c.evaluator().CheckSatisfied(q, tol))
 
@@ -128,8 +134,8 @@ class IrisPlantVisualizer:
             meshcat.geometry.TriangularMeshGeometry(vertices, triangles),
             meshcat.geometry.MeshLambertMaterial(color=0xff0000, wireframe=True))
 
-    def plot_regions(self, regions, ellipses = None, region_suffix = ''):
-        viz_utils.plot_regions(self.vis2, regions, ellipses, region_suffix)
+    def plot_regions(self, regions, ellipses = None, region_suffix = '', randomize_colors = False):
+        viz_utils.plot_regions(self.vis2, regions, ellipses, region_suffix, randomize_colors)
 
     def plot_seedpoints(self, seed_points):
         for i in range(seed_points.shape[0]):
@@ -206,7 +212,6 @@ class IrisPlantVisualizer:
         eval_dict = dict(zip(b_poly.indeterminates(), cur_s))
         a, b = self.EvaluatePlanePair((a_poly, b_poly), eval_dict)
         eval_dict = dict(zip(self.s_variables, cur_s))
-        #     print(f"{a}, {b}")
         p1 = np.array([p.Evaluate(eval_dict) for p in p1_rat])
         p2 = np.array([p.Evaluate(eval_dict) for p in p2_rat])
         return self.transform(a, b, p1, p2, self.plane_verts), p1, p2
