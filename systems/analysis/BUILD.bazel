@@ -120,6 +120,8 @@ drake_cc_library(
     deps = [
         "//common:symbolic",
         "//solvers:mathematical_program",
+        "//solvers:mathematical_program_result",
+        "//solvers:choose_best_solver",
     ],
 )
 
