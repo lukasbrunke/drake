@@ -8,7 +8,7 @@ from pydrake.all import RotationMatrix, RigidTransform
 import colorsys
 import itertools
 from fractions import Fraction
-from random import shuffle
+import random
 
 
 def infinite_hues():
@@ -41,9 +41,7 @@ def n_colors(n=33):
 
 def n_colors_random(n=33):
     colors = n_colors(100 * n)
-    shuffle(colors)
-    colors = colors[:n]
-    return colors
+    return random.sample(colors, n)
 
 class PiecewiseLinearTrajectory:
     def __init__(self, path, duration):
