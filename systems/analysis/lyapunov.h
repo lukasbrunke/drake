@@ -4,6 +4,7 @@
 
 #include "drake/common/autodiff.h"
 #include "drake/common/eigen_types.h"
+#include "drake/solvers/mathematical_program.h"
 #include "drake/systems/framework/context.h"
 #include "drake/systems/framework/system.h"
 
@@ -60,6 +61,35 @@ Eigen::VectorXd SampleBasedLyapunovAnalysis(
         basis_functions,
     const Eigen::Ref<const Eigen::MatrixXd>& state_samples,
     const Eigen::Ref<const Eigen::VectorXd>& V_zero_state);
+
+/// Constructs a program to find the common Lyapunov function and controller for
+/// a set of linear systems
+/// <pre>
+/// ẋ = A[0]*x + B[0]*u
+/// ẋ = A[1]*x + B[1]*u
+///       ...
+/// ẋ = A[n-1]*x + B[n-1]*u
+/// </pre>
+/// We assume that common Lyapunov function is xᵀPx with the controller u = Kx
+/// The condition for the common Lyapunov function is
+/// <pre>
+/// P(A[i]+B[i]K) + (A[i]+B[i]K)ᵀP  ≼ 0     (1)
+/// P ≽ 0
+/// </pre>
+/// To form (1) as an LMI, we do multiply P⁻¹ from both left and right in (1),
+/// and introduce two new variables M=P⁻¹, N = KP⁻¹, with the following LMI
+/// <pre>
+/// A[i]M+B[i]N + MA[i]ᵀ + NᵀB[i]ᵀ ≼ 0
+/// M ≽ 0
+/// </pre>
+/// @param A The dynamics of the i'th system is ẋ = A[i]x+B[i]u.
+/// @param B The dynamics of the i'th system is ẋ = A[i]x+B[i]u.
+/// @param[out] M The common Lyapunov function is xᵀM⁻¹x
+/// @param[out] N The common controller is u = NM⁻¹x
+std::unique_ptr<solvers::MathematicalProgram> ConstructCommonLyapunovProgram(
+    const std::vector<Eigen::MatrixXd>& A,
+    const std::vector<Eigen::MatrixXd>& B, MatrixX<symbolic::Variable>* M,
+    MatrixX<symbolic::Variable>* N);
 
 }  // namespace analysis
 }  // namespace systems

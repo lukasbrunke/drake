@@ -7,6 +7,7 @@
 #include "drake/bindings/pydrake/documentation_pybind.h"
 #include "drake/bindings/pydrake/pydrake_pybind.h"
 #include "drake/systems/analysis/integrator_base.h"
+#include "drake/systems/analysis/lyapunov.h"
 #include "drake/systems/analysis/monte_carlo.h"
 #include "drake/systems/analysis/region_of_attraction.h"
 #include "drake/systems/analysis/runge_kutta2_integrator.h"
@@ -318,6 +319,10 @@ PYBIND11_MODULE(analysis, m) {
     m.def("RegionOfAttraction", &RegionOfAttraction, py::arg("system"),
         py::arg("context"), py::arg("options") = RegionOfAttractionOptions(),
         doc.RegionOfAttraction.doc);
+
+    m.def("ConstructCommonLyapunovProgram", &ConstructCommonLyapunovProgram,
+        py::arg("A"), py::arg("B"), py::arg("M"), py::arg("N"),
+        doc.ConstructCommonLyapunovProgram.doc);
   }
 }
 

@@ -117,6 +117,28 @@ Eigen::VectorXd SampleBasedLyapunovAnalysis(
   return result.GetSolution(params);
 }
 
+std::unique_ptr<solvers::MathematicalProgram> ConstructCommonLyapunovProgram(
+    const std::vector<Eigen::MatrixXd>& A,
+    const std::vector<Eigen::MatrixXd>& B, MatrixX<symbolic::Variable>* M,
+    MatrixX<symbolic::Variable>* N) {
+  DRAKE_DEMAND(A.size() == B.size());
+  auto prog = std::make_unique<solvers::MathematicalProgram>();
+  DRAKE_DEMAND(!A.empty());
+  const int nx = A[0].rows();
+  const int nu = B[0].cols();
+  *M = prog->NewSymmetricContinuousVariables(nx, "M");
+  prog->AddPositiveSemidefiniteConstraint(*M);
+  *N = prog->NewContinuousVariables(nu, nx, "N");
+  for (int i = 0; i < static_cast<int>(A.size()); ++i) {
+    DRAKE_DEMAND(A[i].rows() == nx && A[i].cols() == nx);
+    DRAKE_DEMAND(B[i].rows() == nx && B[i].cols() == nu);
+    prog->AddPositiveSemidefiniteConstraint(
+        -(A[i] * (*M) + B[i] * (*N) + (*M) * A[i].transpose() +
+          N->transpose() * B[i].transpose()));
+  }
+  return prog;
+}
+
 }  // namespace analysis
 }  // namespace systems
 }  // namespace drake
