@@ -221,10 +221,13 @@ void SearchCspacePolytope(
 
   Eigen::MatrixXd C_init;
   Eigen::VectorXd d_init;
-  Eigen::VectorXd t_lower_dummy, t_upper_dummy;
+  std::unordered_map<SortedPair<geometry::GeometryId>,
+                     std::pair<BodyIndex, Eigen::VectorXd>>
+      separating_plane_init;
   if (read_file.has_value()) {
-    ReadCspacePolytopeFromFile(read_file.value(), &C_init, &d_init,
-                               &t_lower_dummy, &t_upper_dummy);
+    ReadCspacePolytopeFromFile(read_file.value(), dual_ur_diagram.plant(),
+                               dual_ur_diagram.scene_graph().model_inspector(),
+                               &C_init, &d_init, &separating_plane_init);
   } else {
     BuildCandidateCspacePolytope(q0, &C_init, &d_init);
   }
@@ -247,11 +250,13 @@ void SearchCspacePolytope(
   solver_options.SetOption(solvers::CommonSolverOption::kPrintToConsole, false);
   CspaceFreeRegionSolution cspace_free_region_solution;
   Eigen::VectorXd q_star = Eigen::Matrix<double, 12, 1>::Zero();
+  const Eigen::VectorXd t0 =
+      dut.rational_forward_kinematics().ComputeTValue(q0, q_star);
   if (do_bisection) {
     drake::log()->info("Start bisection");
     dut.CspacePolytopeBinarySearch(
         q_star, filtered_collision_pairs, C_init, d_init, binary_search_option,
-        solver_options, q0, std::nullopt, &cspace_free_region_solution);
+        solver_options, t0, std::nullopt, &cspace_free_region_solution);
   }
   CspaceFreeRegion::BilinearAlternationOption bilinear_alternation_option{
       .max_iters = 10,
@@ -270,9 +275,12 @@ void SearchCspacePolytope(
     d0 = d_init;
   }
   drake::log()->info("Start bilinear alternation");
+  std::vector<double> polytope_volumes;
+  std::vector<double> ellipsoid_determinants;
   dut.CspacePolytopeBilinearAlternation(
       q_star, filtered_collision_pairs, C0, d0, bilinear_alternation_option,
-      solver_options, q0, std::nullopt, &cspace_free_region_solution);
+      solver_options, t0, std::nullopt, &cspace_free_region_solution,
+      &polytope_volumes, &ellipsoid_determinants);
 
   const Eigen::VectorXd t_upper =
       (dual_ur_diagram.plant().GetPositionUpperLimits() / 2)
@@ -284,9 +292,9 @@ void SearchCspacePolytope(
           .array()
           .tan()
           .matrix();
-  WriteCspacePolytopeToFile(cspace_free_region_solution.C,
-                            cspace_free_region_solution.d, t_lower, t_upper,
-                            write_file, 10);
+  WriteCspacePolytopeToFile(
+      cspace_free_region_solution, dual_ur_diagram.plant(),
+      dual_ur_diagram.scene_graph().model_inspector(), write_file, 10);
 }
 
 void VisualizaPostures(const std::string& cspace_polytope_file) {
@@ -295,8 +303,13 @@ void VisualizaPostures(const std::string& cspace_polytope_file) {
   auto& plant_context = dual_ur_diagram.plant().GetMyMutableContextFromRoot(
       diagram_context.get());
   Eigen::MatrixXd C;
-  Eigen::VectorXd d, t_lower, t_upper;
-  ReadCspacePolytopeFromFile(cspace_polytope_file, &C, &d, &t_lower, &t_upper);
+  Eigen::VectorXd d;
+  std::unordered_map<SortedPair<geometry::GeometryId>,
+                     std::pair<BodyIndex, Eigen::VectorXd>>
+      separating_planes;
+  ReadCspacePolytopeFromFile(cspace_polytope_file, dual_ur_diagram.plant(),
+                             dual_ur_diagram.scene_graph().model_inspector(),
+                             &C, &d, &separating_planes);
 
   solvers::MathematicalProgram prog;
   auto t1 = prog.NewContinuousVariables(12);
@@ -305,8 +318,8 @@ void VisualizaPostures(const std::string& cspace_polytope_file) {
                            t1);
   prog.AddLinearConstraint(C, Eigen::VectorXd::Constant(d.rows(), -kInf), d,
                            t2);
-  prog.AddBoundingBoxConstraint(t_lower, t_upper, t1);
-  prog.AddBoundingBoxConstraint(t_lower, t_upper, t2);
+  // prog.AddBoundingBoxConstraint(t_lower, t_upper, t1);
+  // prog.AddBoundingBoxConstraint(t_lower, t_upper, t2);
   // Add the cost max (t1-t2)^2 = (A*[t1;t2])^2;
   Eigen::Matrix<double, 12, 24> A;
   A << Eigen::Matrix<double, 12, 12>::Identity(),

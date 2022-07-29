@@ -11,18 +11,6 @@ load("//tools/lint:lint.bzl", "add_lint_tests")
 
 package(default_visibility = ["//visibility:public"])
 
-filegroup(
-    name = "models",
-    srcs = glob(
-        [
-            "models/**",
-        ],
-        exclude = [
-            "**/*.sha512",
-        ],
-    ),
-)
-
 drake_cc_package_library(
     name = "rational_forward_kinematics",
     visibility = ["//visibility:public"],
@@ -190,6 +178,7 @@ drake_cc_binary(
     testonly = 1,
     srcs = ["test/iiwa_shelf_demo.cc"],
     data = [
+        ":models",
         "//examples/kuka_iiwa_arm:models",
         "//manipulation/models/iiwa_description:models",
         "//manipulation/models/wsg_50_description:models",
@@ -247,9 +236,9 @@ drake_cc_binary(
     name = "ur3e_demo",
     srcs = ["test/ur3e_demo.cc"],
     data = [
+        ":models",
         "//manipulation/models/ur3e_description:models",
         "//manipulation/models/wsg_50_description:models",
-        "//sos_iris_certifier:models",
     ],
     deps = [
         ":cspace_free_region",

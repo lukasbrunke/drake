@@ -285,7 +285,7 @@ void SearchCspacePolytope(
 
   CspaceFreeRegion::BinarySearchOption binary_search_option{
       .epsilon_max = 0.05,
-      .epsilon_min = 0.,
+      .epsilon_min = 0.001,
       .max_iters = 4,
       .compute_polytope_volume = true,
       .num_threads = -1};
@@ -398,8 +398,8 @@ void VisualizePostures(const std::string& read_file) {
 int DoMain() {
   const std::string write_file = "iiwa_shelf_cspace_polytope6.txt";
   // const std::string read_file = "iiwa_shelf_cspace_polytope2.txt";
-  // SearchCspacePolytope(write_file);
-  VisualizePostures(write_file);
+  SearchCspacePolytope(write_file);
+  // VisualizePostures(write_file);
   return 0;
 }
 }  // namespace multibody

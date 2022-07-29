@@ -1860,6 +1860,9 @@ void CspaceFreeRegion::CspacePolytopeBinarySearch(
       &C_var, &d_var, &lagrangian_gram_vars, &verified_gram_vars,
       &separating_plane_vars, &separating_plane_to_tuples,
       &separating_plane_to_lorentz_cone_constraints);
+  drake::log()->info("epsilon lower {}",
+                     FindEpsilonLower(C, d_init, t_lower, t_upper, t_inner_pts,
+                                      inner_polytope));
   DRAKE_DEMAND(binary_search_option.epsilon_min >=
                FindEpsilonLower(C, d_init, t_lower, t_upper, t_inner_pts,
                                 inner_polytope));

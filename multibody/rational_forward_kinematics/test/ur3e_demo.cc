@@ -83,8 +83,8 @@ class Ur3Diagram {
     plant_->WeldFrames(ur_tool0, schunk_frame, X_TS);
 
     // Add shelf.
-    const std::string shelf_file_path =
-        FindResourceOrThrow("drake/sos_iris_certifier/assets/shelves2.sdf");
+    const std::string shelf_file_path = FindResourceOrThrow(
+        "drake/multibody/rational_forward_kinematics/models/shelves.sdf");
     const auto shelf_instance =
         parser.AddModelFromFile(shelf_file_path, "shelves");
     const auto& shelf_frame =
@@ -208,7 +208,7 @@ void BuildCandidateCspacePolytope(const Eigen::VectorXd& q_free,
       auto result = solvers::Solve(prog);
       if (result.get_solution_result() == solvers::SolutionResult::kUnbounded ||
           result.get_solution_result() ==
-              solvers::SolutionResult::kInfeasible_Or_Unbounded ||
+              solvers::SolutionResult::kInfeasibleOrUnbounded ||
           result.get_solution_result() ==
               solvers::SolutionResult::kDualInfeasible) {
         std::cout << "t(" << i << ") can be -inf\n";
@@ -217,7 +217,7 @@ void BuildCandidateCspacePolytope(const Eigen::VectorXd& q_free,
       result = solvers::Solve(prog);
       if (result.get_solution_result() == solvers::SolutionResult::kUnbounded ||
           result.get_solution_result() ==
-              solvers::SolutionResult::kInfeasible_Or_Unbounded ||
+              solvers::SolutionResult::kInfeasibleOrUnbounded ||
           result.get_solution_result() ==
               solvers::SolutionResult::kDualInfeasible) {
         std::cout << "t(" << i << ") can be inf\n";
@@ -251,6 +251,9 @@ void SearchCspacePolytope(const std::string& write_file) {
       ur_diagram.diagram(), &(ur_diagram.plant()), &(ur_diagram.scene_graph()),
       SeparatingPlaneOrder::kConstant, CspaceRegionType::kGenericPolytope,
       separating_polytope_delta);
+  const Eigen::VectorXd q_star = Eigen::Matrix<double, 6, 1>::Zero();
+  const Eigen::VectorXd t0 =
+      dut.rational_forward_kinematics().ComputeTValue(q0, q_star);
 
   CspaceFreeRegion::FilteredCollisionPairs filtered_collision_pairs{};
 
@@ -261,25 +264,30 @@ void SearchCspacePolytope(const std::string& write_file) {
       .compute_polytope_volume = false};
   solvers::SolverOptions solver_options;
   solver_options.SetOption(solvers::CommonSolverOption::kPrintToConsole, false);
-  Eigen::VectorXd q_star = Eigen::Matrix<double, 6, 1>::Zero();
   CspaceFreeRegionSolution cspace_free_region_solution;
-  dut.CspacePolytopeBinarySearch(q_star, filtered_collision_pairs, C_init,
-                                 d_init, binary_search_option, solver_options,
-                                 q0, std::nullopt, &cspace_free_region_solution);
+  dut.CspacePolytopeBinarySearch(
+      q_star, filtered_collision_pairs, C_init, d_init, binary_search_option,
+      solver_options, t0, std::nullopt, &cspace_free_region_solution);
   CspaceFreeRegion::BilinearAlternationOption bilinear_alternation_option{
       .max_iters = 20,
       .convergence_tol = 0.001,
       .redundant_tighten = 0.5,
       .compute_polytope_volume = false};
+  std::vector<double> polytope_volumes;
+  std::vector<double> ellipsoid_determinants;
   dut.CspacePolytopeBilinearAlternation(
-      q_star, filtered_collision_pairs, cspace_free_region_solution.C, cspace_free_region_solution.d,
-      bilinear_alternation_option, solver_options, q0, std::nullopt, &cspace_free_region_solution);
+      q_star, filtered_collision_pairs, cspace_free_region_solution.C,
+      cspace_free_region_solution.d, bilinear_alternation_option,
+      solver_options, t0, std::nullopt, &cspace_free_region_solution,
+      &polytope_volumes, &ellipsoid_determinants);
 
   const Eigen::VectorXd t_upper =
       (ur_diagram.plant().GetPositionUpperLimits() / 2).array().tan().matrix();
   const Eigen::VectorXd t_lower =
       (ur_diagram.plant().GetPositionLowerLimits() / 2).array().tan().matrix();
-  WriteCspacePolytopeToFile(cspace_free_region_solution.C, cspace_free_region_solution.d, t_lower, t_upper, write_file, 10);
+  WriteCspacePolytopeToFile(cspace_free_region_solution, ur_diagram.plant(),
+                            ur_diagram.scene_graph().model_inspector(),
+                            write_file, 10);
 }
 
 int DoMain() {

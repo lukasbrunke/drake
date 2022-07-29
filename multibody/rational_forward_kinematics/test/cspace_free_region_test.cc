@@ -588,7 +588,7 @@ void TestGenerateRationalsForLinkOnOneSideOfPlane(
     const Eigen::Ref<const Eigen::VectorXd>& q_star,
     const CspaceFreeRegion::FilteredCollisionPairs& filtered_collision_pairs,
     SeparatingPlaneOrder plane_order) {
-  const auto rationals = dut.GenerateLinkOnOneSideOfPlaneRationals(
+  const auto rationals = dut.GenerateRationalsForLinkOnOneSideOfPlane(
       q_star, filtered_collision_pairs);
   // Check the size of rationals.
   int rationals_size = 0;
@@ -643,18 +643,18 @@ TEST_F(IiwaCspaceTest, GenerateRationalsForLinkOnOneSideOfPlane) {
                                 CspaceRegionType::kGenericPolytope,
                                 separating_polytope_delta);
     const Eigen::VectorXd q_star = Eigen::VectorXd::Zero(7);
-    TestGenerateLinkOnOneSideOfPlaneRationals(dut1, q_star, {}, plane_order);
+    TestGenerateRationalsForLinkOnOneSideOfPlane(dut1, q_star, {}, plane_order);
 
     // Multiple pairs of polytopes.
     scene_graph_->collision_filter_manager().RemoveDeclaration(filter_id);
     const CspaceFreeRegion dut2(*diagram_, plant_, scene_graph_, plane_order,
                                 CspaceRegionType::kGenericPolytope,
                                 separating_polytope_delta);
-    TestGenerateLinkOnOneSideOfPlaneRationals(dut2, q_star, {}, plane_order);
+    TestGenerateRationalsForLinkOnOneSideOfPlane(dut2, q_star, {}, plane_order);
     // Now test with filtered collision pairs.
     const CspaceFreeRegion::FilteredCollisionPairs filtered_collision_pairs{
         {{link7_polytopes_id_[0], obstacles_id_[0]}}};
-    TestGenerateLinkOnOneSideOfPlaneRationals(
+    TestGenerateRationalsForLinkOnOneSideOfPlane(
         dut2, q_star, filtered_collision_pairs, plane_order);
   }
 }
@@ -668,7 +668,7 @@ TEST_F(IiwaNonpolytopeCollisionCspaceTest,
                                 CspaceRegionType::kGenericPolytope,
                                 separating_polytope_delta);
     const Eigen::VectorXd q_star = Eigen::VectorXd::Zero(7);
-    TestGenerateLinkOnOneSideOfPlaneRationals(dut1, q_star, {}, plane_order);
+    TestGenerateRationalsForLinkOnOneSideOfPlane(dut1, q_star, {}, plane_order);
   }
 }
 
@@ -893,6 +893,7 @@ void CheckReadAndWriteCspacePolytope(const CspaceFreeRegion& dut,
     EXPECT_TRUE(
         CompareMatrices(it->second.second, plane.decision_variables, tol));
   }
+}
 
 // Check a polynomial is y̅ᵀy̅ + 2y̅ᵀPa(t)+1, with both y̅ and t being the
 // indeterminates.
@@ -1502,7 +1503,7 @@ void TestConstructLagrangianAndPolytopeProgramNonPolytopic(
   EXPECT_TRUE(result_lagrangian.is_success());
 
   // Check that |P * a_val| <= 1.
-  auto check_a_norm = [](const SeparatingPlane& plane,
+  auto check_a_norm = [](const SeparatingPlane<symbolic::Variable>& plane,
                          const Eigen::Vector3d& a_val) {
     for (const auto collision_geometry :
          {plane.positive_side_geometry, plane.negative_side_geometry}) {
