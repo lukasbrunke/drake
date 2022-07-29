@@ -343,18 +343,19 @@ PYBIND11_MODULE(analysis, m) {
                     const Eigen::Ref<const MatrixX<symbolic::Polynomial>>&,
                     std::optional<symbolic::Polynomial>,
                     const Eigen::Ref<const VectorX<symbolic::Variable>>&,
-                    double, std::vector<VectorX<symbolic::Polynomial>>,
+                    double, double, std::vector<VectorX<symbolic::Polynomial>>,
                     const Eigen::Ref<const Eigen::MatrixXd>&,
                     const Eigen::Ref<const VectorX<symbolic::Polynomial>>&>(),
                 py::arg("f"), py::arg("G"), py::arg("dynamics_denominator"),
-                py::arg("x"), py::arg("beta"), py::arg("unsafe_regions"),
-                py::arg("u_vertices"), py::arg("state_eq_constraints"),
-                cls_doc.ctor.doc)
+                py::arg("x"), py::arg("beta_minus"), py::arg("beta_plus"),
+                py::arg("unsafe_regions"), py::arg("u_vertices"),
+                py::arg("state_eq_constraints"), cls_doc.ctor.doc)
             .def(
                 "AddControlBarrierConstraint",
                 [](const analysis::ControlBarrier& self,
                     solvers::MathematicalProgram* prog,
                     const symbolic::Polynomial& lambda0,
+                    const std::optional<symbolic::Polynomial>& lambda1,
                     const VectorX<symbolic::Polynomial>& l,
                     const VectorX<symbolic::Polynomial>&
                         state_constraints_lagrangian,
@@ -363,14 +364,14 @@ PYBIND11_MODULE(analysis, m) {
                   symbolic::Polynomial hdot_poly;
                   VectorX<symbolic::Monomial> monomials;
                   MatrixX<symbolic::Variable> gram;
-                  self.AddControlBarrierConstraint(prog, lambda0, l,
+                  self.AddControlBarrierConstraint(prog, lambda0, lambda1, l,
                       state_constraints_lagrangian, h, deriv_eps, a, &hdot_poly,
                       &monomials, &gram);
                   return std::make_tuple(hdot_poly, monomials, gram);
                 },
-                py::arg("prog"), py::arg("lambda0"), py::arg("l"),
-                py::arg("state_constraints_lagrangian"), py::arg("h"),
-                py::arg("deriv_eps"), py::arg("a"),
+                py::arg("prog"), py::arg("lambda0"), py::arg("lambda1"),
+                py::arg("l"), py::arg("state_constraints_lagrangian"),
+                py::arg("h"), py::arg("deriv_eps"), py::arg("a"),
                 cls_doc.AddControlBarrierConstraint.doc);
 
     py::class_<Class::LagrangianReturn>(control_barrier, "LagrangianReturn")
@@ -380,6 +381,8 @@ PYBIND11_MODULE(analysis, m) {
             pybind11::return_value_policy::reference)
         .def_readonly("lambda0", &Class::LagrangianReturn::lambda0)
         .def_readonly("lambda0_gram", &Class::LagrangianReturn::lambda0_gram)
+        .def_readonly("lambda1", &Class::LagrangianReturn::lambda1)
+        .def_readonly("lambda1_gram", &Class::LagrangianReturn::lambda1_gram)
         .def_readonly("l", &Class::LagrangianReturn::l)
         .def_readonly("l_grams", &Class::LagrangianReturn::l_grams)
         .def_readonly("state_constraints_lagrangian",
@@ -387,8 +390,8 @@ PYBIND11_MODULE(analysis, m) {
 
     control_barrier.def("ConstructLagrangianProgram",
         &Class::ConstructLagrangianProgram, py::arg("h"), py::arg("deriv_eps"),
-        py::arg("lambda0_degree"), py::arg("l_degrees"),
-        py::arg("state_constraints_lagrangian_degrees"),
+        py::arg("lambda0_degree"), py::arg("lambda1_degree"),
+        py::arg("l_degrees"), py::arg("state_constraints_lagrangian_degrees"),
         cls_doc.ConstructLagrangianProgram.doc);
 
     py::class_<Class::UnsafeReturn>(control_barrier, "UnsafeReturn")
@@ -427,9 +430,9 @@ PYBIND11_MODULE(analysis, m) {
             &Class::BarrierReturn::unsafe_sos_poly_grams);
 
     control_barrier.def("ConstructBarrierProgram",
-        &Class::ConstructBarrierProgram, py::arg("lambda0"), py::arg("l"),
-        py::arg("hdot_state_constraints_lagrangian_degrees"), py::arg("t"),
-        py::arg("unsafe_state_constraints_lagrangian_degrees"),
+        &Class::ConstructBarrierProgram, py::arg("lambda0"), py::arg("lambda1"),
+        py::arg("l"), py::arg("hdot_state_constraints_lagrangian_degrees"),
+        py::arg("t"), py::arg("unsafe_state_constraints_lagrangian_degrees"),
         py::arg("h_degree"), py::arg("deriv_eps"), py::arg("s_degrees"),
         cls_doc.ConstructBarrierProgram.doc);
   }
