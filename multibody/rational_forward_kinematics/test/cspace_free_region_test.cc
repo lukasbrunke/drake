@@ -291,8 +291,8 @@ void CheckRationalLorentzConeConstraint(
 
 void TestGenerateLinkOnOneSideOfPlaneRationalFunction(
     const RationalForwardKinematics& rational_forward_kinematics,
-    const SeparatingPlane<symbolic::Variable>& separating_plane, PlaneSide plane_side,
-    const Eigen::Ref<const Eigen::VectorXd>& q_star,
+    const SeparatingPlane<symbolic::Variable>& separating_plane,
+    PlaneSide plane_side, const Eigen::Ref<const Eigen::VectorXd>& q_star,
     double separating_polytope_delta) {
   const CollisionGeometry* link_geometry;
   const CollisionGeometry* other_side_geometry;

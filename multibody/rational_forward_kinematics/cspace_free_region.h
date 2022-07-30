@@ -156,8 +156,7 @@ struct CspaceFreeRegionSolution {
         separating_planes{std::move(m_separating_planes)} {}
   //
   CspaceFreeRegionSolution(Eigen::MatrixXd m_C, Eigen::MatrixXd m_d)
-      : C{m_C},
-        d{m_d} {}
+      : C{m_C}, d{m_d} {}
 
   // values defining Hpolyhedron Ct <= d
   Eigen::MatrixXd C;
@@ -183,47 +182,47 @@ struct CspaceFreeRegionSolution {
   std::vector<SeparatingPlane<double>> separating_planes;
 };
 
- /**
-  * The rational function representing that a link is on the desired
-  * side of the plane. If the link is on the positive side of the plane, then
-  * the rational is aᵀx + b - δ, otherwise it is -δ - aᵀx - b
-  */
- struct LinkOnPlaneSideRational {
-   LinkOnPlaneSideRational(
-       symbolic::RationalFunction m_rational,
-       const CollisionGeometry* m_link_geometry,
-       multibody::BodyIndex m_expressed_body_index,
-       const CollisionGeometry* m_other_side_link_geometry,
-       Vector3<symbolic::Expression> m_a_A, symbolic::Expression m_b,
-       PlaneSide m_plane_side, SeparatingPlaneOrder m_plane_order,
-       std::vector<solvers::Binding<solvers::LorentzConeConstraint>>
-           m_lorentz_cone_constraints)
-       : rational{std::move(m_rational)},
-         link_geometry{m_link_geometry},
-         expressed_body_index{m_expressed_body_index},
-         other_side_link_geometry{m_other_side_link_geometry},
-         a_A{std::move(m_a_A)},
-         b{std::move(m_b)},
-         plane_side{m_plane_side},
-         plane_order{m_plane_order},
-         lorentz_cone_constraints{std::move(m_lorentz_cone_constraints)} {}
-   const symbolic::RationalFunction rational;
-   const CollisionGeometry* const link_geometry;
-   const multibody::BodyIndex expressed_body_index;
-   const CollisionGeometry* const other_side_link_geometry;
-   /**
-    * a_A is the normal vector of the separating plane expressed in the frame A
-    * (namely exprssed_body_index).
-    */
-   const Vector3<symbolic::Expression> a_A;
-   const symbolic::Expression b;
-   const PlaneSide plane_side;
-   const SeparatingPlaneOrder plane_order;
-   // Some geometries (ellipsoid, capsules, etc) require imposing
-   // additional Lorentz cone constraints.
-   const std::vector<solvers::Binding<drake::solvers::LorentzConeConstraint>>
-       lorentz_cone_constraints;
- };
+/**
+ * The rational function representing that a link is on the desired
+ * side of the plane. If the link is on the positive side of the plane, then
+ * the rational is aᵀx + b - δ, otherwise it is -δ - aᵀx - b
+ */
+struct LinkOnPlaneSideRational {
+  LinkOnPlaneSideRational(
+      symbolic::RationalFunction m_rational,
+      const CollisionGeometry* m_link_geometry,
+      multibody::BodyIndex m_expressed_body_index,
+      const CollisionGeometry* m_other_side_link_geometry,
+      Vector3<symbolic::Expression> m_a_A, symbolic::Expression m_b,
+      PlaneSide m_plane_side, SeparatingPlaneOrder m_plane_order,
+      std::vector<solvers::Binding<solvers::LorentzConeConstraint>>
+          m_lorentz_cone_constraints)
+      : rational{std::move(m_rational)},
+        link_geometry{m_link_geometry},
+        expressed_body_index{m_expressed_body_index},
+        other_side_link_geometry{m_other_side_link_geometry},
+        a_A{std::move(m_a_A)},
+        b{std::move(m_b)},
+        plane_side{m_plane_side},
+        plane_order{m_plane_order},
+        lorentz_cone_constraints{std::move(m_lorentz_cone_constraints)} {}
+  const symbolic::RationalFunction rational;
+  const CollisionGeometry* const link_geometry;
+  const multibody::BodyIndex expressed_body_index;
+  const CollisionGeometry* const other_side_link_geometry;
+  /**
+   * a_A is the normal vector of the separating plane expressed in the frame A
+   * (namely exprssed_body_index).
+   */
+  const Vector3<symbolic::Expression> a_A;
+  const symbolic::Expression b;
+  const PlaneSide plane_side;
+  const SeparatingPlaneOrder plane_order;
+  // Some geometries (ellipsoid, capsules, etc) require imposing
+  // additional Lorentz cone constraints.
+  const std::vector<solvers::Binding<drake::solvers::LorentzConeConstraint>>
+      lorentz_cone_constraints;
+};
 
 enum class CspaceRegionType { kGenericPolytope, kAxisAlignedBoundingBox };
 

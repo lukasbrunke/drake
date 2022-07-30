@@ -72,6 +72,7 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
 
   py::module::import("pydrake.math");
   py::module::import("pydrake.multibody.plant");
+  py::module::import("pydrake.solvers.mathematicalprogram");
   // RationalForwardKinematics Class
   {
     using Class = RationalForwardKinematics;
@@ -454,7 +455,8 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
               const std::optional<std::pair<Eigen::MatrixXd, Eigen::VectorXd>>&
                   inner_polytope) {
             CspaceFreeRegionSolution cspace_free_region_solution;
-            std::vector<double> polytope_volumes, ellipsoid_determinants;
+            std::vector<double> polytope_volumes;
+            std::vector<double> ellipsoid_determinants;
             self->CspacePolytopeBilinearAlternation(q_star,
                 filtered_collision_pairs, C_init, d_init,
                 bilinear_alternation_option, solver_options, t_inner_pts,
@@ -591,8 +593,6 @@ PYBIND11_MODULE(rational_forward_kinematics, m) {
       },
       py::arg("filename"), py::arg("plant"), py::arg("scene_graph"),
       doc.ReadCspacePolytopeFromFile.doc);
-
-  py::module::import("pydrake.solvers.mathematicalprogram");
 
   type_pack<symbolic::Polynomial, symbolic::RationalFunction> sym_pack;
   type_visit([m](auto dummy) { DoPoseDeclaration(m, dummy); }, sym_pack);
