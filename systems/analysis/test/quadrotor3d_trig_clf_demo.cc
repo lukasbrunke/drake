@@ -110,10 +110,10 @@ void SearchWTrigDynamics() {
     drake::log()->info("Find initial Clf with LQR controller.");
     V_init = FindClfInit(V_degree, x);
     V_init = V_init.RemoveTermsWithSmallCoefficients(1E-6);
-    Save(V_init, "quadrotor3d_trig_clf_regional.txt");
+    Save(V_init, "/home/hongkaidai/Dropbox/sos_clf_cbf/quadrotor3d_trig_clf_regional.txt");
   } else {
     drake::log()->info("Load initial Clf with LQR controller.");
-    V_init = Load(x_set, "quadrotor3d_trig_clf_regional.txt");
+    V_init = Load(x_set, "/home/hongkaidai/Dropbox/sos_clf_cbf/quadrotor3d_trig_clf_regional.txt");
   }
 
   const ControlLyapunov dut(x, f, G, u_vertices, state_constraints);
@@ -145,10 +145,11 @@ void SearchWTrigDynamics() {
     const double rho_sol = result.GetSolution(rho_var);
     std::cout << fmt::format("V_init(x) <= {}\n", rho_sol);
     V_init = V_init / rho_sol;
-    Save(V_init, "quadrotor3d_trig_clf_max_rho.txt");
+    Save(V_init, "/home/hongkaidai/Dropbox/sos_clf_cbf/quadrotor3d_trig_clf_max_rho.txt");
   } else {
     drake::log()->info("Load initial Clf.");
-    V_init = Load(x_set, "quadrotor3d_trig_clf_max_rho.txt");
+    //V_init = Load(x_set, "/home/hongkaidai/Dropbox/sos_clf_cbf/quadrotor3d_trig_clf_max_rho.txt");
+    V_init = Load(x_set, "/home/hongkaidai/Dropbox/sos_clf_cbf/quadrotor3d_trig_clf_sol.txt");
   }
 
   symbolic::Polynomial V_sol;
@@ -174,6 +175,8 @@ void SearchWTrigDynamics() {
     for (int i = 0; i < state_samples.cols(); ++i) {
       x_samples.col(i) = ToTrigState<double>(state_samples.col(i));
     }
+    std::cout << "V(x_samples): "
+              << V_init.EvaluateIndeterminates(x, x_samples).transpose() << "\n";
 
     const double positivity_eps = 0.0001;
     const int positivity_d = V_degree / 2;
@@ -189,7 +192,7 @@ void SearchWTrigDynamics() {
                &positivity_eq_lagrangian, &lambda0_sol, &l_sol, &p_sol);
     std::cout << "V(x_samples): "
               << V_sol.EvaluateIndeterminates(x, x_samples).transpose() << "\n";
-    Save(V_sol, "quadrotor3d_trig_clf_sol.txt");
+    Save(V_sol, "/home/hongkaidai/Dropbox/sos_clf_cbf/quadrotor3d_trig_clf_sol.txt");
   }
 }
 
