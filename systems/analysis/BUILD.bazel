@@ -35,6 +35,7 @@ drake_cc_package_library(
         ":lyapunov",
         ":monte_carlo",
         ":quadrotor2d",
+        ":quadrotor",
         ":radau_integrator",
         ":region_of_attraction",
         ":runge_kutta2_integrator",
