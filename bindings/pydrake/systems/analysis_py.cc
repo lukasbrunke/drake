@@ -875,10 +875,8 @@ PYBIND11_MODULE(analysis, m) {
 
     py::class_<Class::SearchWithSlackAOptions, Class::SearchOptions>(
         control_barrier, "SearchWithSlackAOptions")
-        .def(py::init<double, double, bool, double, std::vector<double>>(),
-            py::arg("hdot_a_zero_tol"), py::arg("unsafe_a_zero_tol"),
-            py::arg("use_zero_a"), py::arg("hdot_a_cost_weight"),
-            py::arg("unsafe_a_cost_weight"),
+        .def(py::init<double, double, bool>(), py::arg("hdot_a_zero_tol"),
+            py::arg("unsafe_a_zero_tol"), py::arg("use_zero_a"),
             cls_doc.SearchWithSlackAOptions.ctor.doc)
         .def_readwrite(
             "hdot_a_zero_tol", &Class::SearchWithSlackAOptions::hdot_a_zero_tol)
@@ -886,10 +884,6 @@ PYBIND11_MODULE(analysis, m) {
             &Class::SearchWithSlackAOptions::unsafe_a_zero_tol)
         .def_readwrite(
             "use_zero_a", &Class::SearchWithSlackAOptions::use_zero_a)
-        .def_readwrite("hdot_a_cost_weight",
-            &Class::SearchWithSlackAOptions::hdot_a_cost_weight)
-        .def_readwrite("unsafe_a_cost_weight",
-            &Class::SearchWithSlackAOptions::unsafe_a_cost_weight)
         .def_readwrite("lagrangian_step_backoff_scale",
             &Class::SearchWithSlackAOptions::lagrangian_step_backoff_scale);
 
@@ -988,10 +982,14 @@ PYBIND11_MODULE(analysis, m) {
         .value("kDiagonal", analysis::SlackPolynomialType::kDiagonal);
 
     py::class_<analysis::SlackPolynomialInfo>(m, "SlackPolynomialInfo")
-        .def(py::init<int, analysis::SlackPolynomialType>(), py::arg("degree"),
-            py::arg("poly_type") = analysis::SlackPolynomialType::kSos)
+        .def(py::init<int, analysis::SlackPolynomialType, double>(),
+            py::arg("degree"),
+            py::arg("poly_type") = analysis::SlackPolynomialType::kSos,
+            py::arg("cost_weight") = 1.)
         .def_readwrite("degree", &analysis::SlackPolynomialInfo::degree)
-        .def_readwrite("type", &analysis::SlackPolynomialInfo::type);
+        .def_readwrite("type", &analysis::SlackPolynomialInfo::type)
+        .def_readwrite(
+            "cost_weight", &analysis::SlackPolynomialInfo::cost_weight);
 
     py::class_<analysis::FindCandidateRegionalLyapunovReturn>(
         m, "FindCandidateRegionalLyapunovReturn")
