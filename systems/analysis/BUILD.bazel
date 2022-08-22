@@ -21,6 +21,7 @@ drake_cc_package_library(
     deps = [
         ":antiderivative_function",
         ":bogacki_shampine3_integrator",
+        ":cart_pole",
         ":control_lyapunov",
         ":control_barrier",
         ":dense_output",
