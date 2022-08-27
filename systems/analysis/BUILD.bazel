@@ -19,6 +19,7 @@ drake_cc_package_library(
     name = "analysis",
     visibility = ["//visibility:public"],
     deps = [
+        ":acrobot",
         ":antiderivative_function",
         ":bogacki_shampine3_integrator",
         ":cart_pole",
