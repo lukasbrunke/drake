@@ -36,6 +36,7 @@ drake_cc_package_library(
         ":integrator_base",
         ":lyapunov",
         ":monte_carlo",
+        ":pendulum",
         ":quadrotor2d",
         ":quadrotor",
         ":radau_integrator",
