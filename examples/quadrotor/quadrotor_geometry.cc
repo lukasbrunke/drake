@@ -17,13 +17,14 @@ namespace quadrotor {
 const QuadrotorGeometry* QuadrotorGeometry::AddToBuilder(
       systems::DiagramBuilder<double>* builder,
       const systems::OutputPort<double>& quadrotor_state_port,
+      const std::optional<std::string>& name,
       geometry::SceneGraph<double>* scene_graph) {
   DRAKE_THROW_UNLESS(builder != nullptr);
   DRAKE_THROW_UNLESS(scene_graph != nullptr);
 
   auto quadrotor_geometry = builder->AddSystem(
       std::unique_ptr<QuadrotorGeometry>(
-          new QuadrotorGeometry(scene_graph)));
+          new QuadrotorGeometry(scene_graph, name)));
   builder->Connect(
       quadrotor_state_port,
       quadrotor_geometry->get_input_port(0));
@@ -35,7 +36,7 @@ const QuadrotorGeometry* QuadrotorGeometry::AddToBuilder(
 }
 
 QuadrotorGeometry::QuadrotorGeometry(
-    geometry::SceneGraph<double>* scene_graph) {
+    geometry::SceneGraph<double>* scene_graph, const std::optional<std::string>& name) {
   DRAKE_THROW_UNLESS(scene_graph != nullptr);
 
   // Use (temporary) MultibodyPlant to parse the urdf and setup the
@@ -46,7 +47,7 @@ QuadrotorGeometry::QuadrotorGeometry(
 
   auto model_id = parser.AddModelFromFile(
       FindResourceOrThrow("drake/examples/quadrotor/quadrotor.urdf"),
-      "quadrotor");
+      name.value_or("quadrotor"));
   mbp.Finalize();
 
   source_id_ = *mbp.get_source_id();

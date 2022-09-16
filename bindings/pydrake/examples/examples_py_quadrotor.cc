@@ -1,5 +1,6 @@
 #include "pybind11/eigen.h"
 #include "pybind11/pybind11.h"
+#include "pybind11/stl.h"
 
 #include "drake/bindings/pydrake/documentation_pybind.h"
 #include "drake/bindings/pydrake/examples/examples_py.h"
@@ -46,6 +47,7 @@ void DefineExamplesQuadrotor(py::module m) {
           doc.QuadrotorGeometry.get_frame_id.doc)
       .def_static("AddToBuilder", &QuadrotorGeometry::AddToBuilder,
           py::arg("builder"), py::arg("quadrotor_state_port"),
+          py::arg("name"),
           py::arg("scene_graph"), py::return_value_policy::reference,
           // Keep alive, ownership: `return` keeps `builder` alive.
           py::keep_alive<0, 1>(), doc.QuadrotorGeometry.AddToBuilder.doc);
