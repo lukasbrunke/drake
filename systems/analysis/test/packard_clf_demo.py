@@ -142,7 +142,7 @@ def simulate_clf(x, clf, u_max, kappa, x0, duration):
 
 def draw_clf_contour(fig, ax, V, rho_vals, x):
     xs = np.arange(-4, 4, 0.01)
-    ys = np.arange(-8, 8, 0.01)
+    ys = np.arange(-5, 5, 0.01)
     X, Y = np.meshgrid(xs, ys)
     V_val = V.EvaluateIndeterminates(x, np.vstack((X.reshape((1, -1)), Y.reshape((1, -1))))).reshape(X.shape)
     contour_handle = ax.contour(X, Y, V_val, rho_vals, linewidths=1)
@@ -154,8 +154,12 @@ def draw_contours(V, x, V_init, rho_init):
     fig = plt.figure()
     ax = fig.add_subplot(111)
     contour_handle_init = draw_clf_contour(fig, ax, V_init, [rho_init], x)
-    contour_handle_init.collections[0].set_edgecolor('k')
-    contour_handle = draw_clf_contour(fig, ax, V, [0.023, 0.03, 0.259, 0.38, 0.45], x)
+    contour_handle_init.collections[0].set_edgecolor('g')
+    contour_handle = draw_clf_contour(fig, ax, V, [0.0102, 0.013, 0.09, 0.11, 0.3], x)
+    contour_handle.collections[0].set_edgecolor('slategrey')
+    contour_handle.collections[1].set_edgecolor('tan')
+    contour_handle.collections[2].set_edgecolor('cyan')
+    contour_handle.collections[3].set_edgecolor('plum')
     contour_handle.collections[-1].set_edgecolor('r')
     proxy = [plt.Rectangle((0, 0), 1, 1, fc=contour_handle_init.collections[0].get_edgecolor()[0])] + [plt.Rectangle((0, 0), 1, 1, fc=pc.get_edgecolor()[0]) for pc in contour_handle.collections]
     contour_labels = ["CLF_init", "degree(u)=1", "degree(u)=3", "degree(u)=5", "degree(u)=7", "CLF"]
@@ -166,7 +170,7 @@ def draw_contours(V, x, V_init, rho_init):
     #for i in range(len(contour_labels)):
     #    contour_handle.collections[i].set_label(contour_labels[i])
     for fig_format in ["pdf", "png"]:
-        fig.savefig("/home/hongkaidai/Dropbox/talks/pictures/sos_clf_cbf/packard_V_contours_with_init."+fig_format, format=fig_format)
+        fig.savefig("/home/hongkaidai/Dropbox/talks/pictures/sos_clf_cbf/packard_V8_contours_with_init."+fig_format, format=fig_format)
     return fig, ax, contour_handle
 
 def simulate_u(x, u, V, kappa, u_max, x0, duration):
@@ -215,9 +219,9 @@ def search(u_max, kappa):
     #V_init = sym.Polynomial(sym.pow(x.dot(x), 2))
     rho_init = 0.3
 
-    V_degree = 6
-    lambda0_degree = 6
-    l_degrees = [6, 6]
+    V_degree = 8
+    lambda0_degree = 8
+    l_degrees = [8, 8]
     p_degrees = []
     search_options = analysis.ControlLyapunov.SearchOptions()
     search_options.d_converge_tol = 0.
