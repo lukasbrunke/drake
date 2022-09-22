@@ -1,7 +1,10 @@
 import numpy as np
 import scipy.integrate
+import pickle
 
 import matplotlib.pyplot as plt
+
+import clf_cbf_utils
 
 import pydrake.systems.controllers as controllers
 import pydrake.symbolic as sym
@@ -240,6 +243,15 @@ def search(u_max, kappa):
         V_init, lambda0_degree, l_degrees, V_degree, 0., 1, [], p_degrees, [],
         kappa, x_star, S, r_degree=V_degree - 2, search_options=search_options,
         ellipsoid_option=ellipsoid_option)
+
+    with open("/home/hongkaidai/Dropbox/sos_clf_cbf/packard/V8_1.pickle", "wb") as handle:
+        pickle.dump({"V": clf_cbf_utils.serialize_polynomial(search_result.V),
+            "rho": search_options.rho,
+            "V_init": clf_cbf_utils.serialize_polynomial(V_init),
+            "kappa": kappa,
+            "u_max": u_max,
+            "lambda0_degree": lambda0_degree,
+            "l_degrees": l_degrees}, handle)
 
     fig, ax, contour_handle = draw_contours(search_result.V, x, V_init, rho_init)
 
