@@ -152,8 +152,8 @@ def draw_clf_contour(fig, ax, V, rho_vals, x):
     X, Y = np.meshgrid(xs, ys)
     V_val = V.EvaluateIndeterminates(x, np.vstack((X.reshape((1, -1)), Y.reshape((1, -1))))).reshape(X.shape)
     contour_handle = ax.contour(X, Y, V_val, rho_vals, linewidths=1)
-    ax.set_xlabel(r"$x_1$")
-    ax.set_ylabel(r"$x_2$")
+    ax.set_xlabel(r"$x_1$", fontsize=20)
+    ax.set_ylabel(r"$x_2$", fontsize=20)
     return contour_handle
 
 def draw_contours(V, x, V_init, rho_init):
@@ -170,7 +170,7 @@ def draw_contours(V, x, V_init, rho_init):
     contour_handle.collections[-1].set_edgecolor('r')
     proxy = [plt.Rectangle((0, 0), 1, 1, fc=contour_handle_init.collections[0].get_edgecolor()[0])] + [plt.Rectangle((0, 0), 1, 1, fc=pc.get_edgecolor()[0]) for pc in contour_handle.collections]
     contour_labels = ["CLF_init", "degree(u)=1", "degree(u)=3", "degree(u)=5", "degree(u)=7", "degree(u)=9", "CLF"]
-    plt.legend(proxy, contour_labels)
+    plt.legend(proxy, contour_labels, fontsize=12)
     ax.axis("equal")
     #ax.axis("scaled")
     #ax.set(xlim=(-5, 5), ylim=(-10, 10))
