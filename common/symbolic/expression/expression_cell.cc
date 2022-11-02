@@ -6,6 +6,7 @@
 #include <cmath>
 #include <functional>
 #include <iomanip>
+#include <iostream>
 #include <limits>
 #include <map>
 #include <memory>
@@ -118,6 +119,13 @@ Expression ExpandMultiplication(const Expression& e1, const Expression& e2,
 // already expanded.
 Expression ExpandMultiplication(const Expression& e1, const Expression& e2) {
   // Precondition: e1 and e2 are already expanded.
+  std::cout << "e1: " << e1 << "\ne2: " << e2 << "\n";
+  std::cout << "e1.Expand(): " << e1.Expand()
+            << "\ne2.Expand(): " << e2.Expand() << "\n";
+  std::cout << "e1 == e1.Expand()? " << e1.EqualTo(e1.Expand()) << "\n";
+  std::cout << "e2 == e2.Expand()? " << e2.EqualTo(e2.Expand()) << "\n";
+  std::cout << "e2.get_kind() == e2.Expand().get_kind(): "
+            << (e2.get_kind() == e2.Expand().get_kind()) << "\n";
   DRAKE_ASSERT(e1.EqualTo(e1.Expand()));
   DRAKE_ASSERT(e2.EqualTo(e2.Expand()));
 
