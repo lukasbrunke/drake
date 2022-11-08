@@ -6,6 +6,7 @@
 #include <cmath>
 #include <functional>
 #include <iomanip>
+#include <iostream>
 #include <limits>
 #include <map>
 #include <memory>
@@ -133,6 +134,7 @@ void AssertAlreadyExpanded(const Expression& e, int line) {
 // already expanded.
 Expression ExpandMultiplication(const Expression& e1, const Expression& e2) {
   // Precondition: e1 and e2 are already expanded.
+  std::cout << fmt::format("e1={}\ne2={}\n", e1, e2);
   AssertAlreadyExpanded(e1, __LINE__);
   AssertAlreadyExpanded(e2, __LINE__);
 
@@ -146,6 +148,7 @@ Expression ExpandMultiplication(const Expression& e1, const Expression& e2) {
     for (const pair<const Expression, double>& p : m1) {
       fac.AddExpression(ExpandMultiplication(p.second, p.first, e2));
     }
+    std::cout << fmt::format("{}: e1={}, e2={}, fac.GetExpression()={}\n", __LINE__, e1, e2, fac.GetExpression());
     return fac.GetExpression();
   }
   if (is_addition(e2)) {
@@ -158,6 +161,7 @@ Expression ExpandMultiplication(const Expression& e1, const Expression& e2) {
     for (const pair<const Expression, double>& p : m1) {
       fac.AddExpression(ExpandMultiplication(e1, p.second, p.first));
     }
+    std::cout << fmt::format("{}: e1={}, e2={}, fac.GetExpression()={}\n", __LINE__, e1, e2, fac.GetExpression());
     return fac.GetExpression();
   }
   if (is_division(e1)) {
@@ -171,6 +175,7 @@ Expression ExpandMultiplication(const Expression& e1, const Expression& e2) {
       // precondition.
       const Expression& e2_1{get_first_argument(e2)};
       const Expression& e2_2{get_second_argument(e2)};
+      std::cout << fmt::format("{}: e1={}, e2={}, ExpandMultiplication(e1_1, e2_1)/ExpandMultiplication(e1_2, e2_2)={}\n", __LINE__, e1, e2, ExpandMultiplication(e1_1, e2_1)/ExpandMultiplication(e1_2, e2_2));
       return ExpandMultiplication(e1_1, e2_1) /
              ExpandMultiplication(e1_2, e2_2);
     }
@@ -178,6 +183,8 @@ Expression ExpandMultiplication(const Expression& e1, const Expression& e2) {
     // => (e1_1 * e2).Expand() / e2.
     //
     // Note that e1_1, e1_2, and e_2 are already expanded by the precondition.
+    std::cout << fmt::format("{}: e1={}, e2={}, ExpandMultiplication(e1_1, e2)/e1_2={}\n",
+                             __LINE__, e1, e2, ExpandMultiplication(e1_1, e2) / e1_2);
     return ExpandMultiplication(e1_1, e2) / e1_2;
   }
   if (is_division(e2)) {
@@ -187,8 +194,11 @@ Expression ExpandMultiplication(const Expression& e1, const Expression& e2) {
     // Note that e1, e2_1, and e2_2 are already expanded by the precondition.
     const Expression& e2_1{get_first_argument(e2)};
     const Expression& e2_2{get_second_argument(e2)};
+    std::cout << fmt::format("{}: e1={}, e2={}, ExpandMultiplication(e1, e2_1)/e2_2={}\n",
+                             __LINE__, e1, e2, ExpandMultiplication(e1, e2_1) / e2_2);
     return ExpandMultiplication(e1, e2_1) / e2_2;
   }
+  std::cout << fmt::format("{}: e1={}, e2={}, e1*e2={}\n", __LINE__, e1, e2, e1 * e2);
   return e1 * e2;
 }
 
