@@ -1,5 +1,6 @@
 #include "drake/multibody/inverse_kinematics/minimum_distance_constraint.h"
 
+#include <iostream>
 #include <limits>
 #include <vector>
 
@@ -54,6 +55,15 @@ VectorX<S> Distances(const MultibodyPlant<T>& plant,
         signed_distance_pairs[i].distance, signed_distance_pairs[i].nhat_BA_W,
         q, &distances(i));
   }
+  //const int num_pairs = query_object.inspector().GetCollisionCandidates().size();
+  //if (distances.rows() < num_pairs) {
+  //  const int old_size = distances.rows();
+  //  distances.conservativeResize(num_pairs);
+  //  for (int i = old_size; i < num_pairs; ++i) {
+  //    distances(i) = influence_distance;
+  //  }
+  //}
+  std::cout << "distances: " << distances.transpose() << "\n";
   return distances;
 }
 

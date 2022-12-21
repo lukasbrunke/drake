@@ -1,5 +1,6 @@
 #include "drake/solvers/minimum_value_constraint.h"
 
+#include <iostream>
 #include <limits>
 #include <vector>
 
@@ -21,6 +22,11 @@ T LogSumExp(const std::vector<T>& x) {
   for (const T& xi : x) {
     sum_exp += exp(xi - x_max);
   }
+  std::cout << "x: ";
+  for (const auto& xi : x) {
+    std::cout << xi << " ";
+  }
+  std::cout << "\n";
   return x_max + log(sum_exp);
 }
 
