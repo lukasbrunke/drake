@@ -7,7 +7,6 @@ from pydrake.all import (HPolyhedron,
                          RationalForwardKinematics, GeometrySet, Role,
                          RigidTransform, RotationMatrix,
                          Hyperellipsoid, Simulator, Box)
-from pydrake.all import GetVertices
 from functools import partial
 import mcubes
 import C_Iris_Examples.visualizations_utils as viz_utils
@@ -16,7 +15,7 @@ from IPython.display import display
 from scipy.spatial import Delaunay, ConvexHull
 from scipy.linalg import block_diag
 
-from pydrake.all import MeshcatVisualizerCpp, StartMeshcat, MeshcatVisualizer, DiagramBuilder, \
+from pydrake.all import MeshcatVisualizer, StartMeshcat, MeshcatVisualizer, DiagramBuilder, \
     AddMultibodyPlantSceneGraph, TriangleSurfaceMesh, Rgba, SurfaceTriangle, Sphere
 
 
@@ -28,12 +27,12 @@ class IrisPlantVisualizer:
         self.meshcat2 = StartMeshcat()
         self.meshcat1.Delete()
         self.meshcat2.Delete()
-        self.vis = MeshcatVisualizerCpp.AddToBuilder(builder, scene_graph, self.meshcat1)
+        self.vis = MeshcatVisualizer.AddToBuilder(builder, scene_graph, self.meshcat1)
 
 
         builder2 = DiagramBuilder()
         plant2, scene_graph2 = AddMultibodyPlantSceneGraph(builder2, time_step=0.0)
-        self.vis2 = MeshcatVisualizerCpp.AddToBuilder(builder2, scene_graph2, self.meshcat2)
+        self.vis2 = MeshcatVisualizer.AddToBuilder(builder2, scene_graph2, self.meshcat2)
 
         self.plant = plant
 
@@ -42,19 +41,19 @@ class IrisPlantVisualizer:
 
         # Construct Rational Forward Kinematics
         self.forward_kin = RationalForwardKinematics(plant)
-        self.s_variables = sym.Variables(self.forward_kin.t())
-        self.s_array = self.forward_kin.t()
+        self.s_variables = sym.Variables(self.forward_kin.s())
+        self.s_array = self.forward_kin.s()
         self.num_joints = self.plant.num_positions()
         # the point around which we construct the stereographic projection
         self.q_star = kwargs.get('q_star', np.zeros(self.num_joints))
         self.q_lower_limits = plant.GetPositionLowerLimits()
-        self.s_lower_limits = self.forward_kin.ComputeTValue(self.q_lower_limits, self.q_star)
+        self.s_lower_limits = self.forward_kin.ComputeSValue(self.q_lower_limits, self.q_star)
         tmp = -1
         self.q_lower_limits = viz_utils.stretch_array_to_3d(self.q_lower_limits,tmp)
         self.s_lower_limits = viz_utils.stretch_array_to_3d(self.s_lower_limits,tmp)
 
         self.q_upper_limits = plant.GetPositionUpperLimits()
-        self.s_upper_limits = self.forward_kin.ComputeTValue(self.q_upper_limits, self.q_star)
+        self.s_upper_limits = self.forward_kin.ComputeSValue(self.q_upper_limits, self.q_star)
         self.q_upper_limits = viz_utils.stretch_array_to_3d(self.q_upper_limits)
         self.s_upper_limits = viz_utils.stretch_array_to_3d(self.s_upper_limits)
 
@@ -92,9 +91,9 @@ class IrisPlantVisualizer:
             pair_set.add(p[0])
             pair_set.add(p[1])
         self.geom_ids = self.inspector.GetGeometryIds(GeometrySet(list(pair_set)))
-        self.link_poses_by_body_index_rat_pose = self.forward_kin.CalcLinkPoses(self.q_star,
-                                                                                self.plant.world_body().index())
-        self.X_WA_list = [p.asRigidTransformExpr() for p in self.link_poses_by_body_index_rat_pose]
+        # self.link_poses_by_body_index_rat_pose = self.forward_kin.CalcLinkPoses(self.q_star,
+        #                                                                         self.plant.world_body().index())
+        # self.X_WA_list = [p.asRigidTransformExpr() for p in self.link_poses_by_body_index_rat_pose]
         self.body_indexes_by_geom_id = {geom:
                                             plant.GetBodyFromFrameId(self.inspector.GetFrameId(geom)).index() for geom
                                         in
@@ -105,16 +104,16 @@ class IrisPlantVisualizer:
         self.vpoly_sets_in_self_frame_by_geom_id = {
             geom: self.MakeFromVPolytopeSceneGraph(self.query, geom, self.inspector.GetFrameId(geom))
             for geom in self.geom_ids}
-
-        self.s_space_vertex_world_position_by_geom_id = {}
-        for geom in self.geom_ids:
-            VPoly = self.vpoly_sets_in_self_frame_by_geom_id[geom]
-            num_verts = VPoly.vertices().shape[1]
-            X_WA = self.X_WA_list[int(self.body_indexes_by_geom_id[geom])]
-            R_WA = X_WA.rotation().matrix()
-            p_WA = X_WA.translation()
-            vert_pos = R_WA @ (VPoly.vertices()) + np.repeat(p_WA[:, np.newaxis], num_verts, 1)
-            self.s_space_vertex_world_position_by_geom_id[geom] = vert_pos
+        #
+        # self.s_space_vertex_world_position_by_geom_id = {}
+        # for geom in self.geom_ids:
+        #     VPoly = self.vpoly_sets_in_self_frame_by_geom_id[geom]
+        #     num_verts = VPoly.vertices().shape[1]
+        #     X_WA = self.X_WA_list[int(self.body_indexes_by_geom_id[geom])]
+        #     R_WA = X_WA.rotation().matrix()
+        #     p_WA = X_WA.translation()
+        #     vert_pos = R_WA @ (VPoly.vertices()) + np.repeat(p_WA[:, np.newaxis], num_verts, 1)
+        #     self.s_space_vertex_world_position_by_geom_id[geom] = vert_pos
 
         #plotting planes setup
         x = np.linspace(-1, 1, 3)
@@ -368,7 +367,7 @@ class IrisPlantVisualizer:
     def showres(self,q, idx_list = None):
         self.plant.SetPositions(self.plant_context, q)
         col = self.col_func_handle(q)
-        s = self.forward_kin.ComputeTValue(np.array(q), self.q_star)
+        s = self.forward_kin.ComputeSValue(np.array(q), self.q_star)
         s = viz_utils.stretch_array_to_3d(s)
         color = Rgba(1, 0.72, 0, 1) if col else Rgba(0.24, 1, 0, 1)
 
@@ -442,7 +441,7 @@ class IrisPlantVisualizer:
     def visualize_planes(self, idx_list = None):
         idx_list = [i for i in range(len(self.certified_region_solution_list))] if idx_list is None else idx_list
         q = self.plant.GetPositions(self.plant_context)
-        s = self.forward_kin.ComputeTValue(np.array(q), self.q_star)
+        s = self.forward_kin.ComputeSValue(np.array(q), self.q_star)
         if self.color_dict is None:
             colors = viz_utils.n_colors(len(self.certified_region_solution_list), rgbs_ret=True)
             color_dict = {i: tuple(val / 255 for val in c) for i, c in enumerate(colors)}
