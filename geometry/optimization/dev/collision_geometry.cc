@@ -31,7 +31,7 @@ struct ReifyData {
       PlaneSide m_plane_side, GeometryId m_geometry_id,
       const VectorX<symbolic::Variable>& m_y_slack,
       std::vector<symbolic::RationalFunction>* m_rationals,
-      std::vector<symbolic::Polynomial>* m_polynomials_w_slack)
+      std::vector<symbolic::RationalFunction>* m_psd_mat_rationals)
       : a{&m_a},
         b{&m_b},
         X_AB_multilinear{&m_X_AB_multilinear},
@@ -40,7 +40,7 @@ struct ReifyData {
         geometry_id{m_geometry_id},
         y_slack{&m_y_slack},
         rationals{m_rationals},
-        polynomials_w_slack{m_polynomials_w_slack} {}
+        psd_mat_rationals{m_psd_mat_rationals} {}
 
   // To avoid copying objects (which might be expensive), I store the
   // non-primitive-type objects with pointers.
@@ -53,7 +53,7 @@ struct ReifyData {
   const GeometryId geometry_id;
   const VectorX<symbolic::Variable>* y_slack;
   std::vector<symbolic::RationalFunction>* rationals;
-  std::vector<symbolic::Polynomial>* polynomials_w_slack;
+  std::vector<symbolic::RationalFunction>* psd_mat_rationals;
 };
 
 // Compute the rational function
@@ -128,9 +128,9 @@ class OnPlaneSideReifier : public ShapeReifier {
       const multibody::RationalForwardKinematics& rational_forward_kin,
       PlaneSide plane_side, const VectorX<symbolic::Variable>& y_slack,
       std::vector<symbolic::RationalFunction>* rationals,
-      std::vector<symbolic::Polynomial>* polynomials_w_slack) {
+      std::vector<symbolic::RationalFunction>* psd_mat_rationals) {
     ReifyData data(a, b, X_AB_multilinear, rational_forward_kin, plane_side,
-                   geometry_id_, y_slack, rationals, polynomials_w_slack);
+                   geometry_id_, y_slack, rationals, psd_mat_rationals);
     geometry_->Reify(this, &data);
   }
 
@@ -165,16 +165,16 @@ class OnPlaneSideReifier : public ShapeReifier {
     // Namely if plane_side = kPositive, the matrix
     // ⌈aᵀp_AS + b               aᵀ⌉  is psd.           (2a)
     // ⌊ a        (aᵀp_AS + b)/r²*I⌋
-    // If we write p_AS = f(s)/g(s), (2a) is equivalent to the polynomial
-    // ⌈1⌉ᵀ⌈aᵀf(s) + g(s)b              g(s)aᵀ⌉⌈1⌉
-    // ⌊y⌋ ⌊ g(s)a        (aᵀf(s)+ g(s)b)/r²*I⌋⌊y⌋
+    // (2a) is equivalent to the rational 
+    // ⌈1⌉ᵀ⌈aᵀp_AS + b              aᵀ⌉⌈1⌉
+    // ⌊y⌋ ⌊ a        (aᵀp_AS+ b)/r²*I⌋⌊y⌋
     // being non-negative.
     // Likewise if plane_side = kNegative, the matrix
     // ⌈-aᵀp_AS - b               aᵀ⌉  is psd.           (2b)
     // ⌊ a        -(aᵀp_AS + b)/r²*I⌋
-    // (2b) is equivalent to the polynomial
-    // ⌈1⌉ᵀ⌈-aᵀf(s) - g(s)b              g(s)aᵀ⌉⌈1⌉
-    // ⌊y⌋ ⌊ g(s)a        -(aᵀf(s)+ g(s)b)/r²*I⌋⌊y⌋
+    // (2b) is equivalent to the rational
+    // ⌈1⌉ᵀ⌈-aᵀp_AS - b              aᵀ⌉⌈1⌉
+    // ⌊y⌋ ⌊ a        -(aᵀp_AS+ b)/r²*I⌋⌊y⌋
     // being non-negative.
     auto* reify_data = static_cast<ReifyData*>(data);
 
@@ -197,11 +197,12 @@ class OnPlaneSideReifier : public ShapeReifier {
          {symbolic::Monomial((*(reify_data->y_slack))(1), 2), 1},
          {symbolic::Monomial((*(reify_data->y_slack))(2), 2), 1}}};
     const double sign = reify_data->plane_side == PlaneSide::kPositive ? 1 : -1;
-    reify_data->polynomials_w_slack->push_back(
+    reify_data->psd_mat_rationals->emplace_back(
         sign * a_dot_x_plus_b.numerator() +
-        2 * reify_data->a->dot(y_poly) * a_dot_x_plus_b.denominator() +
-        y_squared / (sphere.radius() * sphere.radius()) * sign *
-            a_dot_x_plus_b.numerator());
+            2 * reify_data->a->dot(y_poly) * a_dot_x_plus_b.denominator() +
+            y_squared / (sphere.radius() * sphere.radius()) * sign *
+                a_dot_x_plus_b.numerator(),
+        a_dot_x_plus_b.denominator());
   }
 
   void ImplementGeometry(const Capsule& capsule, void* data) {
@@ -217,13 +218,13 @@ class OnPlaneSideReifier : public ShapeReifier {
     // and 1(b) is equivalent to
     // ⌈aᵀp_AS2 + b               aᵀ⌉  is psd.           (3b)
     // ⌊ a         (aᵀp_AS + b)/r²*I⌋
-    // If we write p_AS = f(s)/g(s), (3) is equivalent to the polynomial
-    // ⌈1⌉ᵀ⌈aᵀf(s) + g(s)b              g(s)aᵀ⌉⌈1⌉
-    // ⌊y⌋ ⌊ g(s)a        (aᵀf(s)+ g(s)b)/r²*I⌋⌊y⌋
+    // (3) is equivalent to the rational
+    // ⌈1⌉ᵀ⌈aᵀp_AS + b              aᵀ⌉⌈1⌉
+    // ⌊y⌋ ⌊ a       (aᵀp_AS + b)/r²*I⌋⌊y⌋
     // being non-negative.
-    // Likewise, if plane_side = kNegative, (2) is equivalent to the polynomial
-    // ⌈1⌉ᵀ⌈-aᵀf(s) - g(s)b              g(s)aᵀ⌉⌈1⌉
-    // ⌊y⌋ ⌊ g(s)a        -(aᵀf(s)+ g(s)b)/r²*I⌋⌊y⌋
+    // Likewise, if plane_side = kNegative, (2) is equivalent to the rational
+    // ⌈1⌉ᵀ⌈-aᵀp_AS - b              aᵀ⌉⌈1⌉
+    // ⌊y⌋ ⌊ a       -(aᵀp_AS + b)/r²*I⌋⌊y⌋
     // being non-negative.
     auto* reify_data = static_cast<ReifyData*>(data);
     Eigen::Matrix<double, 3, 2> p_GS;
@@ -250,11 +251,12 @@ class OnPlaneSideReifier : public ShapeReifier {
           reify_data->rational_forward_kin
               ->ConvertMultilinearPolynomialToRationalFunction(
                   reify_data->a->dot(p_AS) + *(reify_data->b));
-      reify_data->polynomials_w_slack->push_back(
+      reify_data->psd_mat_rationals->emplace_back(
           sign * a_dot_x_plus_b.numerator() +
-          2 * reify_data->a->dot(y_poly) * a_dot_x_plus_b.denominator() +
-          y_squared / (capsule.radius() * capsule.radius()) * sign *
-              a_dot_x_plus_b.numerator());
+              2 * reify_data->a->dot(y_poly) * a_dot_x_plus_b.denominator() +
+              y_squared / (capsule.radius() * capsule.radius()) * sign *
+                  a_dot_x_plus_b.numerator(),
+          a_dot_x_plus_b.denominator());
     }
   }
 
@@ -341,9 +343,9 @@ class NumRationalsPerPlaneSideReifier : public ShapeReifier {
   const Shape* shape_;
 };
 
-class NumPolynomialsWSlackReifier : public ShapeReifier {
+class NumPsdMatRationalsReifier : public ShapeReifier {
  public:
-  explicit NumPolynomialsWSlackReifier(const Shape* shape) : shape_{shape} {}
+  explicit NumPsdMatRationalsReifier(const Shape* shape) : shape_{shape} {}
 
   int ProcessData() {
     int ret;
@@ -492,10 +494,10 @@ void CollisionGeometry::OnPlaneSide(
     const multibody::RationalForwardKinematics& rational_forward_kin,
     PlaneSide plane_side, const VectorX<symbolic::Variable>& y_slack,
     std::vector<symbolic::RationalFunction>* rationals,
-    std::vector<symbolic::Polynomial>* polynomials_w_slack) const {
+    std::vector<symbolic::RationalFunction>* psd_mat_rationals) const {
   OnPlaneSideReifier reifier(geometry_, X_BG_, id_);
   reifier.ProcessData(a, b, X_AB_multilinear, rational_forward_kin, plane_side,
-                      y_slack, rationals, polynomials_w_slack);
+                      y_slack, rationals, psd_mat_rationals);
 }
 
 GeometryType CollisionGeometry::type() const {
@@ -508,8 +510,8 @@ int CollisionGeometry::num_rationals_per_side() const {
   return reifier.ProcessData();
 }
 
-int CollisionGeometry::num_polynomials_w_slack() const {
-  NumPolynomialsWSlackReifier reifier(geometry_);
+int CollisionGeometry::num_psd_mat_rationals() const {
+  NumPsdMatRationalsReifier reifier(geometry_);
   return reifier.ProcessData();
 }
 

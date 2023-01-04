@@ -61,10 +61,9 @@ class CollisionGeometry {
    We can reformulate (1) as the following constraint
    ⌈aᵀp_AS + b               aᵀ⌉  is psd.           (2)
    ⌊ a        (aᵀp_AS + b)/r²*I⌋
-   If p_AS(s) = f(s) / g(s) where both f(s) and g(s) are polynomials, then (2)
-   is equivalent to the polynomial
-   ⌈1⌉ᵀ⌈aᵀf(s) + g(s)b              g(s)aᵀ⌉⌈1⌉
-   ⌊y⌋ ⌊ g(s)a        (aᵀf(s)+ g(s)b)/r²*I⌋⌊y⌋
+   (2) is equivalent to the rational
+   ⌈1⌉ᵀ⌈aᵀp_AS + b              aᵀ⌉⌈1⌉
+   ⌊y⌋ ⌊ a        (aᵀp_AS+ b)/r²*I⌋⌊y⌋
    is positive.
 
    To impose the constraint that a polytope is on the positive side
@@ -88,7 +87,7 @@ class CollisionGeometry {
    non-polytopic geometries.
    @param[out] rationals The rational functions that need to be positive. This
    is used for polytope geometries.
-   @param[out] polynomials_w_slack The polynomials (whose indeterminates are y
+   @param[out] psd_mat_rationals The rationals (whose indeterminates are y
    and s) that need to be positive. This is used for non-polytopic geometries.
    */
   void OnPlaneSide(
@@ -98,7 +97,7 @@ class CollisionGeometry {
       const multibody::RationalForwardKinematics& rational_forward_kin,
       PlaneSide plane_side, const VectorX<symbolic::Variable>& y_slack,
       std::vector<symbolic::RationalFunction>* rationals,
-      std::vector<symbolic::Polynomial>* polynomials_w_slack) const;
+      std::vector<symbolic::RationalFunction>* psd_mat_rationals) const;
 
   [[nodiscard]] GeometryType type() const;
 
@@ -112,7 +111,7 @@ class CollisionGeometry {
    Returns the number of polynomials_w_slack in the condition "this geometry is
    on one side of the plane."
    */
-  [[nodiscard]] int num_polynomials_w_slack() const;
+  [[nodiscard]] int num_psd_mat_rationals() const;
 
   /**
    Returns the size of y used in the matrix-sos constraint to impose the
