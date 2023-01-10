@@ -41,9 +41,9 @@ class CIrisToyRobotTest : public ::testing::Test {
 // Create a robot with only polytopic collision geometry.
 // world - revolute - body0 - revolute - body1 - revolute - body2 - revolute -
 // body3
-class CIrisRobotPolytopicCollisionTest : public ::testing::Test {
+class CIrisRobotPolytopicGeometryTest : public ::testing::Test {
  public:
-  CIrisRobotPolytopicCollisionTest();
+  CIrisRobotPolytopicGeometryTest();
 
  protected:
   std::unique_ptr<systems::Diagram<double>> diagram_;

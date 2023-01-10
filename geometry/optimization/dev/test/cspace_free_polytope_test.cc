@@ -31,9 +31,11 @@ class CspaceFreePolytopeTester {
   CspaceFreePolytopeTester(const multibody::MultibodyPlant<double>* plant,
                            const geometry::SceneGraph<double>* scene_graph,
                            SeparatingPlaneOrder plane_order,
-                           const Eigen::Ref<const Eigen::VectorXd>& q_star)
-      : cspace_free_polytope_{
-            new CspaceFreePolytope(plant, scene_graph, plane_order, q_star)} {}
+                           const Eigen::Ref<const Eigen::VectorXd>& q_star,
+                           const CspaceFreePolytope::Options& options =
+                               CspaceFreePolytope::Options())
+      : cspace_free_polytope_{new CspaceFreePolytope(
+            plant, scene_graph, plane_order, q_star, options)} {}
 
   const CspaceFreePolytope& cspace_free_polytope() const {
     return *cspace_free_polytope_;
@@ -87,6 +89,13 @@ class CspaceFreePolytopeTester {
                                          VectorX<symbolic::Monomial>>&
   map_body_to_monomial_basis_w_y() const {
     return cspace_free_polytope_->map_body_to_monomial_basis_w_y_;
+  }
+
+  [[nodiscard]] const std::unordered_map<
+      SortedPair<multibody::BodyIndex>,
+      std::array<VectorX<symbolic::Monomial>, 3>>&
+  map_body_to_monomial_basis_w_y_array() const {
+    return cspace_free_polytope_->map_body_to_monomial_basis_w_y_array_;
   }
 
   [[nodiscard]] CspaceFreePolytope::SeparationCertificateProgram
@@ -440,10 +449,63 @@ TEST_F(CIrisToyRobotTest, CalcSBoundsPolynomial) {
   }
 }
 
-TEST_F(CIrisToyRobotTest, CalcMonomialBasis) {
+TEST_F(CIrisToyRobotTest, CalcMonomialBasis1) {
+  // Test CalcMonomialBasis with formulation 1
   const Eigen::Vector3d q_star(0, 0, 0);
-  CspaceFreePolytopeTester tester(plant_, scene_graph_,
-                                  SeparatingPlaneOrder::kAffine, q_star);
+  CspaceFreePolytope::Options options;
+  options.formulation = CspaceFreePolytope::Formulation::kFormulation1;
+  CspaceFreePolytopeTester tester(
+      plant_, scene_graph_, SeparatingPlaneOrder::kAffine, q_star, options);
+  EXPECT_TRUE(tester.map_body_to_monomial_basis_w_y().empty());
+
+  const auto& map_body_to_monomial_basis = tester.map_body_to_monomial_basis();
+  // Make sure map_body_to_monomial_basis contains all pairs of bodies.
+  for (const auto& plane : tester.cspace_free_polytope().separating_planes()) {
+    for (const auto collision_geometry :
+         {plane.positive_side_geometry, plane.negative_side_geometry}) {
+      const SortedPair<multibody::BodyIndex> body_pair(
+          plane.expressed_body, collision_geometry->body_index());
+      auto it = map_body_to_monomial_basis.find(body_pair);
+      EXPECT_NE(it, map_body_to_monomial_basis.end());
+      const auto& monomial_basis = it->second;
+      // Make sure the degree for each variable in the monomial is at most 1.
+      for (int i = 0; i < monomial_basis.rows(); ++i) {
+        for (const auto& [var, degree] : monomial_basis(i).get_powers()) {
+          EXPECT_LE(degree, 1);
+        }
+      }
+
+      if (collision_geometry->type() == GeometryType::kSphere ||
+          collision_geometry->type() == GeometryType::kCapsule) {
+        auto it_w_y_array =
+            tester.map_body_to_monomial_basis_w_y_array().find(body_pair);
+        EXPECT_NE(it_w_y_array,
+                  tester.map_body_to_monomial_basis_w_y_array().end());
+        const auto& monomial_basis_w_y_array = it_w_y_array->second;
+        for (int i = 0; i < 3; ++i) {
+          EXPECT_EQ(monomial_basis_w_y_array[i].rows(),
+                    2 * monomial_basis.rows());
+          for (int j = 0; j < monomial_basis.rows(); ++j) {
+            EXPECT_EQ(monomial_basis_w_y_array[i](j), monomial_basis(j));
+            EXPECT_EQ(
+                monomial_basis_w_y_array[i](monomial_basis.rows() + j),
+                symbolic::Monomial(tester.cspace_free_polytope().y_slack()(i)) *
+                    monomial_basis(j));
+          }
+        }
+      }
+    }
+  }
+}
+
+TEST_F(CIrisToyRobotTest, CalcMonomialBasis2) {
+  // Test CalcMonomialBasis with formulation 2
+  const Eigen::Vector3d q_star(0, 0, 0);
+  CspaceFreePolytope::Options options;
+  options.formulation = CspaceFreePolytope::Formulation::kFormulation2;
+  CspaceFreePolytopeTester tester(
+      plant_, scene_graph_, SeparatingPlaneOrder::kAffine, q_star, options);
+  EXPECT_TRUE(tester.map_body_to_monomial_basis_w_y_array().empty());
   const auto& map_body_to_monomial_basis = tester.map_body_to_monomial_basis();
   // Make sure map_body_to_monomial_basis contains all pairs of bodies.
   for (const auto& plane : tester.cspace_free_polytope().separating_planes()) {
@@ -584,6 +646,10 @@ void CheckSosLagrangians(
   }
 }
 
+// Check if rationals are all positive in the C-space polytope. Note that for
+// some reason Mosek doesn't solve to a very high precision (the constraint
+// violation can be in the order of 1E-3, even if  Mosek reports success), so we
+// could use a pretty large tolerance `tol`.
 void CheckRationalsPositiveInCspacePolytope(
     const std::vector<symbolic::RationalFunction>& rationals,
     const std::vector<CspaceFreePolytope::SeparatingPlaneLagrangians>&
@@ -613,10 +679,13 @@ void TestConstructPlaneSearchProgram(
     const systems::Diagram<double>& diagram,
     const multibody::MultibodyPlant<double>& plant,
     const SceneGraph<double>& scene_graph,
-    const SortedPair<geometry::GeometryId>& geometry_pair) {
+    const SortedPair<geometry::GeometryId>& geometry_pair,
+    CspaceFreePolytope::Formulation formulation) {
   const Eigen::Vector3d q_star(0, 0, 0);
-  CspaceFreePolytopeTester tester(&plant, &scene_graph,
-                                  SeparatingPlaneOrder::kAffine, q_star);
+  CspaceFreePolytope::Options options;
+  options.formulation = formulation;
+  CspaceFreePolytopeTester tester(
+      &plant, &scene_graph, SeparatingPlaneOrder::kAffine, q_star, options);
   Eigen::Matrix<double, 9, 3> C;
   // clang-format off
   C << 1, 1, 0,
@@ -748,24 +817,35 @@ void TestConstructPlaneSearchProgram(
 
 TEST_F(CIrisToyRobotTest, ConstructPlaneSearchProgram1) {
   // Test ConstructPlaneSearchProgram with both geometries being polytopes.
-  TestConstructPlaneSearchProgram(
-      *diagram_, *plant_, *scene_graph_,
-      SortedPair<geometry::GeometryId>(world_box_, body3_box_));
+  for (auto formulation : {CspaceFreePolytope::Formulation::kFormulation1,
+                           CspaceFreePolytope::Formulation::kFormulation2}) {
+    TestConstructPlaneSearchProgram(
+        *diagram_, *plant_, *scene_graph_,
+        SortedPair<geometry::GeometryId>(world_box_, body3_box_), formulation);
+  }
 }
 
 TEST_F(CIrisToyRobotTest, ConstructPlaneSearchProgram2) {
   // Test ConstructPlaneSearchProgram with neither geometries being polytope.
-  TestConstructPlaneSearchProgram(
-      *diagram_, *plant_, *scene_graph_,
-      SortedPair<geometry::GeometryId>(world_sphere_, body2_capsule_));
+  for (auto formulation : {CspaceFreePolytope::Formulation::kFormulation1,
+                           CspaceFreePolytope::Formulation::kFormulation2}) {
+    TestConstructPlaneSearchProgram(
+        *diagram_, *plant_, *scene_graph_,
+        SortedPair<geometry::GeometryId>(world_sphere_, body2_capsule_),
+        formulation);
+  }
 }
 
 TEST_F(CIrisToyRobotTest, ConstructPlaneSearchProgram3) {
   // Test ConstructPlaneSearchProgram with one geometry being polytope and the
   // other not.
-  TestConstructPlaneSearchProgram(
-      *diagram_, *plant_, *scene_graph_,
-      SortedPair<geometry::GeometryId>(body1_convex_, body3_sphere_));
+  for (auto formulation : {CspaceFreePolytope::Formulation::kFormulation1,
+                           CspaceFreePolytope::Formulation::kFormulation2}) {
+    TestConstructPlaneSearchProgram(
+        *diagram_, *plant_, *scene_graph_,
+        SortedPair<geometry::GeometryId>(body1_convex_, body3_sphere_),
+        formulation);
+  }
 }
 
 TEST_F(CIrisToyRobotTest, FindSeparationCertificateGivenPolytopeSuccess) {
@@ -1071,7 +1151,75 @@ void CompareLagrangians(
   }
 }
 
-TEST_F(CIrisRobotPolytopicCollisionTest, InitializePolytopeSearchProgram) {
+void CheckPolytopeSearchResult(
+    const CspaceFreePolytopeTester& tester, const Eigen::MatrixXd& C_sol,
+    const Eigen::VectorXd& d_sol,
+    const solvers::MathematicalProgramResult& result,
+    const std::vector<
+        std::optional<CspaceFreePolytope::SeparationCertificateResult>>&
+        certificates_result,
+    const std::unordered_map<int, CspaceFreePolytope::SeparationCertificate>&
+        new_certificates,
+    bool search_s_bounds_lagrangians, double tol) {
+  // Now check rationals.
+  std::unordered_map<int, CspaceFreePolytope::SeparationCertificateResult>
+      new_certificates_result;
+  for (const auto& [plane_index, new_certificate] : new_certificates) {
+    const auto& plane =
+        tester.cspace_free_polytope().separating_planes()[plane_index];
+    const auto& plane_geometries = tester.plane_geometries()[plane_index];
+    const CspaceFreePolytope::SeparationCertificateResult
+        new_certificate_result = new_certificate.GetSolution(
+            plane_index, plane.a, plane.b, plane.decision_variables, result);
+    new_certificates_result.emplace(plane_index, new_certificate_result);
+    CheckRationalsPositiveInCspacePolytope(
+        plane_geometries.positive_side_rationals,
+        new_certificate_result.positive_side_rational_lagrangians,
+        plane.decision_variables,
+        new_certificate_result.plane_decision_var_vals, C_sol, d_sol, tester,
+        tol);
+    CheckRationalsPositiveInCspacePolytope(
+        plane_geometries.negative_side_rationals,
+        new_certificate_result.negative_side_rational_lagrangians,
+        plane.decision_variables,
+        new_certificate_result.plane_decision_var_vals, C_sol, d_sol, tester,
+        tol);
+    CheckRationalsPositiveInCspacePolytope(
+        plane_geometries.positive_side_psd_mat,
+        new_certificate_result.positive_side_psd_mat_lagrangians,
+        plane.decision_variables,
+        new_certificate_result.plane_decision_var_vals, C_sol, d_sol, tester,
+        tol);
+    CheckRationalsPositiveInCspacePolytope(
+        plane_geometries.negative_side_psd_mat,
+        new_certificate_result.negative_side_psd_mat_lagrangians,
+        plane.decision_variables,
+        new_certificate_result.plane_decision_var_vals, C_sol, d_sol, tester,
+        tol);
+  }
+  // Check if the Lagrangians are set correctly.
+  for (const auto& old_certificate : certificates_result) {
+    const int plane_index = old_certificate->plane_index;
+    const auto& new_certificate_result =
+        new_certificates_result.at(plane_index);
+    CompareLagrangians(
+        old_certificate->positive_side_rational_lagrangians,
+        new_certificate_result.positive_side_rational_lagrangians,
+        !search_s_bounds_lagrangians);
+    CompareLagrangians(
+        old_certificate->negative_side_rational_lagrangians,
+        new_certificate_result.negative_side_rational_lagrangians,
+        !search_s_bounds_lagrangians);
+    CompareLagrangians(old_certificate->positive_side_psd_mat_lagrangians,
+                       new_certificate_result.positive_side_psd_mat_lagrangians,
+                       !search_s_bounds_lagrangians);
+    CompareLagrangians(old_certificate->negative_side_psd_mat_lagrangians,
+                       new_certificate_result.negative_side_psd_mat_lagrangians,
+                       !search_s_bounds_lagrangians);
+  }
+}
+
+TEST_F(CIrisRobotPolytopicGeometryTest, InitializePolytopeSearchProgram) {
   const Eigen::Vector4d q_star(0, 0, 0, 0);
   CspaceFreePolytopeTester tester(plant_, scene_graph_,
                                   SeparatingPlaneOrder::kAffine, q_star);
@@ -1138,75 +1286,26 @@ TEST_F(CIrisRobotPolytopicCollisionTest, InitializePolytopeSearchProgram) {
       ASSERT_TRUE(result.is_success());
       const auto C_sol = result.GetSolution(C_var);
       const auto d_sol = result.GetSolution(d_var);
-      // Now check rationals.
-      std::unordered_map<int, CspaceFreePolytope::SeparationCertificateResult>
-          new_certificates_result;
-      for (const auto& [plane_index, new_certificate] : new_certificates) {
-        const auto& plane =
-            tester.cspace_free_polytope().separating_planes()[plane_index];
-        const auto& plane_geometries = tester.plane_geometries()[plane_index];
-        const CspaceFreePolytope::SeparationCertificateResult
-            new_certificate_result =
-                new_certificate.GetSolution(plane_index, plane.a, plane.b,
-                                            plane.decision_variables, result);
-        new_certificates_result.emplace(plane_index, new_certificate_result);
-        CheckRationalsPositiveInCspacePolytope(
-            plane_geometries.positive_side_rationals,
-            new_certificate_result.positive_side_rational_lagrangians,
-            plane.decision_variables,
-            new_certificate_result.plane_decision_var_vals, C_sol, d_sol,
-            tester, 4E-5);
-        CheckRationalsPositiveInCspacePolytope(
-            plane_geometries.negative_side_rationals,
-            new_certificate_result.negative_side_rational_lagrangians,
-            plane.decision_variables,
-            new_certificate_result.plane_decision_var_vals, C_sol, d_sol,
-            tester, 4E-5);
-        CheckRationalsPositiveInCspacePolytope(
-            plane_geometries.positive_side_psd_mat,
-            new_certificate_result.positive_side_psd_mat_lagrangians,
-            plane.decision_variables,
-            new_certificate_result.plane_decision_var_vals, C_sol, d_sol,
-            tester, 0);
-        CheckRationalsPositiveInCspacePolytope(
-            plane_geometries.negative_side_psd_mat,
-            new_certificate_result.negative_side_psd_mat_lagrangians,
-            plane.decision_variables,
-            new_certificate_result.plane_decision_var_vals, C_sol, d_sol,
-            tester, 0);
-      }
-      // Check if the Lagrangians are set correctly.
-      for (const auto& old_certificate : certificates_result) {
-        const int plane_index = old_certificate->plane_index;
-        const auto& new_certificate_result =
-            new_certificates_result.at(plane_index);
-        CompareLagrangians(
-            old_certificate->positive_side_rational_lagrangians,
-            new_certificate_result.positive_side_rational_lagrangians,
-            !search_s_bounds_lagrangians);
-        CompareLagrangians(
-            old_certificate->negative_side_rational_lagrangians,
-            new_certificate_result.negative_side_rational_lagrangians,
-            !search_s_bounds_lagrangians);
-        CompareLagrangians(
-            old_certificate->positive_side_psd_mat_lagrangians,
-            new_certificate_result.positive_side_psd_mat_lagrangians,
-            !search_s_bounds_lagrangians);
-        CompareLagrangians(
-            old_certificate->negative_side_psd_mat_lagrangians,
-            new_certificate_result.negative_side_psd_mat_lagrangians,
-            !search_s_bounds_lagrangians);
-      }
+      CheckPolytopeSearchResult(tester, C_sol, d_sol, result,
+                                certificates_result, new_certificates,
+                                search_s_bounds_lagrangians, 2E-2);
     }
   }
 }
 
-TEST_F(CIrisToyRobotTest, InitializePolytopeSearchProgram) {
-  const Eigen::Vector3d q_star(0, 0, 0);
-  CspaceFreePolytopeTester tester(plant_, scene_graph_,
-                                  SeparatingPlaneOrder::kAffine, q_star);
-  Eigen::Matrix<double, 9, 3> C;
-  // clang-format off
+class CIrisToyRobotInitializePolytopeSearchProgramTest
+    : public CIrisToyRobotTest {
+ public:
+  void Test(CspaceFreePolytope::Formulation formulation,
+            const std::vector<bool>& search_s_bounds_lagrangians_options) {
+    const Eigen::Vector3d q_star(0, 0, 0);
+    CspaceFreePolytope::Options cspace_free_polytope_options;
+    cspace_free_polytope_options.formulation = formulation;
+    CspaceFreePolytopeTester tester(plant_, scene_graph_,
+                                    SeparatingPlaneOrder::kAffine, q_star,
+                                    cspace_free_polytope_options);
+    Eigen::Matrix<double, 9, 3> C;
+    // clang-format off
   C << 1, 1, 0,
        -1, -1, 0,
        -1, 0, 1,
@@ -1216,58 +1315,82 @@ TEST_F(CIrisToyRobotTest, InitializePolytopeSearchProgram) {
        1, 0, 1,
        1, 1, -1,
        1, -1, 1;
-  // clang-format on
-  Eigen::Matrix<double, 9, 1> d;
-  d << 0.1, 0.1, 0.1, 0.02, 0.02, 0.2, 0.1, 0.1, 0.2;
-  for (int i = 0; i < C.rows(); ++i) {
-    const double C_row_norm = C.row(i).norm();
-    C.row(i) = C.row(i) / C_row_norm;
-    d(i) = d(i) / C_row_norm;
-  }
+    // clang-format on
+    Eigen::Matrix<double, 9, 1> d;
+    d << 0.1, 0.1, 0.1, 0.02, 0.02, 0.2, 0.1, 0.1, 0.2;
+    for (int i = 0; i < C.rows(); ++i) {
+      const double C_row_norm = C.row(i).norm();
+      C.row(i) = C.row(i) / C_row_norm;
+      d(i) = d(i) / C_row_norm;
+    }
 
-  CspaceFreePolytope::IgnoredCollisionPairs ignored_collision_pairs{
-      SortedPair<geometry::GeometryId>(world_box_, body2_sphere_),
-      SortedPair<geometry::GeometryId>(world_box_, body2_capsule_),
-      SortedPair<geometry::GeometryId>(body0_box_, body2_capsule_)};
-  CspaceFreePolytope::FindSeparationCertificateGivenPolytopeOptions options;
-  options.verbose = true;
-  solvers::MosekSolver solver;
-  options.solver_id = solver.id();
-  if (solver.available()) {
-    const auto certificates_result =
-        tester.FindSeparationCertificateGivenPolytope(ignored_collision_pairs,
-                                                      C, d, options);
-    ASSERT_TRUE(std::all_of(
-        certificates_result.begin(), certificates_result.end(),
-        [](const std::optional<CspaceFreePolytope::SeparationCertificateResult>&
-               certificate) { return certificate.has_value(); }));
+    CspaceFreePolytope::IgnoredCollisionPairs ignored_collision_pairs{
+        SortedPair<geometry::GeometryId>(world_box_, body2_sphere_),
+        SortedPair<geometry::GeometryId>(world_box_, body2_capsule_),
+        SortedPair<geometry::GeometryId>(body0_box_, body2_capsule_)};
+    CspaceFreePolytope::FindSeparationCertificateGivenPolytopeOptions options;
+    options.verbose = true;
+    solvers::MosekSolver solver;
+    options.solver_id = solver.id();
+    options.solver_options = solvers::SolverOptions();
+    options.solver_options->SetOption(
+        solvers::CommonSolverOption::kPrintToConsole, 0);
+    if (solver.available()) {
+      const auto certificates_result =
+          tester.FindSeparationCertificateGivenPolytope(ignored_collision_pairs,
+                                                        C, d, options);
+      ASSERT_TRUE(std::all_of(
+          certificates_result.begin(), certificates_result.end(),
+          [](const std::optional<
+              CspaceFreePolytope::SeparationCertificateResult>& certificate) {
+            return certificate.has_value();
+          }));
 
-    for (bool search_s_bounds_lagrangians : {false, true}) {
-      const int gram_total_size = tester.GetGramVarSizeForPolytopeSearchProgram(
-          ignored_collision_pairs, search_s_bounds_lagrangians);
-      MatrixX<symbolic::Variable> C_var(C.rows(), C.cols());
-      VectorX<symbolic::Variable> d_var(d.rows());
-      for (int i = 0; i < C.rows(); ++i) {
-        d_var(i) = symbolic::Variable("d" + std::to_string(i));
-        for (int j = 0; j < C.cols(); ++j) {
-          C_var(i, j) = symbolic::Variable(fmt::format("C({},{})", i, j));
+      for (bool search_s_bounds_lagrangians :
+           search_s_bounds_lagrangians_options) {
+        const int gram_total_size =
+            tester.GetGramVarSizeForPolytopeSearchProgram(
+                ignored_collision_pairs, search_s_bounds_lagrangians);
+        MatrixX<symbolic::Variable> C_var(C.rows(), C.cols());
+        VectorX<symbolic::Variable> d_var(d.rows());
+        for (int i = 0; i < C.rows(); ++i) {
+          d_var(i) = symbolic::Variable("d" + std::to_string(i));
+          for (int j = 0; j < C.cols(); ++j) {
+            C_var(i, j) = symbolic::Variable(fmt::format("C({},{})", i, j));
+          }
         }
-      }
-      const VectorX<symbolic::Polynomial> d_minus_Cs =
-          tester.CalcDminusCs<symbolic::Variable>(C_var, d_var);
+        const VectorX<symbolic::Polynomial> d_minus_Cs =
+            tester.CalcDminusCs<symbolic::Variable>(C_var, d_var);
 
-      std::unordered_map<int, CspaceFreePolytope::SeparationCertificate>
-          new_certificates;
-      auto prog = tester.InitializePolytopeSearchProgram(
-          ignored_collision_pairs, C_var, d_var, d_minus_Cs,
-          certificates_result, search_s_bounds_lagrangians, gram_total_size,
-          &new_certificates);
-      solvers::SolverOptions solver_options;
-      solver_options.SetOption(solvers::CommonSolverOption::kPrintToConsole, 0);
-      const auto result = solver.Solve(*prog, std::nullopt, solver_options);
-      ASSERT_TRUE(result.is_success());
+        std::unordered_map<int, CspaceFreePolytope::SeparationCertificate>
+            new_certificates;
+        auto prog = tester.InitializePolytopeSearchProgram(
+            ignored_collision_pairs, C_var, d_var, d_minus_Cs,
+            certificates_result, search_s_bounds_lagrangians, gram_total_size,
+            &new_certificates);
+        solvers::SolverOptions solver_options;
+        solver_options.SetOption(solvers::CommonSolverOption::kPrintToConsole,
+                                 1);
+        const auto result = solver.Solve(*prog, std::nullopt, solver_options);
+        ASSERT_TRUE(result.is_success());
+        const auto C_sol = result.GetSolution(C_var);
+        const auto d_sol = result.GetSolution(d_var);
+        CheckPolytopeSearchResult(tester, C_sol, d_sol, result,
+                                  certificates_result, new_certificates,
+                                  search_s_bounds_lagrangians, 1E-3);
+      }
     }
   }
+};
+
+TEST_F(CIrisToyRobotInitializePolytopeSearchProgramTest, Formulation1) {
+  Test(CspaceFreePolytope::Formulation::kFormulation1,
+       {true} /* search_s_bounds_lagrangians_options */);
+}
+
+TEST_F(CIrisToyRobotInitializePolytopeSearchProgramTest, Formulation2) {
+  Test(CspaceFreePolytope::Formulation::kFormulation2,
+       {false, true} /* search_s_bounds_lagrangians_options */);
 }
 
 TEST_F(CIrisToyRobotTest, FindPolytopeGivenLagrangian) {
@@ -1295,7 +1418,10 @@ TEST_F(CIrisToyRobotTest, FindPolytopeGivenLagrangian) {
   }
 
   CspaceFreePolytope::IgnoredCollisionPairs ignored_collision_pairs{
-      SortedPair<geometry::GeometryId>(world_box_, body2_sphere_)};
+      SortedPair<geometry::GeometryId>(world_box_, body2_sphere_),
+      SortedPair<geometry::GeometryId>(world_box_, body2_capsule_),
+      SortedPair<geometry::GeometryId>(body0_box_, body2_capsule_),
+  };
 
   CspaceFreePolytope::FindSeparationCertificateGivenPolytopeOptions options;
   options.verbose = true;
@@ -1336,10 +1462,10 @@ TEST_F(CIrisToyRobotTest, FindPolytopeGivenLagrangian) {
           solvers::CommonSolverOption::kPrintToConsole, 0);
       polytope_options.search_s_bounds_lagrangians =
           search_s_bounds_lagrangians;
-      polytope_options.backoff_scale = 0.4;
+      polytope_options.backoff_scale = 0.05;
       polytope_options.ellipsoid_margin_epsilon = 0;
       polytope_options.ellipsoid_margin_cost =
-          CspaceFreePolytope::EllipsoidMarginCost::kSum;
+          CspaceFreePolytope::EllipsoidMarginCost::kGeometricMean;
 
       const HPolyhedron cspace_h_polyhedron =
           tester.GetPolyhedronWithJointLimits(C, d);
@@ -1551,7 +1677,7 @@ TEST_F(CIrisToyRobotTest, BinarySearch) {
   CspaceFreePolytope::BinarySearchOptions options;
   options.scale_min = 1;
   options.scale_max = 10;
-  options.convergence_tol = 1E-2;
+  options.convergence_tol = 1E-1;
   solvers::MosekSolver solver;
   if (solver.available()) {
     const Eigen::Vector3d s_center(0.01, 0, 0.01);

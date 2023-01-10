@@ -130,7 +130,7 @@ CIrisToyRobotTest::CIrisToyRobotTest() {
   diagram_ = builder.Build();
 }
 
-CIrisRobotPolytopicCollisionTest::CIrisRobotPolytopicCollisionTest() {
+CIrisRobotPolytopicGeometryTest::CIrisRobotPolytopicGeometryTest() {
   systems::DiagramBuilder<double> builder;
   plant_ = builder.AddSystem<multibody::MultibodyPlant<double>>(0.);
   scene_graph_ = builder.AddSystem<geometry::SceneGraph<double>>();

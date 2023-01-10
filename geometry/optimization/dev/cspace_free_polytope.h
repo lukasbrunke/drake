@@ -64,9 +64,23 @@ class CspaceFreePolytope {
 
   ~CspaceFreePolytope() {}
 
+  enum Formulation {
+    /** When we have non-polytopic collision geometries, we need to impose the
+     * matrix-sos constraint. With kFormulation1, the sos polynomials for
+     * non-polytopic collision geometries are written as ∑ᵢ pᵢ(s, yᵢ), i=0,
+     * 1, 2. Each pᵢ(s, yᵢ) is a sos polynomial of of s and yᵢ; with
+     * kFormulation2, the sos polynomials for non-polytopic geometries are
+     * written as q(s, y) which is a sos polynomial of s and y.
+     */
+    kFormulation1,
+    kFormulation2,
+  };
+
   /** Optional argument for constructing CspaceFreePolytope */
   struct Options {
     Options() {}
+
+    Formulation formulation{Formulation::kFormulation2};
   };
 
   /**
@@ -198,7 +212,7 @@ class CspaceFreePolytope {
     // We can find the certificate for each pair of geometries in parallel.
     // num_threads specifies how many threads we run in parallel. If num_threads
     // <=0, then we use all available threads on the computer.
-    int num_threads{1};
+    int num_threads{-1};
 
     // If verbose set to true, then we will print some information to the
     // terminal.
@@ -543,19 +557,30 @@ class CspaceFreePolytope {
 
   // maps a pair of body (body1, body2) to the monomial basis. This monomial
   // basis contains all the monomials of form ∏ᵢ pow(sᵢ, dᵢ), dᵢ=0 or 1, sᵢ
-  // correspond to the revolute joint on the kinematics chain between body1 and
-  // body2.
+  // correspond to the revolute/prismatic joint on the kinematics chain between
+  // body1 and body2.
   std::unordered_map<SortedPair<multibody::BodyIndex>,
                      VectorX<symbolic::Monomial>>
       map_body_to_monomial_basis_;
   // maps a pair of body (body1, body2) to the monomial basis. This monomial
   // basis contains all the monomials of form ∏ᵢ pow(sᵢ, dᵢ) or y(0)*∏ᵢ pow(sᵢ,
   // dᵢ), y(1)*∏ᵢ pow(sᵢ, dᵢ) or y(2)*∏ᵢ pow(sᵢ, dᵢ) where dᵢ=0 or 1, sᵢ
-  // correspond to the revolute joint on the kinematics chain between body1 and
-  // body2.
+  // correspond to the revolute/prismatic joint on the kinematics chain between
+  // body1 and body2.
   std::unordered_map<SortedPair<multibody::BodyIndex>,
                      VectorX<symbolic::Monomial>>
       map_body_to_monomial_basis_w_y_;
+
+  // maps a pair of body (body1, body2) to the monomial basis. The value of this
+  // map contains is the size-3 array m(s, y(0)), m(s, y(1)), m(s, y(2)), where
+  // m(s, y(j)) is a monomial basis contains all the monomials of form ∏ᵢ
+  // pow(sᵢ, dᵢ) or y(j)*∏ᵢ pow(sᵢ, dᵢ), where dᵢ=0 or 1, sᵢ correspond to the
+  // revolute/prismatic joints on the kinematics chain between body1 and body2.
+  std::unordered_map<SortedPair<multibody::BodyIndex>,
+                     std::array<VectorX<symbolic::Monomial>, 3>>
+      map_body_to_monomial_basis_w_y_array_;
+
+  Formulation formulation_;
 };
 
 /**
