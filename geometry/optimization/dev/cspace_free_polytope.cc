@@ -721,9 +721,43 @@ void CspaceFreePolytope::GenerateRationals() {
                                  X_AB_multilinear, rational_forward_kin_,
                                  plane_side, y_slack_, &rationals, &psd_mat);
     }
-    plane_geometries_.emplace_back(
-        positive_side_rationals, negative_side_rationals, positive_side_psd_mat,
-        negative_side_psd_mat, plane_index);
+    // For non-polytopic geometries (sphere, polytope, etc), we also add a
+    // rational>=0 constraint to exclude the trivial separating plane solution
+    // (a=b=0). If one side of the geomtry is polytope and the other side is
+    // not, then we don't need to add the rationals for the non-polytope side,
+    // as the rationals on the polytopic side already exclude the trivial
+    // solution (a=b=0). Following the same logic, if both sides are
+    // non-polytopic, then we only need the rationals on one side.
+    if (separating_plane.positive_side_geometry->type() ==
+            GeometryType::kPolytope &&
+        separating_plane.negative_side_geometry->type() ==
+            GeometryType::kPolytope) {
+      plane_geometries_.emplace_back(
+          positive_side_rationals, negative_side_rationals,
+          positive_side_psd_mat, negative_side_psd_mat, plane_index);
+    } else if (separating_plane.positive_side_geometry->type() ==
+                   GeometryType::kPolytope &&
+               separating_plane.negative_side_geometry->type() !=
+                   GeometryType::kPolytope) {
+      // Do not add the negative side rationals.
+      plane_geometries_.emplace_back(
+          positive_side_rationals, std::vector<symbolic::RationalFunction>(),
+          positive_side_psd_mat, negative_side_psd_mat, plane_index);
+    } else if (separating_plane.positive_side_geometry->type() !=
+                   GeometryType::kPolytope &&
+               separating_plane.negative_side_geometry->type() ==
+                   GeometryType::kPolytope) {
+      // Do not add the positive side rationals.
+      plane_geometries_.emplace_back(
+          std::vector<symbolic::RationalFunction>(), negative_side_rationals,
+          positive_side_psd_mat, negative_side_psd_mat, plane_index);
+    } else {
+      // Both sides are non-polytopic, we only need the rationals from one side,
+      // we choose the positive side.
+      plane_geometries_.emplace_back(
+          positive_side_rationals, std::vector<symbolic::RationalFunction>(),
+          positive_side_psd_mat, negative_side_psd_mat, plane_index);
+    }
     DRAKE_DEMAND(plane_geometries_[plane_index].plane_index == plane_index);
   }
 }

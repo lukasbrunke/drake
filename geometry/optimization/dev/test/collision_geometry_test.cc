@@ -286,7 +286,7 @@ TEST_F(CollisionGeometryTest, Sphere) {
                            plant_->world_body().index(), world_sphere_,
                            model_inspector.GetPoseInFrame(world_sphere_));
   EXPECT_EQ(sphere.type(), GeometryType::kSphere);
-  EXPECT_EQ(sphere.num_rationals_per_side(), 0);
+  EXPECT_EQ(sphere.num_rationals_per_side(), 1);
   EXPECT_EQ(sphere.num_psd_mat_rationals(), 1);
   EXPECT_EQ(sphere.y_slack_size(), 3);
 
@@ -312,7 +312,7 @@ TEST_F(CollisionGeometryTest, Sphere) {
   sphere.OnPlaneSide(a_, b_, X_AB_multilinear, rational_forward_kin_,
                      PlaneSide::kNegative, y_slack_, &rationals,
                      &psd_mat_rationals);
-  EXPECT_EQ(rationals.size(), 0);
+  EXPECT_EQ(rationals.size(), 1);
   const Eigen::Vector3d p_BS = sphere.X_BG().translation();
   Eigen::Vector3d p_AS;
   plant_->CalcPointsPositions(*plant_context_, plant_->world_frame(), p_BS,
@@ -325,18 +325,20 @@ TEST_F(CollisionGeometryTest, Sphere) {
 
   CheckPolynomialWSlack(psd_mat_rationals[0], env, -a_expr.dot(p_AS) - b_expr,
                         a_expr, y_slack_, radius);
+  CheckRationalExpression(rationals[0], env, -1 - a_expr.dot(p_AS) - b_expr);
 
   // Positive side.
   rationals.clear();
   sphere.OnPlaneSide(a_, b_, X_AB_multilinear, rational_forward_kin_,
                      PlaneSide::kPositive, y_slack_, &rationals,
                      &psd_mat_rationals);
-  EXPECT_TRUE(rationals.empty());
+  EXPECT_EQ(rationals.size(), 1);
   // We append a new polynomial to polynomials_w_slack, hence it should have
   // size 2.
   EXPECT_EQ(psd_mat_rationals.size(), 2);
   CheckPolynomialWSlack(psd_mat_rationals.back(), env,
                         a_expr.dot(p_AS) + b_expr, a_expr, y_slack_, radius);
+  CheckRationalExpression(rationals[0], env, a_expr.dot(p_AS) + b_expr - 1);
 }
 
 TEST_F(CollisionGeometryTest, Capsule) {
@@ -347,7 +349,7 @@ TEST_F(CollisionGeometryTest, Capsule) {
                             geometry_body, body2_capsule_,
                             model_inspector.GetPoseInFrame(body2_capsule_));
   EXPECT_EQ(capsule.type(), GeometryType::kCapsule);
-  EXPECT_EQ(capsule.num_rationals_per_side(), 0);
+  EXPECT_EQ(capsule.num_rationals_per_side(), 1);
   EXPECT_EQ(capsule.num_psd_mat_rationals(), 2);
   EXPECT_EQ(capsule.y_slack_size(), 3);
 
@@ -373,23 +375,30 @@ TEST_F(CollisionGeometryTest, Capsule) {
   capsule.OnPlaneSide(a_, b_, X_AB_multilinear, rational_forward_kin_,
                       PlaneSide::kNegative, y_slack_, &rationals,
                       &psd_mat_rationals);
-  EXPECT_EQ(rationals.size(), 0);
+  EXPECT_EQ(rationals.size(), 1);
   const Capsule& capsule_shape =
       static_cast<const Capsule&>(model_inspector.GetShape(body2_capsule_));
   Eigen::Matrix<double, 3, 2> p_GS;
   p_GS.col(0) << 0, 0, capsule_shape.length() / 2;
   p_GS.col(1) << 0, 0, -capsule_shape.length() / 2;
+  const Eigen::Vector3d p_GO(0, 0, 0);
   const Eigen::Matrix<double, 3, 2> p_BS = capsule.X_BG() * p_GS;
+  const Eigen::Vector3d p_BO = capsule.X_BG() * p_BO;
   Eigen::Matrix<double, 3, 2> p_AS;
+  Eigen::Vector3d p_AO;
   plant_->CalcPointsPositions(
       *plant_context_, plant_->get_body(geometry_body).body_frame(), p_BS,
       plant_->get_body(expressed_body).body_frame(), &p_AS);
+  plant_->CalcPointsPositions(
+      *plant_context_, plant_->get_body(geometry_body).body_frame(), p_BO,
+      plant_->get_body(expressed_body).body_frame(), &p_AO);
   EXPECT_EQ(psd_mat_rationals.size(), 2);
   for (int i = 0; i < 2; ++i) {
     CheckPolynomialWSlack(psd_mat_rationals[i], env,
                           -a_expr.dot(p_AS.col(i)) - b_expr, a_expr, y_slack_,
                           capsule_shape.radius());
   }
+  CheckRationalExpression(rationals[0], env, -a_expr.dot(p_AO) - b_expr - 1);
 
   // Positive side
   rationals.clear();
@@ -403,6 +412,8 @@ TEST_F(CollisionGeometryTest, Capsule) {
                           a_expr.dot(p_AS.col(i)) + b_expr, a_expr, y_slack_,
                           capsule_shape.radius());
   }
+  EXPECT_EQ(rationals.size(), 1);
+  CheckRationalExpression(rationals[0], env, a_expr.dot(p_AO) + b_expr - 1);
 }
 
 GTEST_TEST(DistanceToHalfspace, Test) {

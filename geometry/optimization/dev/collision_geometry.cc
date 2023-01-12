@@ -161,18 +161,21 @@ class OnPlaneSideReifier : public ShapeReifier {
     // If the sphere with radius r is on one side of the plane
     // it is equivalent to the following condition
     // aᵀ*p_AS + b ≥ r|a|       if plane_side = kPositive   (1a)
-    // aᵀ*p_AS + b ≤ -r|a|      if plane_side = kNegative   (1b)
+    // aᵀ*p_AS + b ≥ 1          if plane_side = kPositive   (1b)
+    //
+    // aᵀ*p_AS + b ≤ -r|a|      if plane_side = kNegative   (2a)
+    // aᵀ*p_AS + b ≤ -1         if plane_side = kNegative   (2b)
     // Namely if plane_side = kPositive, the matrix
-    // ⌈aᵀp_AS + b               aᵀ⌉  is psd.           (2a)
+    // ⌈aᵀp_AS + b               aᵀ⌉  is psd.           (3a)
     // ⌊ a        (aᵀp_AS + b)/r²*I⌋
-    // (2a) is equivalent to the rational 
+    // (3a) is equivalent to the rational 
     // ⌈1⌉ᵀ⌈aᵀp_AS + b              aᵀ⌉⌈1⌉
     // ⌊y⌋ ⌊ a        (aᵀp_AS+ b)/r²*I⌋⌊y⌋
     // being non-negative.
     // Likewise if plane_side = kNegative, the matrix
-    // ⌈-aᵀp_AS - b               aᵀ⌉  is psd.           (2b)
+    // ⌈-aᵀp_AS - b               aᵀ⌉  is psd.           (4a)
     // ⌊ a        -(aᵀp_AS + b)/r²*I⌋
-    // (2b) is equivalent to the rational
+    // (4a) is equivalent to the rational
     // ⌈1⌉ᵀ⌈-aᵀp_AS - b              aᵀ⌉⌈1⌉
     // ⌊y⌋ ⌊ a        -(aᵀp_AS+ b)/r²*I⌋⌊y⌋
     // being non-negative.
@@ -203,15 +206,27 @@ class OnPlaneSideReifier : public ShapeReifier {
             y_squared / (sphere.radius() * sphere.radius()) * sign *
                 a_dot_x_plus_b.numerator(),
         a_dot_x_plus_b.denominator());
+    // Now add the rational constraint 
+    // aᵀ*p_AS + b ≥ 1          if plane_side = kPositive   (1b)
+    // aᵀ*p_AS + b ≤ -1         if plane_side = kNegative   (2b)
+    ImplementPolytopeGeometry(Eigen::Vector3d::Zero(), X_BG_, data);
   }
 
   void ImplementGeometry(const Capsule& capsule, void* data) {
     // If the capsule with radius r is on one side of the plane
     // it is equivalent to the following condition
-    // aᵀ*p_AS1 + b ≥ r|a|       if plane_side = kPositive   (1a)
-    // aᵀ*p_AS2 + b ≥ r|a|       if plane_side = kPositive   (1b)
-    // aᵀ*p_AS1 + b ≤ -r|a|      if plane_side = kNegative   (2a)
-    // aᵀ*p_AS2 + b ≤ -r|a|      if plane_side = kNegative   (2b)
+    // If plane_side = kPositive
+    // aᵀ*p_AS1 + b ≥ r|a|        (1a)
+    // aᵀ*p_AS2 + b ≥ r|a|        (1b)
+    // aᵀ*p_AO + b ≥ 1            (1c)
+    //
+    // If plane_side = kNegative
+    // aᵀ*p_AS1 + b ≤ -r|a|       (2a)
+    // aᵀ*p_AS2 + b ≤ -r|a|       (2b)
+    // aᵀ*p_AO + b ≤ -1           (2c)
+    // where S1 and S2 are the center of the two spheres, O is the center of
+    // the capsule.
+    //
     // If plane_side = kPositive, (1a) is equivalent to the matrix
     // ⌈aᵀp_AS1 + b               aᵀ⌉  is psd.           (3a)
     // ⌊ a         (aᵀp_AS + b)/r²*I⌋
@@ -258,6 +273,9 @@ class OnPlaneSideReifier : public ShapeReifier {
                   a_dot_x_plus_b.numerator(),
           a_dot_x_plus_b.denominator());
     }
+    // aᵀ*p_AO + b ≥ 1          if plane_side = kPositive
+    // aᵀ*p_AO + b ≤ -1         if plane_side = kNegative
+    ImplementPolytopeGeometry(Eigen::Vector3d::Zero(), X_BG_, data);
   }
 
   const Shape* geometry_;
@@ -332,12 +350,12 @@ class NumRationalsPerPlaneSideReifier : public ShapeReifier {
 
   void ImplementGeometry(const Sphere&, void* data) {
     auto* num = static_cast<int*>(data);
-    *num = 0;
+    *num = 1;
   }
 
   void ImplementGeometry(const Capsule&, void* data) {
     auto* num = static_cast<int*>(data);
-    *num = 0;
+    *num = 1;
   }
 
   const Shape* shape_;

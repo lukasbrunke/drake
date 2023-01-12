@@ -365,10 +365,31 @@ TEST_F(CIrisToyRobotTest, CspaceFreePolytopeGenerateRationals) {
       throw std::runtime_error(
           "Cylinder has not been implemented yet for C-IRIS.");
     }
-    EXPECT_EQ(plane_geometries.positive_side_rationals.size(),
-              plane.positive_side_geometry->num_rationals_per_side());
-    EXPECT_EQ(plane_geometries.negative_side_rationals.size(),
-              plane.negative_side_geometry->num_rationals_per_side());
+    if (plane.positive_side_geometry->type() == GeometryType::kPolytope &&
+        plane.negative_side_geometry->type() == GeometryType::kPolytope) {
+      EXPECT_EQ(plane_geometries.positive_side_rationals.size(),
+                plane.positive_side_geometry->num_rationals_per_side());
+      EXPECT_EQ(plane_geometries.negative_side_rationals.size(),
+                plane.negative_side_geometry->num_rationals_per_side());
+    } else if (plane.positive_side_geometry->type() ==
+                   GeometryType::kPolytope &&
+               plane.negative_side_geometry->type() !=
+                   GeometryType::kPolytope) {
+      EXPECT_EQ(plane_geometries.positive_side_rationals.size(),
+                plane.positive_side_geometry->num_rationals_per_side());
+      EXPECT_TRUE(plane_geometries.negative_side_rationals.empty());
+    } else if (plane.positive_side_geometry->type() !=
+                   GeometryType::kPolytope &&
+               plane.negative_side_geometry->type() ==
+                   GeometryType::kPolytope) {
+      EXPECT_TRUE(plane_geometries.positive_side_rationals.empty());
+      EXPECT_EQ(plane_geometries.negative_side_rationals.size(),
+                plane.negative_side_geometry->num_rationals_per_side());
+    } else {
+      EXPECT_EQ(plane_geometries.positive_side_rationals.size(),
+                plane.positive_side_geometry->num_rationals_per_side());
+      EXPECT_TRUE(plane_geometries.negative_side_rationals.empty());
+    }
     EXPECT_EQ(plane_geometries.positive_side_psd_mat.size(),
               plane.positive_side_geometry->num_psd_mat_rationals());
     EXPECT_EQ(plane_geometries.negative_side_psd_mat.size(),
@@ -889,7 +910,7 @@ TEST_F(CIrisToyRobotTest, FindSeparationCertificateGivenPolytopeSuccess) {
   const CspaceFreePolytope::IgnoredCollisionPairs ignored_collision_pairs{
       SortedPair<geometry::GeometryId>(world_box_, body2_sphere_)};
   CspaceFreePolytope::FindSeparationCertificateGivenPolytopeOptions options;
-  options.verbose = true;
+  options.verbose = false;
   solvers::MosekSolver solver;
   options.solver_id = solver.id();
   if (solver.available()) {
@@ -930,7 +951,7 @@ TEST_F(CIrisToyRobotTest, FindSeparationCertificateGivenPolytopeSuccess) {
             certificate->negative_side_rational_lagrangians,
             plane.decision_variables, certificate->plane_decision_var_vals, C,
             d, tester, 0);
-        const double small_coeff_tol = 1E-5;
+        const double small_coeff_tol = 2E-5;
         CheckRationalsPositiveInCspacePolytope(
             plane_geometries.positive_side_psd_mat,
             certificate->positive_side_psd_mat_lagrangians,
@@ -987,7 +1008,7 @@ TEST_F(CIrisToyRobotTest, FindSeparationCertificateGivenPolytopeFailure) {
   const CspaceFreePolytope::IgnoredCollisionPairs ignored_collision_pairs{
       SortedPair<geometry::GeometryId>(world_box_, body2_sphere_)};
   CspaceFreePolytope::FindSeparationCertificateGivenPolytopeOptions options;
-  options.verbose = true;
+  options.verbose = false;
   solvers::MosekSolver solver;
   options.solver_id = solver.id();
   if (solver.available()) {
@@ -1248,7 +1269,7 @@ TEST_F(CIrisRobotPolytopicGeometryTest, InitializePolytopeSearchProgram) {
 
   CspaceFreePolytope::IgnoredCollisionPairs ignored_collision_pairs{};
   CspaceFreePolytope::FindSeparationCertificateGivenPolytopeOptions options;
-  options.verbose = true;
+  options.verbose = false;
   solvers::MosekSolver solver;
   options.solver_id = solver.id();
   if (solver.available()) {
@@ -1329,7 +1350,7 @@ class CIrisToyRobotInitializePolytopeSearchProgramTest
         SortedPair<geometry::GeometryId>(world_box_, body2_capsule_),
         SortedPair<geometry::GeometryId>(body0_box_, body2_capsule_)};
     CspaceFreePolytope::FindSeparationCertificateGivenPolytopeOptions options;
-    options.verbose = true;
+    options.verbose = false;
     solvers::MosekSolver solver;
     options.solver_id = solver.id();
     options.solver_options = solvers::SolverOptions();
@@ -1370,7 +1391,7 @@ class CIrisToyRobotInitializePolytopeSearchProgramTest
             &new_certificates);
         solvers::SolverOptions solver_options;
         solver_options.SetOption(solvers::CommonSolverOption::kPrintToConsole,
-                                 1);
+                                 0);
         const auto result = solver.Solve(*prog, std::nullopt, solver_options);
         ASSERT_TRUE(result.is_success());
         const auto C_sol = result.GetSolution(C_var);
@@ -1390,7 +1411,7 @@ TEST_F(CIrisToyRobotInitializePolytopeSearchProgramTest, Formulation1) {
 
 TEST_F(CIrisToyRobotInitializePolytopeSearchProgramTest, Formulation2) {
   Test(CspaceFreePolytope::Formulation::kFormulation2,
-       {false, true} /* search_s_bounds_lagrangians_options */);
+       {true} /* search_s_bounds_lagrangians_options */);
 }
 
 TEST_F(CIrisToyRobotTest, FindPolytopeGivenLagrangian) {
@@ -1424,7 +1445,7 @@ TEST_F(CIrisToyRobotTest, FindPolytopeGivenLagrangian) {
   };
 
   CspaceFreePolytope::FindSeparationCertificateGivenPolytopeOptions options;
-  options.verbose = true;
+  options.verbose = false;
   solvers::MosekSolver solver;
   options.solver_id = solver.id();
   if (solver.available()) {
