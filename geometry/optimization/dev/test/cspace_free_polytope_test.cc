@@ -79,23 +79,11 @@ class CspaceFreePolytopeTester {
     return cspace_free_polytope_->CalcDminusCs<T>(C, d);
   }
 
-  [[nodiscard]] const std::unordered_map<SortedPair<multibody::BodyIndex>,
-                                         VectorX<symbolic::Monomial>>&
-  map_body_to_monomial_basis() const {
-    return cspace_free_polytope_->map_body_to_monomial_basis_;
-  }
-
-  [[nodiscard]] const std::unordered_map<SortedPair<multibody::BodyIndex>,
-                                         VectorX<symbolic::Monomial>>&
-  map_body_to_monomial_basis_w_y() const {
-    return cspace_free_polytope_->map_body_to_monomial_basis_w_y_;
-  }
-
   [[nodiscard]] const std::unordered_map<
       SortedPair<multibody::BodyIndex>,
-      std::array<VectorX<symbolic::Monomial>, 3>>&
-  map_body_to_monomial_basis_w_y_array() const {
-    return cspace_free_polytope_->map_body_to_monomial_basis_w_y_array_;
+      std::array<VectorX<symbolic::Monomial>, 4>>&
+  map_body_to_monomial_basis_array() const {
+    return cspace_free_polytope_->map_body_to_monomial_basis_array_;
   }
 
   [[nodiscard]] CspaceFreePolytope::SeparationCertificateProgram
@@ -470,93 +458,43 @@ TEST_F(CIrisToyRobotTest, CalcSBoundsPolynomial) {
   }
 }
 
-TEST_F(CIrisToyRobotTest, CalcMonomialBasis1) {
-  // Test CalcMonomialBasis with formulation 1
+TEST_F(CIrisToyRobotTest, CalcMonomialBasis) {
+  // Test CalcMonomialBasis
   const Eigen::Vector3d q_star(0, 0, 0);
   CspaceFreePolytope::Options options;
-  options.formulation = CspaceFreePolytope::Formulation::kFormulation1;
-  CspaceFreePolytopeTester tester(
-      plant_, scene_graph_, SeparatingPlaneOrder::kAffine, q_star, options);
-  EXPECT_TRUE(tester.map_body_to_monomial_basis_w_y().empty());
+  for (bool with_cross_y : {false, true}) {
+    options.with_cross_y = with_cross_y;
+    CspaceFreePolytopeTester tester(
+        plant_, scene_graph_, SeparatingPlaneOrder::kAffine, q_star, options);
 
-  const auto& map_body_to_monomial_basis = tester.map_body_to_monomial_basis();
-  // Make sure map_body_to_monomial_basis contains all pairs of bodies.
-  for (const auto& plane : tester.cspace_free_polytope().separating_planes()) {
-    for (const auto collision_geometry :
-         {plane.positive_side_geometry, plane.negative_side_geometry}) {
-      const SortedPair<multibody::BodyIndex> body_pair(
-          plane.expressed_body, collision_geometry->body_index());
-      auto it = map_body_to_monomial_basis.find(body_pair);
-      EXPECT_NE(it, map_body_to_monomial_basis.end());
-      const auto& monomial_basis = it->second;
-      // Make sure the degree for each variable in the monomial is at most 1.
-      for (int i = 0; i < monomial_basis.rows(); ++i) {
-        for (const auto& [var, degree] : monomial_basis(i).get_powers()) {
-          EXPECT_LE(degree, 1);
-        }
-      }
-
-      if (collision_geometry->type() == GeometryType::kSphere ||
-          collision_geometry->type() == GeometryType::kCapsule) {
-        auto it_w_y_array =
-            tester.map_body_to_monomial_basis_w_y_array().find(body_pair);
-        EXPECT_NE(it_w_y_array,
-                  tester.map_body_to_monomial_basis_w_y_array().end());
-        const auto& monomial_basis_w_y_array = it_w_y_array->second;
-        for (int i = 0; i < 3; ++i) {
-          EXPECT_EQ(monomial_basis_w_y_array[i].rows(),
-                    2 * monomial_basis.rows());
-          for (int j = 0; j < monomial_basis.rows(); ++j) {
-            EXPECT_EQ(monomial_basis_w_y_array[i](j), monomial_basis(j));
-            EXPECT_EQ(
-                monomial_basis_w_y_array[i](monomial_basis.rows() + j),
-                symbolic::Monomial(tester.cspace_free_polytope().y_slack()(i)) *
-                    monomial_basis(j));
+    const auto& map_body_to_monomial_basis_array =
+        tester.map_body_to_monomial_basis_array();
+    // Make sure map_body_to_monomial_basis_array contains all pairs of bodies.
+    for (const auto& plane :
+         tester.cspace_free_polytope().separating_planes()) {
+      for (const auto collision_geometry :
+           {plane.positive_side_geometry, plane.negative_side_geometry}) {
+        const SortedPair<multibody::BodyIndex> body_pair(
+            plane.expressed_body, collision_geometry->body_index());
+        auto it = map_body_to_monomial_basis_array.find(body_pair);
+        EXPECT_NE(it, map_body_to_monomial_basis_array.end());
+        const auto& monomial_basis_array = it->second;
+        for (int i = 0; i < monomial_basis_array[0].rows(); ++i) {
+          // Make sure the degree for each variable in the
+          // monomial_basis_array[0] is at most 1.
+          for (const auto& [var, degree] :
+               monomial_basis_array[0](i).get_powers()) {
+            EXPECT_LE(degree, 1);
           }
         }
-      }
-    }
-  }
-}
-
-TEST_F(CIrisToyRobotTest, CalcMonomialBasis2) {
-  // Test CalcMonomialBasis with formulation 2
-  const Eigen::Vector3d q_star(0, 0, 0);
-  CspaceFreePolytope::Options options;
-  options.formulation = CspaceFreePolytope::Formulation::kFormulation2;
-  CspaceFreePolytopeTester tester(
-      plant_, scene_graph_, SeparatingPlaneOrder::kAffine, q_star, options);
-  EXPECT_TRUE(tester.map_body_to_monomial_basis_w_y_array().empty());
-  const auto& map_body_to_monomial_basis = tester.map_body_to_monomial_basis();
-  // Make sure map_body_to_monomial_basis contains all pairs of bodies.
-  for (const auto& plane : tester.cspace_free_polytope().separating_planes()) {
-    for (const auto collision_geometry :
-         {plane.positive_side_geometry, plane.negative_side_geometry}) {
-      const SortedPair<multibody::BodyIndex> body_pair(
-          plane.expressed_body, collision_geometry->body_index());
-      auto it = map_body_to_monomial_basis.find(body_pair);
-      EXPECT_NE(it, map_body_to_monomial_basis.end());
-      const auto& monomial_basis = it->second;
-      // Make sure the degree for each variable in the monomial is at most 1.
-      for (int i = 0; i < monomial_basis.rows(); ++i) {
-        for (const auto& [var, degree] : monomial_basis(i).get_powers()) {
-          EXPECT_LE(degree, 1);
-        }
-      }
-
-      if (collision_geometry->type() == GeometryType::kSphere ||
-          collision_geometry->type() == GeometryType::kCapsule) {
-        auto it_w_y = tester.map_body_to_monomial_basis_w_y().find(body_pair);
-        EXPECT_NE(it_w_y, tester.map_body_to_monomial_basis_w_y().end());
-        const auto& monomial_basis_w_y = it_w_y->second;
-        EXPECT_EQ(monomial_basis_w_y.rows(), 4 * monomial_basis.rows());
-        for (int i = 0; i < monomial_basis.rows(); ++i) {
-          EXPECT_EQ(monomial_basis_w_y(i), monomial_basis(i));
-          for (int j = 0; j < 3; ++j) {
+        for (int i = 0; i < 3; ++i) {
+          EXPECT_EQ(monomial_basis_array[i + 1].rows(),
+                    monomial_basis_array[0].rows());
+          for (int j = 0; j < monomial_basis_array[0].rows(); ++j) {
             EXPECT_EQ(
-                monomial_basis_w_y((j + 1) * monomial_basis.rows() + i),
-                symbolic::Monomial(tester.cspace_free_polytope().y_slack()(j)) *
-                    monomial_basis(i));
+                monomial_basis_array[i + 1](j),
+                symbolic::Monomial(tester.cspace_free_polytope().y_slack()(i)) *
+                    monomial_basis_array[0](j));
           }
         }
       }
@@ -700,11 +638,10 @@ void TestConstructPlaneSearchProgram(
     const systems::Diagram<double>& diagram,
     const multibody::MultibodyPlant<double>& plant,
     const SceneGraph<double>& scene_graph,
-    const SortedPair<geometry::GeometryId>& geometry_pair,
-    CspaceFreePolytope::Formulation formulation) {
+    const SortedPair<geometry::GeometryId>& geometry_pair, bool with_cross_y) {
   const Eigen::Vector3d q_star(0, 0, 0);
   CspaceFreePolytope::Options options;
-  options.formulation = formulation;
+  options.with_cross_y = with_cross_y;
   CspaceFreePolytopeTester tester(
       &plant, &scene_graph, SeparatingPlaneOrder::kAffine, q_star, options);
   Eigen::Matrix<double, 9, 3> C;
@@ -838,34 +775,31 @@ void TestConstructPlaneSearchProgram(
 
 TEST_F(CIrisToyRobotTest, ConstructPlaneSearchProgram1) {
   // Test ConstructPlaneSearchProgram with both geometries being polytopes.
-  for (auto formulation : {CspaceFreePolytope::Formulation::kFormulation1,
-                           CspaceFreePolytope::Formulation::kFormulation2}) {
+  for (bool with_cross_y : {false, true}) {
     TestConstructPlaneSearchProgram(
         *diagram_, *plant_, *scene_graph_,
-        SortedPair<geometry::GeometryId>(world_box_, body3_box_), formulation);
+        SortedPair<geometry::GeometryId>(world_box_, body3_box_), with_cross_y);
   }
 }
 
 TEST_F(CIrisToyRobotTest, ConstructPlaneSearchProgram2) {
   // Test ConstructPlaneSearchProgram with neither geometries being polytope.
-  for (auto formulation : {CspaceFreePolytope::Formulation::kFormulation1,
-                           CspaceFreePolytope::Formulation::kFormulation2}) {
+  for (bool with_cross_y : {false, true}) {
     TestConstructPlaneSearchProgram(
         *diagram_, *plant_, *scene_graph_,
         SortedPair<geometry::GeometryId>(world_sphere_, body2_capsule_),
-        formulation);
+        with_cross_y);
   }
 }
 
 TEST_F(CIrisToyRobotTest, ConstructPlaneSearchProgram3) {
   // Test ConstructPlaneSearchProgram with one geometry being polytope and the
   // other not.
-  for (auto formulation : {CspaceFreePolytope::Formulation::kFormulation1,
-                           CspaceFreePolytope::Formulation::kFormulation2}) {
+  for (bool with_cross_y : {false, true}) {
     TestConstructPlaneSearchProgram(
         *diagram_, *plant_, *scene_graph_,
         SortedPair<geometry::GeometryId>(body1_convex_, body3_sphere_),
-        formulation);
+        with_cross_y);
   }
 }
 
@@ -1317,11 +1251,11 @@ TEST_F(CIrisRobotPolytopicGeometryTest, InitializePolytopeSearchProgram) {
 class CIrisToyRobotInitializePolytopeSearchProgramTest
     : public CIrisToyRobotTest {
  public:
-  void Test(CspaceFreePolytope::Formulation formulation,
+  void Test(bool with_cross_y,
             const std::vector<bool>& search_s_bounds_lagrangians_options) {
     const Eigen::Vector3d q_star(0, 0, 0);
     CspaceFreePolytope::Options cspace_free_polytope_options;
-    cspace_free_polytope_options.formulation = formulation;
+    cspace_free_polytope_options.with_cross_y = with_cross_y;
     CspaceFreePolytopeTester tester(plant_, scene_graph_,
                                     SeparatingPlaneOrder::kAffine, q_star,
                                     cspace_free_polytope_options);
@@ -1404,13 +1338,13 @@ class CIrisToyRobotInitializePolytopeSearchProgramTest
   }
 };
 
-TEST_F(CIrisToyRobotInitializePolytopeSearchProgramTest, Formulation1) {
-  Test(CspaceFreePolytope::Formulation::kFormulation1,
+TEST_F(CIrisToyRobotInitializePolytopeSearchProgramTest, WithoutCrossY) {
+  Test(false /* with_cross_y */,
        {true} /* search_s_bounds_lagrangians_options */);
 }
 
-TEST_F(CIrisToyRobotInitializePolytopeSearchProgramTest, Formulation2) {
-  Test(CspaceFreePolytope::Formulation::kFormulation2,
+TEST_F(CIrisToyRobotInitializePolytopeSearchProgramTest, WithCrossY) {
+  Test(true /* with_cross_y */,
        {true} /* search_s_bounds_lagrangians_options */);
 }
 

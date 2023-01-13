@@ -64,23 +64,36 @@ class CspaceFreePolytope {
 
   ~CspaceFreePolytope() {}
 
-  enum Formulation {
-    /** When we have non-polytopic collision geometries, we need to impose the
-     * matrix-sos constraint. With kFormulation1, the sos polynomials for
-     * non-polytopic collision geometries are written as ∑ᵢ pᵢ(s, yᵢ), i=0,
-     * 1, 2. Each pᵢ(s, yᵢ) is a sos polynomial of of s and yᵢ; with
-     * kFormulation2, the sos polynomials for non-polytopic geometries are
-     * written as q(s, y) which is a sos polynomial of s and y.
-     */
-    kFormulation1,
-    kFormulation2,
-  };
-
   /** Optional argument for constructing CspaceFreePolytope */
   struct Options {
     Options() {}
 
-    Formulation formulation{Formulation::kFormulation2};
+    // For non-polytopic collision geometries, we will impose a matrix-sos
+    // constraint X(s) being psd, with a slack indeterminates y, such that the
+    // polynomial
+    // p(s) = ⌈ 1 ⌉ᵀ * X(s) * ⌈ 1 ⌉
+    //        ⌊ y ⌋           ⌊ y ⌋
+    // is positive. This p(s) polynomial doesn't contain the cross term of y
+    // (namely it doesn't have y(i)*y(j), i≠j). When we select the monomial
+    // basis for this polynomial, we can also exclude the cross term of y in the
+    // monomial basis.
+    // For example, if we want to certify that
+    // a(0) + a(1)*y₀ + a(2)*y₁ + a(3)*y₀² + a(4)*y₁² is positive
+    // (this polynomial doesn't have the cross term y₀*y₁), we can write it as
+    // ⌈ 1⌉ᵀ * A₀ * ⌈ 1⌉ + ⌈ 1⌉ᵀ * A₁ * ⌈ 1⌉
+    // ⌊y₀⌋         ⌊y₀⌋   ⌊y₁⌋         ⌊y₁⌋
+    // with two small psd matrices A₀, A₁
+    // Instead of
+    // ⌈ 1⌉ᵀ * A * ⌈ 1⌉
+    // |y₀|        |y₀|
+    // ⌊y₁⌋        ⌊y₁⌋
+    // with one large psd matrix A.
+    // If we set with_cross_y = false, then we will use the monomial basis that
+    // doesn't generate cross terms of y, leading to smaller size sos problems.
+    // If we set with-cross_y = true, then we will use the monomial basis that
+    // will generate cross terms of y, causing larger size sos problems, but
+    // possibly able to certify a larger C-space polytope.
+    bool with_cross_y{false};
   };
 
   /**
@@ -118,7 +131,7 @@ class CspaceFreePolytope {
     return separating_planes_;
   }
 
-  [[nodiscard]] const VectorX<symbolic::Variable>& y_slack() const {
+  [[nodiscard]] const Vector3<symbolic::Variable>& y_slack() const {
     return y_slack_;
   }
 
@@ -529,6 +542,43 @@ class CspaceFreePolytope {
   HPolyhedron GetPolyhedronWithJointLimits(const Eigen::MatrixXd& C,
                                            const Eigen::VectorXd& d) const;
 
+  // Given the monomial_basis_array, compute the sos polynomial.
+  // monomial_basis_array contains [m(s), y₀*m(s), y₁*m(s), y₂*m(s)].
+  //
+  // If num_y == 0, then the sos polynomial is just
+  // m(s)ᵀ * X * m(s)
+  // where X is a Gram matrix, `grams` is a length-1 vector containing X.
+  //
+  // If num_y != 0 and with_cross_y = true, then the sos polynomial is
+  // ⌈    m(s)⌉ᵀ * Y * ⌈    m(s)⌉
+  // | y₀*m(s)|        | y₀*m(s)|
+  // |   ...  |        |   ...  |
+  // ⌊ yₙ*m(s)⌋        ⌊ yₙ*m(s)⌋
+  // where n = num_y-1. Y is a Gram matrix, `grams` is a length-1 vector
+  // containing Y.
+  //
+  // if num_y != 0 and with_cross_y = false, then the sos polynomial is
+  // ∑ᵢ ⌈    m(s)⌉ᵀ * Zᵢ * ⌈    m(s)⌉
+  //    ⌊ yᵢ*m(s)⌋         ⌊ yᵢ*m(s)⌋
+  // where Zᵢ is a Gram matrix, i = 0, ..., num_y-1.  `gram` is a vector of
+  // num_y, gram[i] = Zᵢ
+  struct GramAndMonomialBasis {
+    GramAndMonomialBasis(
+        const std::array<VectorX<symbolic::Monomial>, 4>& monomial_basis_array,
+        bool with_cross_y, int num_y);
+
+    // Add the constraint that the polynomial represented by the Gram and
+    // monomial basis is sos.
+    // @param is_zero_poly If true, then constrain all the Gram matrices to be
+    // zero.
+    void AddSos(solvers::MathematicalProgram* prog,
+                const Eigen::Ref<const VectorX<symbolic::Variable>>& gram_lower,
+                bool is_zero_poly, symbolic::Polynomial* poly);
+    int gram_var_size;
+    std::vector<MatrixX<symbolic::Variable>> grams;
+    std::vector<VectorX<symbolic::Monomial>> monomial_basis;
+  };
+
   multibody::RationalForwardKinematics rational_forward_kin_;
   const geometry::SceneGraph<double>& scene_graph_;
   std::map<multibody::BodyIndex,
@@ -543,7 +593,7 @@ class CspaceFreePolytope {
   // Sometimes we need to impose that a certain matrix of polynomials are always
   // psd (for example with sphere or capsule collision geometries). We will use
   // this slack variable to help us impose the matrix-sos constraint.
-  VectorX<symbolic::Variable> y_slack_;
+  Vector3<symbolic::Variable> y_slack_;
 
   symbolic::Variables s_set_;
 
@@ -555,32 +605,17 @@ class CspaceFreePolytope {
   // We have the invariant plane_geometries_[i].plane_index == i.
   std::vector<PlaneSeparatesGeometries> plane_geometries_;
 
-  // maps a pair of body (body1, body2) to the monomial basis. This monomial
-  // basis contains all the monomials of form ∏ᵢ pow(sᵢ, dᵢ), dᵢ=0 or 1, sᵢ
-  // correspond to the revolute/prismatic joint on the kinematics chain between
-  // body1 and body2.
+  // Maps a pair of body (body1, body2) to an array of monomial basis
+  // `monomial_basis_array`. monomial_basis_array[0] contains all the monomials
+  // of form ∏ᵢ pow(sᵢ, dᵢ), dᵢ=0 or 1, sᵢ correspond to the revolute/prismatic
+  // joint on the kinematic chain between body1 and body2.
+  // monomial_basis_array[i+1] = y_slack_[i] * monomial_basis_array[0]
   std::unordered_map<SortedPair<multibody::BodyIndex>,
-                     VectorX<symbolic::Monomial>>
-      map_body_to_monomial_basis_;
-  // maps a pair of body (body1, body2) to the monomial basis. This monomial
-  // basis contains all the monomials of form ∏ᵢ pow(sᵢ, dᵢ) or y(0)*∏ᵢ pow(sᵢ,
-  // dᵢ), y(1)*∏ᵢ pow(sᵢ, dᵢ) or y(2)*∏ᵢ pow(sᵢ, dᵢ) where dᵢ=0 or 1, sᵢ
-  // correspond to the revolute/prismatic joint on the kinematics chain between
-  // body1 and body2.
-  std::unordered_map<SortedPair<multibody::BodyIndex>,
-                     VectorX<symbolic::Monomial>>
-      map_body_to_monomial_basis_w_y_;
+                     std::array<VectorX<symbolic::Monomial>, 4>>
+      map_body_to_monomial_basis_array_;
 
-  // maps a pair of body (body1, body2) to the monomial basis. The value of this
-  // map contains is the size-3 array m(s, y(0)), m(s, y(1)), m(s, y(2)), where
-  // m(s, y(j)) is a monomial basis contains all the monomials of form ∏ᵢ
-  // pow(sᵢ, dᵢ) or y(j)*∏ᵢ pow(sᵢ, dᵢ), where dᵢ=0 or 1, sᵢ correspond to the
-  // revolute/prismatic joints on the kinematics chain between body1 and body2.
-  std::unordered_map<SortedPair<multibody::BodyIndex>,
-                     std::array<VectorX<symbolic::Monomial>, 3>>
-      map_body_to_monomial_basis_w_y_array_;
-
-  Formulation formulation_;
+  // See Options::with_cross_y for its meaning.
+  bool with_cross_y_;
 };
 
 /**
