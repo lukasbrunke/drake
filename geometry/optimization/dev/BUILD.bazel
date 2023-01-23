@@ -7,11 +7,28 @@ load(
     "drake_cc_library",
     "drake_cc_package_library",
 )
+
 load(
     "@drake//tools/skylark:test_tags.bzl",
     "mosek_test_tags",
 )
+
+load(
+    "@drake//tools/skylark:drake_py.bzl",
+    "drake_py_binary",
+)
+
 load("//tools/lint:lint.bzl", "add_lint_tests")
+
+drake_cc_package_library(
+    name = "dev",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":collision_geometry",
+        ":separating_plane",
+        ":cspace_free_polytope",
+    ],
+)
 
 filegroup(
     name = "models",
@@ -145,6 +162,19 @@ drake_cc_binary(
         "//multibody/inverse_kinematics",
         "//multibody/parsing:parser",
         "//multibody/plant",
+    ],
+)
+
+drake_py_binary(
+    name = "ur3e_demo_py",
+    srcs = ["test/ur3e_demo.py"],
+    data = [
+        ":models",
+        "//manipulation/models/ur3e:models",
+        "//manipulation/models/wsg_50_description:models",
+    ],
+    deps = [
+        "//bindings/pydrake",
     ],
 )
 
