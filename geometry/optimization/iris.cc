@@ -269,15 +269,17 @@ class SamePointConstraintAbstractCSpace : public Constraint {
   std::unique_ptr<Context<Expression>> symbolic_context_{nullptr};
 
  protected:
-  virtual inline void Compute_dqdot_ds(const Ref<const AutoDiffVecXd>& q,
-                                    EigenPtr<MatrixXd> dqdot_ds) const = 0;
+  // Js_v_WF = Jq_v_WF * dqdot/dsdot
+  virtual inline void Compute_Js_v_WF(const Ref<const AutoDiffVecXd>& s,
+                                      const Ref<const MatrixXd>& Jq_v_WF,
+                                      EigenPtr<MatrixXd> Js_v_WF) const = 0;
 
  private:
   void DoEval(const Ref<const VectorXd>& x, VectorXd* y) const override {
     DRAKE_DEMAND(frameA_ != nullptr);
     DRAKE_DEMAND(frameB_ != nullptr);
-    VectorXd cspace_variable = x.head(plant_->num_positions());
-    VectorXd q = ExtractQFromAbstractCSpaceVariable(cspace_variable);
+    VectorXd s = x.head(plant_->num_positions());
+    VectorXd q = ExtractQFromAbstractCSpaceVariable(s);
     Vector3d p_AA = x.template segment<3>(plant_->num_positions()),
              p_BB = x.template tail<3>();
     Vector3d p_WA, p_WB;
@@ -296,11 +298,13 @@ class SamePointConstraintAbstractCSpace : public Constraint {
     DRAKE_DEMAND(frameA_ != nullptr);
     DRAKE_DEMAND(frameB_ != nullptr);
     AutoDiffVecXd s = x.head(plant_->num_positions());
-    AutoDiffVecXd q = ExtractQFromAbstractCSpaceVariable(s);
+    // discard the gradient as the gradients of s are not needed to compute
+    // Js_v_WA, Js_v_WB
+    VectorXd q = ExtractQFromAbstractCSpaceVariable(ExtractDoubleOrThrow(s));
     Vector3<AutoDiffXd> p_AA = x.template segment<3>(plant_->num_positions()),
                         p_BB = x.template tail<3>();
 
-    plant_->SetPositions(context_.get(), ExtractDoubleOrThrow(q));
+    plant_->SetPositions(context_.get(), q);
 
     const RigidTransform<double>& X_WA =
         plant_->EvalBodyPoseInWorld(*context_, frameA_->body());
@@ -318,19 +322,22 @@ class SamePointConstraintAbstractCSpace : public Constraint {
         ExtractDoubleOrThrow(p_BB), plant_->world_frame(),
         plant_->world_frame(), &Jq_v_WB);
 
-    Eigen::Matrix3Xd Js_v_WA(3, plant_->num_positions()),
-        Js_v_WB(3, plant_->num_positions());
+    // initialize the pointers to point to Jq_v_WF so to avoid unnecessary copy
+    // of Jq_v_WF if the abstract configuration space is the normal
+    // configuration space.
+    Eigen::Matrix3Xd* Js_v_WA{&Jq_v_WA};
+    Eigen::Matrix3Xd* Js_v_WB{&Jq_v_WB};
+
     Eigen::MatrixXd dqdot_ds =
         MatrixXd::Identity(plant_->num_positions(), plant_->num_positions());
-    // Js_v_WA_ = Jq_v_WA_ * dqdot/dsdot = dp_WA/dqdot * dqdot/dsdot
-    Compute_dqdot_ds(q, &dqdot_ds);
-    Js_v_WA = Jq_v_WA * dqdot_ds;
-    Js_v_WB = Jq_v_WB * dqdot_ds;
+
+    Compute_Js_v_WF(s, Jq_v_WA, Js_v_WA);
+    Compute_Js_v_WF(s, Jq_v_WB, Js_v_WB);
 
     const Eigen::Vector3d y_val =
         X_WA * math::ExtractValue(p_AA) - X_WB * math::ExtractValue(p_BB);
     Eigen::Matrix3Xd dy(3, plant_->num_positions() + 6);
-    dy << Js_v_WA - Js_v_WB, X_WA.rotation().matrix(),
+    dy << *Js_v_WA - *Js_v_WB, X_WA.rotation().matrix(),
         -X_WB.rotation().matrix();
     *y = math::InitializeAutoDiff(y_val, dy * math::ExtractGradient(x));
   }
@@ -386,9 +393,10 @@ class SamePointConstraint : public SamePointConstraintAbstractCSpace {
   }
 
  protected:
-  inline void Compute_dqdot_ds(const Ref<const AutoDiffVecXd>&,
-                            EigenPtr<MatrixXd>) const override {
-    // since s = q then dqdot_ds = I
+  inline void Compute_Js_v_WF(const Ref<const AutoDiffVecXd>&,
+                              const Ref<const MatrixXd>&,
+                              EigenPtr<MatrixXd>) const override {
+    //    s = q so Js_v_WF = Jq_v_WF
   }
 };
 
@@ -426,12 +434,22 @@ class SamePointConstraintRational : public SamePointConstraintAbstractCSpace {
   }
 
  protected:
-  void Compute_dqdot_ds(const Ref<const AutoDiffVecXd>& q,
-                     EigenPtr<MatrixXd> dqdot_ds) const override {
+  inline void Compute_Js_v_WF(const Ref<const AutoDiffVecXd>& s,
+                              const Ref<const MatrixXd>& Jq_v_WF,
+                              EigenPtr<MatrixXd> Js_v_WF) const override {
+    // If q = g(s) then qdot = dg/ds * ds/dt and so dqdot/ds_dot = dg/ds.
+    // To get dg/ds, we compute q after setting the gradient of s to the
+    // identity.
+    AutoDiffVecXd s_identity_derivative = math::InitializeAutoDiff(
+        math::ExtractValue(s), Eigen::MatrixXd::Identity(s.rows(), s.rows()));
+    AutoDiffVecXd q = ExtractQFromAbstractCSpaceVariable(s_identity_derivative);
+    Eigen::MatrixXd dqdot_dsdot =
+        MatrixXd::Identity(plant_->num_positions(), plant_->num_positions());
     // since sᵢ = f(qᵢ) then we only need to operate on the diagonal.
-    for (int i = 0; i < static_cast<int>((*dqdot_ds).rows()); ++i) {
-      (*dqdot_ds)(i, i) = q(i).derivatives()(i);
+    for (int i = 0; i < static_cast<int>(dqdot_dsdot.rows()); ++i) {
+      dqdot_dsdot(i, i) = q(i).derivatives()(i);
     }
+    *Js_v_WF = Jq_v_WF * dqdot_dsdot;
   }
 
  private:
@@ -751,10 +769,6 @@ HPolyhedron _DoIris_(const MultibodyPlant<double>& plant,
   }
 
   // Make the polytope and ellipsoid.
-  std::cout << same_point_constraint->ExtractAbstractCSpaceVariableFromQ(
-          plant.GetPositionLowerLimits()) << std::endl;
-   std::cout << same_point_constraint->ExtractAbstractCSpaceVariableFromQ(
-          plant.GetPositionUpperLimits())<< std::endl;
   HPolyhedron P = HPolyhedron::MakeBox(
       same_point_constraint->ExtractAbstractCSpaceVariableFromQ(
           plant.GetPositionLowerLimits()),
