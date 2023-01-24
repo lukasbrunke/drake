@@ -322,18 +322,22 @@ class SamePointConstraintAbstractCSpace : public Constraint {
         ExtractDoubleOrThrow(p_BB), plant_->world_frame(),
         plant_->world_frame(), &Jq_v_WB);
 
-    Eigen::Matrix3Xd Js_v_WA(3, plant_->num_positions()),
-        Js_v_WB(3, plant_->num_positions());
+    // initialize the pointers to point to Jq_v_WF so to avoid unnecessary copy
+    // of Jq_v_WF if the abstract configuration space is the normal
+    // configuration space.
+    Eigen::Matrix3Xd* Js_v_WA{&Jq_v_WA};
+    Eigen::Matrix3Xd* Js_v_WB{&Jq_v_WB};
+
     Eigen::MatrixXd dqdot_ds =
         MatrixXd::Identity(plant_->num_positions(), plant_->num_positions());
 
-    Compute_Js_v_WF(s, Jq_v_WA, &Js_v_WA);
-    Compute_Js_v_WF(s, Jq_v_WB, &Js_v_WB);
+    Compute_Js_v_WF(s, Jq_v_WA, Js_v_WA);
+    Compute_Js_v_WF(s, Jq_v_WB, Js_v_WB);
 
     const Eigen::Vector3d y_val =
         X_WA * math::ExtractValue(p_AA) - X_WB * math::ExtractValue(p_BB);
     Eigen::Matrix3Xd dy(3, plant_->num_positions() + 6);
-    dy << Js_v_WA - Js_v_WB, X_WA.rotation().matrix(),
+    dy << *Js_v_WA - *Js_v_WB, X_WA.rotation().matrix(),
         -X_WB.rotation().matrix();
     *y = math::InitializeAutoDiff(y_val, dy * math::ExtractGradient(x));
   }
@@ -390,10 +394,9 @@ class SamePointConstraint : public SamePointConstraintAbstractCSpace {
 
  protected:
   inline void Compute_Js_v_WF(const Ref<const AutoDiffVecXd>&,
-                              const Ref<const MatrixXd>& Jq_v_WF,
-                              EigenPtr<MatrixXd> Js_v_WF) const override {
-    *Js_v_WF = Eigen::Map<const Eigen::MatrixXd>(Jq_v_WF.data(), Jq_v_WF.rows(),
-                                                 Jq_v_WF.cols());
+                              const Ref<const MatrixXd>&,
+                              EigenPtr<MatrixXd>) const override {
+    //    s = q so Js_v_WF = Jq_v_WF
   }
 };
 
