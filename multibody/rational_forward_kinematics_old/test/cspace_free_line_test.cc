@@ -1,4 +1,4 @@
-#include "drake/multibody/rational_forward_kinematics/cspace_free_line.h"
+#include "drake/multibody/rational_forward_kinematics_old/cspace_free_line.h"
 
 #include <algorithm>
 
@@ -12,6 +12,7 @@
 
 namespace drake {
 namespace multibody {
+namespace rational_old {
 
 // Helper method for testing CspaceFreeLine.
 // CspaceFreeLine DoublePendulumCspaceFreeLine() {
@@ -747,5 +748,6 @@ TEST_F(DoublePendulumTest, TestCertifyTangentConfigurationSpaceLinesParrallel) {
 //  }
 //}
 
+}  // namespace rational_old
 }  // namespace multibody
 }  // namespace drake

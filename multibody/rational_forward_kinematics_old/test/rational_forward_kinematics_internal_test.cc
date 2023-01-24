@@ -2,10 +2,11 @@
 
 #include <gtest/gtest.h>
 
-#include "drake/multibody/rational_forward_kinematics/test/rational_forward_kinematics_test_utilities.h"
+#include "drake/multibody/rational_forward_kinematics_old/test/rational_forward_kinematics_test_utilities.h"
 
 namespace drake {
 namespace multibody {
+namespace rational_old {
 namespace internal {
 using drake::multibody::BodyIndex;
 using drake::multibody::internal::Mobilizer;
@@ -261,5 +262,6 @@ TEST_F(FinalizedIiwaTest, FindMobilizersOnShortestPath) {
 }
 
 }  // namespace internal
+}  // namespace rational_old
 }  // namespace multibody
 }  // namespace drake

@@ -1,4 +1,4 @@
-#include "drake/multibody/rational_forward_kinematics/test/rational_forward_kinematics_test_utilities.h"
+#include "drake/multibody/rational_forward_kinematics_old/test/rational_forward_kinematics_test_utilities.h"
 
 #include <algorithm>
 #include <limits>
@@ -17,6 +17,7 @@
 
 namespace drake {
 namespace multibody {
+namespace rational_old {
 using drake::VectorX;
 using drake::math::RigidTransformd;
 using drake::multibody::BodyIndex;
@@ -216,6 +217,6 @@ void SetDiffuse(const MultibodyPlant<double>& plant,
     }
   }
 }
-
+}  // namespace rational_old
 }  // namespace multibody
 }  // namespace drake

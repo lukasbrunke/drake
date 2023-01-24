@@ -1,4 +1,4 @@
-#include "drake/multibody/rational_forward_kinematics/redundant_inequality_pruning.h"
+#include "drake/multibody/rational_forward_kinematics_old/redundant_inequality_pruning.h"
 
 #include <gtest/gtest.h>
 
@@ -65,5 +65,6 @@ GTEST_TEST(RedundantHyperplaneInequalities, RemoveWithTighten) {
 }
 
 }  // namespace
+}  // namespace rational_old
 }  // namespace multibody
 }  // namespace drake

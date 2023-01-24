@@ -38,28 +38,9 @@ drake_py_library(
 )
 
 drake_py_library(
-    name = "prm",
-    srcs = [
-        "prm.py",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-drake_py_library(
     name = "iris_plant_visualizer",
     srcs = [
         "iris_plant_visualizer.py",
-    ],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//bindings/pydrake",
-    ],
-)
-
-drake_py_library(
-    name = "iris_plant_visualizer2",
-    srcs = [
-        "iris_plant_visualizer2.py",
     ],
     visibility = ["//visibility:public"],
     deps = [

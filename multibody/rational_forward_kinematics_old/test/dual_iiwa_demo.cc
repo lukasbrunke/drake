@@ -10,7 +10,7 @@
 #include "drake/geometry/scene_graph_inspector.h"
 #include "drake/multibody/inverse_kinematics/inverse_kinematics.h"
 #include "drake/multibody/parsing/parser.h"
-#include "drake/multibody/rational_forward_kinematics/cspace_free_region.h"
+#include "drake/multibody/rational_forward_kinematics_old/cspace_free_region.h"
 #include "drake/multibody/tree/multibody_tree_indexes.h"
 #include "drake/solvers/common_solver_option.h"
 #include "drake/solvers/gurobi_solver.h"
@@ -20,6 +20,7 @@
 
 namespace drake {
 namespace multibody {
+namespace rational_old {
 const double kInf = std::numeric_limits<double>::infinity();
 
 std::vector<geometry::GeometryId> GetCollisionGeometries(
@@ -647,6 +648,7 @@ int DoMain() {
   VisualizeOnePosture(write_file);
   return 0;
 }
+}  // namespace rational_old
 }  // namespace multibody
 }  // namespace drake
 

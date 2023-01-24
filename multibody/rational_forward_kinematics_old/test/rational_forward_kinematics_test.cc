@@ -4,10 +4,11 @@
 
 #include "drake/common/test_utilities/eigen_matrix_compare.h"
 #include "drake/common/test_utilities/symbolic_test_util.h"
-#include "drake/multibody/rational_forward_kinematics/test/rational_forward_kinematics_test_utilities.h"
+#include "drake/multibody/rational_forward_kinematics_old/test/rational_forward_kinematics_test_utilities.h"
 
 namespace drake {
 namespace multibody {
+namespace rational_old {
 namespace {
 using drake::CompareMatrices;
 using drake::Matrix3;
@@ -413,5 +414,6 @@ TEST_F(FinalizedIiwaTest, TestTAndQConversion) {
 }
 
 }  // namespace
+}  // namespace rational_old
 }  // namespace multibody
 }  // namespace drake

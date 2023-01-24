@@ -1,4 +1,4 @@
-#include "drake/multibody/rational_forward_kinematics/cspace_free_region.h"
+#include "drake/multibody/rational_forward_kinematics_old/cspace_free_region.h"
 
 #include <chrono>
 #include <limits>
@@ -14,10 +14,10 @@
 #include "drake/geometry/optimization/vpolytope.h"
 #include "drake/multibody/inverse_kinematics/inverse_kinematics.h"
 #include "drake/multibody/plant/coulomb_friction.h"
-#include "drake/multibody/rational_forward_kinematics/collision_geometry.h"
-#include "drake/multibody/rational_forward_kinematics/rational_forward_kinematics.h"
-#include "drake/multibody/rational_forward_kinematics/rational_forward_kinematics_internal.h"
-#include "drake/multibody/rational_forward_kinematics/test/rational_forward_kinematics_test_utilities.h"
+#include "drake/multibody/rational_forward_kinematics_old/collision_geometry.h"
+#include "drake/multibody/rational_forward_kinematics_old/rational_forward_kinematics.h"
+#include "drake/multibody/rational_forward_kinematics_old/rational_forward_kinematics_internal.h"
+#include "drake/multibody/rational_forward_kinematics_old/test/rational_forward_kinematics_test_utilities.h"
 #include "drake/solvers/common_solver_option.h"
 #include "drake/solvers/mathematical_program.h"
 #include "drake/solvers/mosek_solver.h"
@@ -26,6 +26,7 @@
 
 namespace drake {
 namespace multibody {
+namespace rational_old {
 using drake::Vector3;
 using drake::VectorX;
 using drake::math::RigidTransformd;
@@ -290,8 +291,8 @@ void CheckRationalLorentzConeConstraint(
 }
 
 void TestGenerateLinkOnOneSideOfPlaneRationalFunction(
-    const RationalForwardKinematics& rational_forward_kinematics,
-    const SeparatingPlane<symbolic::Variable>& separating_plane,
+    const RationalForwardKinematicsOld& rational_forward_kinematics,
+    const SeparatingPlaneOld<symbolic::Variable>& separating_plane,
     PlaneSide plane_side, const Eigen::Ref<const Eigen::VectorXd>& q_star,
     double separating_polytope_delta) {
   const CollisionGeometry* link_geometry;
@@ -2187,6 +2188,7 @@ GTEST_TEST(AddCspacePolytopeContainment, Test2) {
   }
 }
 
+}  // namespace rational_old
 }  // namespace multibody
 }  // namespace drake
 

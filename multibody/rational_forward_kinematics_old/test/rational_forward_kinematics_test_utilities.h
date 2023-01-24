@@ -13,10 +13,11 @@
 
 #include "drake/math/rigid_transform.h"
 #include "drake/multibody/plant/multibody_plant.h"
-#include "drake/multibody/rational_forward_kinematics/collision_geometry.h"
+#include "drake/multibody/rational_forward_kinematics_old/collision_geometry.h"
 
 namespace drake {
 namespace multibody {
+namespace rational_old {
 
 std::unique_ptr<drake::multibody::MultibodyPlant<double>> ConstructIiwaPlant(
     const std::string& iiwa_sdf_name, bool finalize);
@@ -96,5 +97,6 @@ void SetDiffuse(const MultibodyPlant<double>& plant,
                 std::optional<double> rgba_r, std::optional<double> rgba_g,
                 std::optional<double> rgba_b, std::optional<double> rgba_a);
 
+}  // namespace rational_old
 }  // namespace multibody
 }  // namespace drake

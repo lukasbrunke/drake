@@ -9,9 +9,9 @@
 #include "drake/geometry/optimization/polytope_cover.h"
 #include "drake/multibody/inverse_kinematics/inverse_kinematics.h"
 #include "drake/multibody/parsing/parser.h"
-#include "drake/multibody/rational_forward_kinematics/cspace_free_region.h"
-#include "drake/multibody/rational_forward_kinematics/rational_forward_kinematics.h"
-#include "drake/multibody/rational_forward_kinematics/test/rational_forward_kinematics_test_utilities.h"
+#include "drake/multibody/rational_forward_kinematics_old/cspace_free_region.h"
+#include "drake/multibody/rational_forward_kinematics_old/rational_forward_kinematics.h"
+#include "drake/multibody/rational_forward_kinematics_old/test/rational_forward_kinematics_test_utilities.h"
 #include "drake/solvers/common_solver_option.h"
 #include "drake/solvers/gurobi_solver.h"
 #include "drake/solvers/mosek_solver.h"
@@ -20,6 +20,7 @@
 
 namespace drake {
 namespace multibody {
+namespace rational_old {
 const double kInf = std::numeric_limits<double>::infinity();
 
 class IiwaDiagram {
@@ -402,6 +403,7 @@ int DoMain() {
   VisualizePostures(write_file);
   return 0;
 }
+}  // namespace rational_old
 }  // namespace multibody
 }  // namespace drake
 

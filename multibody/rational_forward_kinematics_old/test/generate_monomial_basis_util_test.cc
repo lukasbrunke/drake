@@ -1,4 +1,4 @@
-#include "drake/multibody/rational_forward_kinematics/generate_monomial_basis_util.h"
+#include "drake/multibody/rational_forward_kinematics_old/generate_monomial_basis_util.h"
 
 #include <unordered_set>
 
@@ -6,6 +6,7 @@
 
 namespace drake {
 namespace multibody {
+namespace rational_old {
 void CheckGenerateMonomialBasisWithOrderUpToOne(
     const drake::symbolic::Variables& t) {
   const auto basis = GenerateMonomialBasisWithOrderUpToOne(t);
@@ -73,5 +74,6 @@ TEST_F(GenerateMonomialBasisTest,
   CheckGenerateMonomialBasisOrderAllUpToOneExceptOneUpToTwo(
       drake::symbolic::Variables({t1_, t2_, t3_, t4_}));
 }
+}  // namespace rational_old
 }  // namespace multibody
 }  // namespace drake
