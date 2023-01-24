@@ -751,6 +751,10 @@ HPolyhedron _DoIris_(const MultibodyPlant<double>& plant,
   }
 
   // Make the polytope and ellipsoid.
+  std::cout << same_point_constraint->ExtractAbstractCSpaceVariableFromQ(
+          plant.GetPositionLowerLimits()) << std::endl;
+   std::cout << same_point_constraint->ExtractAbstractCSpaceVariableFromQ(
+          plant.GetPositionUpperLimits())<< std::endl;
   HPolyhedron P = HPolyhedron::MakeBox(
       same_point_constraint->ExtractAbstractCSpaceVariableFromQ(
           plant.GetPositionLowerLimits()),
