@@ -211,6 +211,23 @@ drake_pybind_library(
 )
 
 drake_pybind_library(
+    name = "rational_forward_kinematics_py",
+    cc_deps = [
+        "//bindings/pydrake:documentation_pybind",
+        "//bindings/pydrake/common:default_scalars_pybind",
+        "//bindings/pydrake/common:sorted_pair_pybind",
+        "//bindings/pydrake/common:value_pybind",
+    ],
+    cc_srcs = ["rational_forward_kinematics_py.cc"],
+    package_info = PACKAGE_INFO,
+    py_deps = [
+        ":module_py",
+        ":plant_py",
+        "//bindings/pydrake/solvers",
+    ],
+)
+
+drake_pybind_library(
     name = "rational_py",
     cc_deps = [
         "//bindings/pydrake:documentation_pybind",
@@ -245,6 +262,7 @@ PY_LIBRARIES_WITH_INSTALL = [
     ":parsing_py",
     ":plant_py",
     ":rational_py",
+    ":rational_forward_kinematics_py",
     ":tree_py",
 ]
 
@@ -268,8 +286,8 @@ drake_py_library(
 
 install(
     name = "install",
-    targets = PY_LIBRARIES + [":all_py"],
     py_dest = PACKAGE_INFO.py_dest,
+    targets = PY_LIBRARIES + [":all_py"],
     deps = get_drake_py_installs(PY_LIBRARIES_WITH_INSTALL),
 )
 
