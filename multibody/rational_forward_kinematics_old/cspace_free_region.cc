@@ -1612,6 +1612,9 @@ void CspaceFreeRegion::CspacePolytopeBilinearAlternation(
     Eigen::VectorXd lagrangian_gram_var_vals, verified_gram_var_vals,
         separating_plane_var_vals;
     auto clock_start = std::chrono::system_clock::now();
+    std::cout << "Bilinear alt checking" << std::endl;
+    std::cout << cspace_free_region_solution->d << std::endl;
+    std::cout << cspace_free_region_solution->C << std::endl;
     const bool find_lagrangian = internal::FindLagrangianAndSeparatingPlanes(
         *this, alternation_tuples, (cspace_free_region_solution->C),
         (cspace_free_region_solution->d), lagrangian_gram_vars,
@@ -1816,6 +1819,9 @@ void CspaceFreeRegion::CspacePolytopeBinarySearch(
 
         Eigen::VectorXd lagrangian_gram_var_vals, verified_gram_var_vals,
             separating_plane_var_vals;
+        std::cout << "Binary search checking" << std::endl;
+        std::cout << d << std::endl;
+        std::cout << C << std::endl;
         const bool is_success = internal::FindLagrangianAndSeparatingPlanes(
             *this, alternation_tuples, C, d, lagrangian_gram_vars,
             verified_gram_vars, separating_plane_vars,
