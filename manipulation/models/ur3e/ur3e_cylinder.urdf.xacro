@@ -25,7 +25,7 @@
     </inertial>
   </xacro:macro>
 
-  <xacro:macro name="ur3e_robot" params="prefix joint_limited weld_wrist
+  <xacro:macro name="ur3e_robot" params="prefix joint_limited weld_wrist visual_collision_same
     shoulder_pan_lower_limit:=${-0.9*pi}    shoulder_pan_upper_limit:=${0.9*pi}
     shoulder_lift_lower_limit:=${-0.9*pi}    shoulder_lift_upper_limit:=${0.9*pi}
     elbow_joint_lower_limit:=${-0.9*pi}    elbow_joint_upper_limit:=${0.9*pi}
@@ -78,15 +78,28 @@
     <xacro:property name="wrist_3_length" value="${d6}" />
 
     <link name="${prefix}base_link" >
-      <visual>
-        <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
-        <geometry>
-          <mesh filename="base.obj"/>
-        </geometry>
-        <material name="LightGrey">
-          <color rgba="0.7 0.7 0.7 1.0"/>
-        </material>
-      </visual>
+      <xacro:unless value="${visual_collision_same}">
+        <visual>
+          <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
+          <geometry>
+            <mesh filename="base.obj"/>
+          </geometry>
+          <material name="LightGrey">
+            <color rgba="0.7 0.7 0.7 1.0"/>
+          </material>
+        </visual>
+      </xacro:unless>
+      <xacro:if value="${visual_collision_same}">
+        <visual name="base_cylinder">
+          <origin rpy="0 0 0" xyz="0 0 0.03"/>
+          <geometry>
+            <cylinder radius="0.07" length="0.06"/>
+          </geometry>
+          <material name="LightRed">
+            <color rgba="0.7 0.1 0.1 1.0"/>
+          </material>
+        </visual>
+      </xacro:if>
       <collision name="base_cylinder">
         <origin rpy="0 0 0" xyz="0 0 0.03"/>
         <geometry>
@@ -119,15 +132,28 @@
     </joint>
 
     <link name="${prefix}shoulder_link">
-      <visual>
-        <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
-        <geometry>
-          <mesh filename="shoulder.obj"/>
-        </geometry>
-        <material name="LightGrey">
-          <color rgba="0.7 0.7 0.7 1.0"/>
-        </material>
-      </visual>
+      <xacro:unless value="${visual_collision_same}">
+        <visual>
+          <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
+          <geometry>
+            <mesh filename="shoulder.obj"/>
+          </geometry>
+          <material name="LightGrey">
+            <color rgba="0.7 0.7 0.7 1.0"/>
+          </material>
+        </visual>
+      </xacro:unless>
+      <xacro:if value="${visual_collision_same}">
+        <visual name="shoulder_cylinder">
+          <origin rpy="0 0 0" xyz="0.0 0.0 -0.02"/>
+          <geometry>
+            <cylinder radius="0.05" length="0.16"/>
+          </geometry>
+          <material name="LightRed">
+            <color rgba="0.7 0.1 0.1 1.0"/>
+          </material>
+        </visual>
+      </xacro:if>
       <collision name="shoulder_cylinder">
         <origin rpy="0 0 0" xyz="0.0 0.0 -0.02"/>
         <geometry>
@@ -160,15 +186,28 @@
     </joint>
 
     <link name="${prefix}upper_arm_link">
-      <visual>
-        <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
-        <geometry>
-          <mesh filename="upperarm.obj"/>
-        </geometry>
-        <material name="LightGrey">
-          <color rgba="0.7 0.7 0.7 1.0"/>
-        </material>
-      </visual>
+      <xacro:unless value="${visual_collision_same}">
+        <visual>
+          <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
+          <geometry>
+            <mesh filename="upperarm.obj"/>
+          </geometry>
+          <material name="LightGrey">
+            <color rgba="0.7 0.7 0.7 1.0"/>
+          </material>
+        </visual>
+      </xacro:unless>
+      <xacro:if value="${visual_collision_same}">
+        <visual name="upper_arm_cylinder1">
+          <origin rpy="${pi/2.0} 0 0" xyz="0.0 -0.02 0.0"/>
+          <geometry>
+            <cylinder radius="0.05" length="0.14"/>
+          </geometry>
+          <material name="LightRed">
+            <color rgba="0.7 0.1 0.1 1.0"/>
+          </material>
+        </visual>
+      </xacro:if>
       <collision name="upper_arm_cylinder1">
         <origin rpy="${pi/2.0} 0 0" xyz="0.0 -0.02 0.0"/>
         <geometry>
@@ -181,12 +220,34 @@
           <cylinder radius="0.05" length="0.051"/>
         </geometry>
       </collision>-->
+      <xacro:if value="${visual_collision_same}">
+        <visual name="upper_arm_cylinder2">
+          <origin rpy="0 0 0" xyz="0.0 0.0 ${upper_arm_length/2.0 + 0.005}"/>
+          <geometry>
+            <cylinder radius="0.04" length="0.21"/>
+          </geometry>
+          <material name="LightRed">
+            <color rgba="0.7 0.1 0.1 1.0"/>
+          </material>
+        </visual>
+      </xacro:if>
       <collision name="upper_arm_cylinder2">
         <origin rpy="0 0 0" xyz="0.0 0.0 ${upper_arm_length/2.0 + 0.005}"/>
         <geometry>
           <cylinder radius="0.04" length="0.21"/>
         </geometry>
       </collision>
+      <xacro:if value="${visual_collision_same}">
+        <visual name="upper_arm_cylinder3">
+          <origin rpy="${pi/2.0} 0 0" xyz="0.0 -0.03 ${upper_arm_length - 0.001}"/>
+          <geometry>
+            <cylinder radius="0.041" length="0.17"/>
+          </geometry>
+          <material name="LightRed">
+            <color rgba="0.7 0.1 0.1 1.0"/>
+          </material>
+        </visual>
+      </xacro:if>
       <collision name="upper_arm_cylinder3">
         <origin rpy="${pi/2.0} 0 0" xyz="0.0 -0.03 ${upper_arm_length - 0.001}"/>
         <geometry>
@@ -219,27 +280,49 @@
     </joint>
 
     <link name="${prefix}forearm_link">
-      <visual>
-        <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
-        <geometry>
-          <mesh filename="forearm.obj"/>
-        </geometry>
-        <material name="LightGrey">
-          <color rgba="0.7 0.7 0.7 1.0"/>
-        </material>
-      </visual>
-        <collision name="forearm_cylinder1">
+      <xacro:unless value="${visual_collision_same}">
+        <visual>
+          <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
+          <geometry>
+            <mesh filename="forearm.obj"/>
+          </geometry>
+          <material name="LightGrey">
+            <color rgba="0.7 0.7 0.7 1.0"/>
+          </material>
+        </visual>
+      </xacro:unless>
+      <xacro:if value="${visual_collision_same}">
+        <visual name="forearm_cylinder1">
           <origin rpy="0 0 0" xyz="0.0 0.0 ${forearm_length/2.0 + 0.005}"/>
           <geometry>
             <cylinder radius="0.034" length="0.19"/>
           </geometry>
-        </collision>
-        <collision name="forearm_cylinder2">
+          <material name="LightRed">
+            <color rgba="0.7 0.1 0.1 1.0"/>
+          </material>
+        </visual>
+        <visual name="forearm_cylinder2">
           <origin rpy="${pi/2.0} 0 0" xyz="0.0 0.022 ${forearm_length}"/>
           <geometry>
             <cylinder radius="0.034" length="0.13"/>
           </geometry>
-        </collision>
+          <material name="LightRed">
+            <color rgba="0.7 0.1 0.1 1.0"/>
+          </material>
+        </visual>
+      </xacro:if>
+      <collision name="forearm_cylinder1">
+        <origin rpy="0 0 0" xyz="0.0 0.0 ${forearm_length/2.0 + 0.005}"/>
+        <geometry>
+          <cylinder radius="0.034" length="0.19"/>
+        </geometry>
+      </collision>
+      <collision name="forearm_cylinder2">
+        <origin rpy="${pi/2.0} 0 0" xyz="0.0 0.022 ${forearm_length}"/>
+        <geometry>
+          <cylinder radius="0.034" length="0.13"/>
+        </geometry>
+      </collision>
       <xacro:cylinder_inertial radius="0.075" length="${-a3}" mass="${forearm_mass}">
         <origin xyz="0.0 0.0 ${-a3/2.0}" rpy="0 0 0" />
       </xacro:cylinder_inertial>
@@ -266,6 +349,7 @@
     </joint>
 
     <link name="${prefix}wrist_1_link">
+      <xacro:unless value="${visual_collision_same}">
       <visual>
         <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
         <geometry>
@@ -275,6 +359,18 @@
           <color rgba="0.7 0.7 0.7 1.0"/>
         </material>
       </visual>
+      </xacro:unless>
+      <xacro:if value="${visual_collision_same}">
+        <visual name="wrist_1_cylinder">
+          <origin rpy="0 0 0" xyz="0.0 0.105 0.012"/>
+          <geometry>
+            <cylinder radius="0.034" length="0.12"/>
+          </geometry>
+          <material name="LightRed">
+            <color rgba="0.7 0.1 0.1 1.0"/>
+          </material>
+        </visual>
+      </xacro:if>
       <collision name="wrist_1_cylinder">
         <origin rpy="0 0 0" xyz="0.0 0.105 0.012"/>
         <geometry>
@@ -308,6 +404,7 @@
 
     <link name="${prefix}wrist_2_link">
       <origin rpy="${pi / 2} 0 0" xyz="0.0 0.0 0.0"/>
+      <xacro:unless value="${visual_collision_same}">
       <visual>
         <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
         <geometry>
@@ -317,6 +414,18 @@
           <color rgba="0.7 0.7 0.7 1.0"/>
         </material>
       </visual>
+      </xacro:unless>
+      <xacro:if value="${visual_collision_same}">
+        <visual name="wrist_2_cylinder">
+          <origin rpy="${pi/2} 0 0" xyz="0.0 0.025 0.085"/>
+          <geometry>
+            <cylinder radius="0.034" length="0.13"/>
+          </geometry>
+          <material name="LightRed">
+            <color rgba="0.7 0.1 0.1 1.0"/>
+          </material>
+        </visual>
+      </xacro:if>
       <collision name="wrist_2_cylinder">
         <origin rpy="${pi/2} 0 0" xyz="0.0 0.025 0.085"/>
         <geometry>
@@ -358,15 +467,17 @@
     </xacro:if>
 
     <link name="${prefix}wrist_3_link">
-      <visual>
-        <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
-        <geometry>
-          <mesh filename="wrist3.obj"/>
-        </geometry>
-        <material name="LightGrey">
-          <color rgba="0.7 0.7 0.7 1.0"/>
-        </material>
-      </visual>
+      <xacro:unless value="${visual_collision_same}">
+        <visual>
+          <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
+          <geometry>
+            <mesh filename="wrist3.obj"/>
+          </geometry>
+          <material name="LightGrey">
+            <color rgba="0.7 0.7 0.7 1.0"/>
+          </material>
+        </visual>
+      </xacro:unless>
       <!--<collision name="wrist_3_cylinder">
         <origin rpy="${pi/2} 0 0" xyz="0.0 0.07 0.0"/>
         <geometry>

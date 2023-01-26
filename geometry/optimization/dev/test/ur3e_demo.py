@@ -1,6 +1,7 @@
 import typing
 import numpy as np
 import pdb
+import argparse
 
 from pydrake.geometry import (AddContactMaterial, Box,
                               CollisionFilterDeclaration, Cylinder,
@@ -56,7 +57,7 @@ class UrDiagram:
             self.ur_instances.append(ur_instance)
             if add_gripper:
                 gripper_file_path = FindResourceOrThrow(
-                    "drake/manipulation/models/wsg_50_description/sdf/schunk_wsg_50_welded_fingers.sdf"
+                    "drake/manipulation/models/wsg_50_description/sdf/schunk_wsg_50_welded_fingers_collision_visual.sdf"
                 )
                 gripper_instance = parser.AddModelFromFile(
                     gripper_file_path, f"schunk{ur_count}")
@@ -87,9 +88,9 @@ class UrDiagram:
                                point_stiffness=250.0,
                                friction=CoulombFriction(0.9, 0.5),
                                properties=proximity_properties)
-            shelf_box = self.plant.RegisterCollisionGeometry(
-                shelf_body, RigidTransform(np.array([0, 0, -0.07])),
-                Box(0.03, 0.03, 0.12), "shelf_box", proximity_properties)
+            #shelf_box = self.plant.RegisterCollisionGeometry(
+            #    shelf_body, RigidTransform(np.array([0, 0, -0.07])),
+            #    Box(0.03, 0.03, 0.12), "shelf_box", proximity_properties)
 
         self.plant.Finalize()
 
@@ -104,7 +105,7 @@ class UrDiagram:
                 CollisionFilterDeclaration().ExcludeWithin(ur_geometries))
 
         meshcat_params = MeshcatVisualizerParams()
-        meshcat_params.role = Role.kProximity
+        meshcat_params.role = Role.kIllustration
         self.visualizer = MeshcatVisualizer.AddToBuilder(
             builder, self.scene_graph, self.meshcat, meshcat_params)
         print(self.meshcat.web_url())
@@ -112,11 +113,12 @@ class UrDiagram:
 
 
 def save_result(search_result: CspaceFreePolytope.SearchResult,
-                file_path: str):
+                s_init: np.ndarray, file_path: str):
     np.savez(file_path,
              C=search_result.C,
              d=search_result.d,
-             plane_decision_var_vals=search_result.plane_decision_var_vals)
+             plane_decision_var_vals=search_result.plane_decision_var_vals,
+             s_init=s_init)
 
 
 def find_ur_shelf_posture(plant: MultibodyPlant,
@@ -157,8 +159,6 @@ def find_ur_shelf_posture(plant: MultibodyPlant,
 
 def setup_ur_shelf_cspace_polytope(
         s_init: np.ndarray) -> (np.ndarray, np.ndarray):
-    C = np.array((12, 6))
-    d = np.array((12, ))
     C = np.array([[1.5, 0.1, 0.2, -0.1, -0.2, 0.4],
                   [-2.1, 0.2, -0.1, 0.4, -0.3, 0.1],
                   [0.1, 2.5, 0.3, -0.3, 0.2, -0.2],
@@ -177,6 +177,22 @@ def setup_ur_shelf_cspace_polytope(
 
     hpolyhedron = HPolyhedron(C, d)
     assert (hpolyhedron.IsBounded())
+    return C, d
+
+
+def setup_dual_arm_cspace_poltope() -> (np.ndarray, np.ndarray):
+    S = np.eye(13, 13) - np.ones((13, 13)) / 13.0
+    S_eigvalue, S_eigvector = np.linalg.eig(S)
+    C = np.empty((13, 12))
+    column_count = 0
+    for i in range(13):
+        if np.abs(S_eigvalue[i] - 1) < 1E-2:
+            C[:13, column_count] = S_eigvector[:, i]
+            column_count += 1
+
+    d = np.array(
+        [0.5, 0.1, 0.3, 0.8, 0.2, 1.3, 0.4, 0.5, 0.1, 0.2, 0.3, 0.1, 0.2])
+    assert (HPolyhedron(C, d).IsBounded())
     return C, d
 
 
@@ -238,7 +254,7 @@ def search_ur_shelf_cspace_polytope(weld_wrist: bool, with_gripper: bool,
         binary_search_result = cspace_free_polytope.BinarySearch(
             ignored_collision_pairs, C_init, d_init, s_init,
             binary_search_options)
-        binary_search_data = "/home/hongkaidai/Dropbox/c_iris_data/ur/ur_shelf_binary_search2.npz"
+        binary_search_data = "/home/hongkaidai/Dropbox/c_iris_data/ur/ur_shelf_no_box_binary_search2.npz"
         np.savez(binary_search_data,
                  C=binary_search_result.C,
                  d=binary_search_result.d,
@@ -250,6 +266,8 @@ def search_ur_shelf_cspace_polytope(weld_wrist: bool, with_gripper: bool,
         load_data = np.load(load_file)
         C_start = load_data["C"]
         d_start = load_data["d"]
+        if "s_init" in set(load_data.keys()):
+            s_init = load_data["s_init"]
 
     bilinear_alternation_options = CspaceFreePolytope.BilinearAlternationOptions(
     )
@@ -263,16 +281,61 @@ def search_ur_shelf_cspace_polytope(weld_wrist: bool, with_gripper: bool,
         mp.SolverOptions()
     bilinear_alternation_options.find_polytope_options.solver_options.SetOption(
         mp.CommonSolverOption.kPrintToConsole, 0)
-    # bilinear_alternation_options.find_polytope_options.backoff_scale = 0.02
+    #bilinear_alternation_options.find_polytope_options.backoff_scale = 0.02
     #bilinear_alternation_options.find_polytope_options.search_s_bounds_lagrangians = False
     bilinear_alternation_result = cspace_free_polytope.SearchWithBilinearAlternation(
         ignored_collision_pairs, C_start, d_start,
         bilinear_alternation_options)
-    save_result(bilinear_alternation_result[-1],
+    save_result(bilinear_alternation_result[-1], s_init,
                 bilinear_alternation_result_file)
     pdb.set_trace()
 
     pass
+
+
+def search_dual_arm_cspace_polytope(weld_wrist: bool, with_gripper: bool,
+                                    binary_search_result_file: str):
+    ur_diagram = UrDiagram(num_ur=2,
+                           weld_wrist=weld_wrist,
+                           add_shelf=False,
+                           add_gripper=with_gripper)
+    diagram_context = ur_diagram.diagram.CreateDefaultContext()
+    plant_context = ur_diagram.plant.GetMyMutableContextFromRoot(
+        diagram_context)
+    q_seed = np.zeros((ur_diagram.plant.num_positions(), ))
+    ur_diagram.plant.SetPositions(plant_context, q_seed)
+    C_init, d_init = setup_dual_arm_cspace_poltope()
+
+    q_star = np.zeros((ur_diagram.plant.num_positions(), ))
+
+    cspace_free_polytope_options = CspaceFreePolytope.Options()
+    cspace_free_polytope_options.with_cross_y = False
+
+    cspace_free_polytope = CspaceFreePolytope(ur_diagram.plant,
+                                              ur_diagram.scene_graph,
+                                              SeparatingPlaneOrder.kAffine,
+                                              q_star,
+                                              cspace_free_polytope_options)
+
+    binary_search_options = CspaceFreePolytope.BinarySearchOptions()
+    binary_search_options.scale_max = 0.05
+    binary_search_options.scale_min = 0.04
+    binary_search_options.max_iter = 4
+    binary_search_options.find_lagrangian_options.verbose = True
+    binary_search_options.find_lagrangian_options.num_threads = 1
+    binary_search_options.find_lagrangian_options.solver_options = mp.SolverOptions(
+    )
+    binary_search_options.find_lagrangian_options.solver_options.SetOption(
+        mp.CommonSolverOption.kPrintToConsole, 0)
+
+    s_seed = cspace_free_polytope.rational_forward_kin().ComputeSValue(
+        q_seed, q_star)
+    binary_search_result = cspace_free_polytope.BinarySearch(
+        set(), C_init, d_init, s_seed, binary_search_options)
+    np.savez(binary_search_result_file,
+             C=binary_search_result.C,
+             d=binary_search_result.d,
+             s_init=s_seed)
 
 
 def visualize_sample(ur_diagram, plant_context, diagram_context,
@@ -283,7 +346,7 @@ def visualize_sample(ur_diagram, plant_context, diagram_context,
     ur_diagram.diagram.ForcedPublish(diagram_context)
 
 
-def visualize(load_file):
+def visualize_ur_shelf(load_file):
     load_data = np.load(load_file)
     C = load_data["C"]
     d = load_data["d"]
@@ -294,13 +357,17 @@ def visualize(load_file):
     diagram_context = ur_diagram.diagram.CreateDefaultContext()
     plant_context = ur_diagram.plant.GetMyMutableContextFromRoot(
         diagram_context)
-    q_init = find_ur_shelf_posture(ur_diagram.plant,
-                                   ur_diagram.gripper_instances[0],
-                                   plant_context)
     rational_forward_kin = RationalForwardKinematics(ur_diagram.plant)
     q_star = np.zeros((6, ))
+    if "s_init" in set(load_data.keys()):
+        s_init = load_data["s_init"]
+    else:
+        q_init = find_ur_shelf_posture(ur_diagram.plant,
+                                       ur_diagram.gripper_instances[0],
+                                       plant_context)
+        s_init = rational_forward_kin.ComputeSValue(q_init, q_star),
     s_samples = [
-        rational_forward_kin.ComputeSValue(q_init, q_star),
+        s_init,
         np.zeros((6, )),
         np.array([1, 2., 3, -12, -21, -30]),
         np.array([-25, -2.1, 0.9, 24, -5, -1.5]),
@@ -315,13 +382,31 @@ def visualize(load_file):
         pdb.set_trace()
 
 
-if __name__ == "__main__":
-    load_file = "/home/hongkaidai/Dropbox/c_iris_data/ur/ur_shelf_binary_search2.npz"
+def ur_shelf(search: bool):
+    load_file = "/home/hongkaidai/Dropbox/c_iris_data/ur/ur_shelf_no_box_bilinear_alternation3.npz"
     #load_file=None
-    bilinear_alternation_result_file = "/home/hongkaidai/Dropbox/c_iris_data/ur/ur_shelf_bilinear_alternation6.npz"
-    #search_ur_shelf_cspace_polytope(
-    #    weld_wrist=False,
-    #    with_gripper=True,
-    #    load_file=load_file,
-    #    bilinear_alternation_result_file=bilinear_alternation_result_file)
-    visualize(bilinear_alternation_result_file)
+    bilinear_alternation_result_file = "/home/hongkaidai/Dropbox/c_iris_data/ur/ur_shelf_no_box_bilinear_alternation6.npz"
+    if search:
+        search_ur_shelf_cspace_polytope(
+            weld_wrist=False,
+            with_gripper=True,
+            load_file=load_file,
+            bilinear_alternation_result_file=bilinear_alternation_result_file)
+    visualize_ur_shelf(bilinear_alternation_result_file)
+
+
+def dual_ur(search: bool):
+    binary_search_result_file = "/home/hongkaidai/Dropbox/c_iris_data/ur/dual_ur_binary_search1.npz"
+    if search:
+        search_dual_arm_cspace_polytope(
+            weld_wrist=False,
+            with_gripper=True,
+            binary_search_result_file=binary_search_result_file)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--search", action="store_true")
+    args = parser.parse_args()
+    #ur_shelf(args.search)
+    dual_ur(args.search)
