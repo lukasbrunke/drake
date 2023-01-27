@@ -58,6 +58,15 @@ xacro_file(
 )
 
 xacro_file(
+    name = "ur3e_cylinder_revolute_wrist_collision_visual.urdf",
+    src = "ur3e_cylinder_revolute_wrist_collision_visual.urdf.xacro",
+    data = [
+        "ur.transmission.xacro",
+        "ur3e_cylinder.urdf.xacro",
+    ],
+)
+
+xacro_file(
     name = "ur3e_cylinder_weld_wrist.urdf",
     src = "ur3e_cylinder_weld_wrist.urdf.xacro",
     data = [
@@ -88,6 +97,7 @@ install_data(
         "ur3e_cylinders_collision.urdf",
         "ur3e_capsule_collision_weld_wrist.urdf",
         "ur3e_cylinder_revolute_wrist.urdf",
+        "ur3e_cylinder_revolute_wrist_collision_visual.urdf",
         "ur3e_cylinder_weld_wrist.urdf",
     ],
 )
