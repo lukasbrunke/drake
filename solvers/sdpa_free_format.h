@@ -284,6 +284,17 @@ class SdpaFreeFormat {
       Eigen::SparseMatrix<double>* C_hat) const;
 
  private:
+  // Register prog.decision_variable(variable_index) as an entry in a block of X
+  // in sdpa free format. If this variable has been previously registered as
+  // another entry in X block already, then modify
+  // entries_in_X_for_same_decision_variable to indicate that multiple entries
+  // in X corresponds to the same decision variable.
+  void RegisterDecisionVariableInX(
+      const MathematicalProgram& prog, int variable_index, int block_index,
+      int block_row_index, int block_col_index, int X_start_row,
+      std::unordered_map<symbolic::Variable::Id, std::vector<EntryInX>>*
+          entries_in_X_for_same_decision_variable);
+
   // Go through all the positive semidefinite constraint in @p prog, and
   // register the corresponding blocks in matrix X for the bound variables of
   // each PositiveSemidefiniteConstraint. It is possible for two
@@ -375,7 +386,15 @@ class SdpaFreeFormat {
 
   void AddLinearMatrixInequalityConstraints(const MathematicalProgram& prog);
 
-  void AddLorentzConeConstraints(const MathematicalProgram& prog);
+  // @param entries_in_X_for_same_decision_variable. If certain entries in z is
+  // actually an entry in x, then we register that entry in x as an entry in X
+  // (the captital X in SDPA). We will also register this entry in
+  // entries_in_X_for_same_decision_variable in case this entry has been
+  // registered in X elsewhere.
+  void AddLorentzConeConstraints(
+      const MathematicalProgram& prog,
+      std::unordered_map<symbolic::Variable::Id, std::vector<EntryInX>>*
+          entries_in_X_for_same_decision_variable);
 
   void AddRotatedLorentzConeConstraints(const MathematicalProgram& prog);
 

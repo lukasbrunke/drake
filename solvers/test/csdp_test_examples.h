@@ -217,5 +217,18 @@ class TrivialSOCP3 : public ::testing::Test {
   std::unique_ptr<MathematicalProgram> prog_;
   Vector2<symbolic::Variable> x_;
 };
+
+
+/**
+ * x(1) >= sqrt(x(0)² + (x(0) + 0.5 * x(1))²)
+ */
+class TrivialSOCP4: public ::testing::Test {
+ public:
+  TrivialSOCP4();
+
+ protected:
+  std::unique_ptr<MathematicalProgram> prog_;
+  Vector3<symbolic::Variable> x_;
+};
 }  // namespace solvers
 }  // namespace drake

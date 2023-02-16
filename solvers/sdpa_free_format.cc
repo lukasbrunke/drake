@@ -23,6 +23,48 @@ const double kInf = std::numeric_limits<double>::infinity();
 
 SdpaFreeFormat::~SdpaFreeFormat() {}
 
+void SdpaFreeFormat::RegisterDecisionVariableInX(
+    const MathematicalProgram& prog, int variable_index,
+    int block_index, int block_row_index, int block_col_index, int X_start_row,
+    std::unordered_map<symbolic::Variable::Id, std::vector<EntryInX>>*
+        entries_in_X_for_same_decision_variable) {
+  const bool has_var_registered = !(std::holds_alternative<std::nullptr_t>(
+      prog_var_in_sdpa_[variable_index]));
+  const EntryInX entry_in_X(block_index, block_row_index, block_col_index,
+                            X_start_row);
+  if (!has_var_registered) {
+    // This variable has not been registered into X. Now register this variable,
+    // by adding it to prog_var_in_sdpa.
+    prog_var_in_sdpa_[variable_index].emplace<DecisionVariableInSdpaX>(
+        Sign::kPositive, 0, entry_in_X);
+  } else {
+    // This variable has been registered. Now make sure it is registered in X.
+    DRAKE_DEMAND(std::holds_alternative<DecisionVariableInSdpaX>(
+        prog_var_in_sdpa_[variable_index]));
+
+    // This variable has been registered into X. We need to add the equality
+    // constraint between all X entries corresponding to this variable.
+
+    // First find if there exists equality constraint on this variable already.
+    const auto& var = prog.decision_variable(variable_index);
+    const auto it2 =
+        entries_in_X_for_same_decision_variable->find(var.get_id());
+    if (it2 == entries_in_X_for_same_decision_variable->end()) {
+      // There does not exist equality constraint on this variable yet.
+      entries_in_X_for_same_decision_variable->emplace_hint(
+          it2, var.get_id(),
+          std::vector<EntryInX>({std::get<DecisionVariableInSdpaX>(
+                                     prog_var_in_sdpa_[variable_index])
+                                     .entry_in_X,
+                                 entry_in_X}));
+    } else {
+      // We found equality constraint on this variable, append the vector
+      // containing all X entries that correspond to this variable.
+      it2->second.push_back(entry_in_X);
+    }
+  }
+}
+
 void SdpaFreeFormat::DeclareXforPositiveSemidefiniteConstraints(
     const MathematicalProgram& prog,
     std::unordered_map<symbolic::Variable::Id, std::vector<EntryInX>>*
@@ -39,38 +81,9 @@ void SdpaFreeFormat::DeclareXforPositiveSemidefiniteConstraints(
         const symbolic::Variable& psd_ij_var =
             binding.variables()(psd_matrix_variable_index++);
         const int psd_ij_var_index = prog.FindDecisionVariableIndex(psd_ij_var);
-        const bool has_var_registered =
-            !(std::holds_alternative<std::nullptr_t>(
-                prog_var_in_sdpa_[psd_ij_var_index]));
-        const EntryInX psd_ij_entry_in_X(num_blocks, i, j, num_X_rows_);
-        if (!has_var_registered) {
-          // This variable has not been registered into X. Now register this
-          // variable, by adding it to prog_var_in_sdpa_
-          prog_var_in_sdpa_[psd_ij_var_index].emplace<DecisionVariableInSdpaX>(
-              Sign::kPositive, 0, psd_ij_entry_in_X);
-        } else {
-          // This variable has been registered into X. We need to add the
-          // equality constraint between all X entries corresponding to this
-          // variable.
-
-          // First find if there exists equality constraint on this variable
-          // already.
-          const auto it2 = entries_in_X_for_same_decision_variable->find(
-              psd_ij_var.get_id());
-          if (it2 == entries_in_X_for_same_decision_variable->end()) {
-            // There does not exist equality constraint on this variable yet.
-            entries_in_X_for_same_decision_variable->emplace_hint(
-                it2, psd_ij_var.get_id(),
-                std::vector<EntryInX>({std::get<DecisionVariableInSdpaX>(
-                                           prog_var_in_sdpa_[psd_ij_var_index])
-                                           .entry_in_X,
-                                       psd_ij_entry_in_X}));
-          } else {
-            // We found equality constraint on this variable, append the vector
-            // containing all X entries that correspond to this variable.
-            it2->second.push_back(psd_ij_entry_in_X);
-          }
-        }
+        RegisterDecisionVariableInX(prog, psd_ij_var_index, num_blocks, i, j,
+                                    num_X_rows_,
+                                    entries_in_X_for_same_decision_variable);
       }
       psd_matrix_variable_index += matrix_rows - j - 1;
     }
@@ -94,6 +107,31 @@ void AddTermToTriplets(const EntryInX& entry_in_X, double coeff,
         entry_in_X.X_start_row + entry_in_X.row_index_in_block, coeff / 2);
   }
 }
+
+// The input arguments to SdpaFreeFormat::AddLinearEqualityConstraint().
+struct LinearEqualityConstraint {
+  LinearEqualityConstraint(
+      std::vector<double> m_coeff_prog_vars,
+      std::vector<int> m_prog_vars_indices,
+      std::vector<double> m_coeff_X_entries, std::vector<EntryInX> m_X_entries,
+      std::vector<double> m_coeff_free_vars,
+      std::vector<SdpaFreeFormat::FreeVariableIndex> m_free_vars_indices,
+      double m_rhs)
+      : coeff_prog_vars{std::move(m_coeff_prog_vars)},
+        prog_vars_indices{std::move(m_prog_vars_indices)},
+        coeff_X_entries{std::move(m_coeff_X_entries)},
+        X_entries{std::move(m_X_entries)},
+        coeff_free_vars{std::move(m_coeff_free_vars)},
+        free_vars_indices{std::move(m_free_vars_indices)},
+        rhs{m_rhs} {}
+  std::vector<double> coeff_prog_vars;
+  std::vector<int> prog_vars_indices;
+  std::vector<double> coeff_X_entries;
+  std::vector<EntryInX> X_entries;
+  std::vector<double> coeff_free_vars;
+  std::vector<SdpaFreeFormat::FreeVariableIndex> free_vars_indices;
+  double rhs;
+};
 
 void SdpaFreeFormat::AddLinearEqualityConstraint(
     const std::vector<double>& coeff_prog_vars,
@@ -490,6 +528,31 @@ void SdpaFreeFormat::AddLinearMatrixInequalityConstraints(
   }
 }
 
+// Checks if a * x + b just returns certain entry in x. Namely a has value 0 for
+// every entry except one entry with value 1, and b = 0. Returns the index of x
+// being selected. If a * x + b doesn't select an entry in x, then just return
+// -1.
+int SelectIndex(const Eigen::Ref<const Eigen::RowVectorXd>& a, double b) {
+  if (b != 0) {
+    return -1;
+  }
+  std::optional<int> ret = std::nullopt;
+  for (int i = 0; i < a.cols(); ++i) {
+    if (a(i) != 0 && a(i) != 1) {
+      return -1;
+    }
+    if (a(i) == 1) {
+      if (ret.has_value()) {
+        // More than one entry in `a` have value = 1.
+        return -1;
+      } else {
+        ret.emplace(i);
+      }
+    }
+  }
+  return ret.value();
+}
+
 // A Lorentz cone constraint z₀ ≥ sqrt(z₁² + ... + zₙ²), where z = A*x+b, can
 // be rewritten as a positive semidefinite constraint
 // ⎡ z₀ z₁ ... zₙ ⎤
@@ -497,37 +560,61 @@ void SdpaFreeFormat::AddLinearMatrixInequalityConstraints(
 // ⎢    ....      ⎥
 // ⎣ zₙ 0   0  z₀ ⎦
 void SdpaFreeFormat::AddLorentzConeConstraints(
-    const MathematicalProgram& prog) {
+    const MathematicalProgram& prog,
+    std::unordered_map<symbolic::Variable::Id, std::vector<EntryInX>>*
+        entries_in_X_for_same_decision_variable) {
   for (const auto& lorentz_cone_constraint : prog.lorentz_cone_constraints()) {
     const int num_block_rows = lorentz_cone_constraint.evaluator()->A().rows();
     const int num_decision_vars = lorentz_cone_constraint.variables().rows();
     const std::vector<int> prog_vars_indices =
         prog.FindDecisionVariableIndices(lorentz_cone_constraint.variables());
 
+    std::vector<double> a;
     // Add the linear constraint that all the diagonal terms of the new block
     // matrix equals to z0.
-    std::vector<double> a;
-    // The last entry in X_entries would be the diagonal term in the new block.
-    a.reserve(num_decision_vars);
-    // We need to impose the linear equality constraint
-    // lorentz_cone_constraint.evaluator()->A().row(0) *
-    // lorentz_cone_constraint.variables() - new_block(i, i) =
-    // -lorentz_cone_constraint.evaluator()->b()(0).
-    // So we first fill in a, b, X_entries and s_indices with the term from
-    // lorentz_cone_constraint.evaluator()->A().row(0) *
-    // lorentz_cone_constraint.variables()
-    for (int i = 0; i < num_decision_vars; ++i) {
-      const double coeff = lorentz_cone_constraint.evaluator()->A_dense()(0, i);
-      a.push_back(coeff);
-    }
+    // First determine if z0 equals to some entry in x, where x =
+    // lorentz_cone_constraint.variables().
+    const int z0_in_x_index =
+        SelectIndex(lorentz_cone_constraint.evaluator()->A_dense().row(0),
+                    lorentz_cone_constraint.evaluator()->b()(0));
+    if (z0_in_x_index == -1) {
+      // z0 is NOT an entry in x.
+      
+      // The last entry in X_entries would be the diagonal term in the new
+      // block.
+      a.reserve(num_decision_vars);
+      // We need to impose the linear equality constraint
+      // lorentz_cone_constraint.evaluator()->A().row(0) *
+      // lorentz_cone_constraint.variables() - new_block(i, i) =
+      // -lorentz_cone_constraint.evaluator()->b()(0).
+      // So we first fill in a, b, X_entries and s_indices with the term from
+      // lorentz_cone_constraint.evaluator()->A().row(0) *
+      // lorentz_cone_constraint.variables()
+      for (int i = 0; i < num_decision_vars; ++i) {
+        const double coeff =
+            lorentz_cone_constraint.evaluator()->A_dense()(0, i);
+        a.push_back(coeff);
+      }
 
-    // For each diagonal entry in the new block matrix, we need to add
-    // -new_block(i, i) to the left-hand side of the equality constraint.
-    for (int i = 0; i < num_block_rows; ++i) {
-      AddLinearEqualityConstraint(
-          a, prog_vars_indices, {-1.0},
-          {EntryInX(static_cast<int>(X_blocks_.size()), i, i, num_X_rows_)}, {},
-          {}, -lorentz_cone_constraint.evaluator()->b()(0));
+      // For each diagonal entry in the new block matrix, we need to add
+      // -new_block(i, i) to the left-hand side of the equality constraint.
+      for (int i = 0; i < num_block_rows; ++i) {
+        AddLinearEqualityConstraint(
+            a, prog_vars_indices, {-1.0},
+            {EntryInX(static_cast<int>(X_blocks_.size()), i, i, num_X_rows_)},
+            {}, {}, -lorentz_cone_constraint.evaluator()->b()(0));
+      }
+    } else {
+      // z0 is an entry in x, z0 =
+      // lorentz_cone_constraint.variables()[z0_in_x_index]. Now register the
+      // variable lorentz_cone_constraint.variables()[z0_in_x_index] in X.
+      const int prog_var_index = prog_vars_indices[z0_in_x_index];
+      // The diagonal entries in this block are all z0.
+      for (int i = 0; i < num_block_rows; ++i) {
+        RegisterDecisionVariableInX(prog, prog_var_index, X_blocks_.size(), i,
+                                    i, num_X_rows_,
+                                    entries_in_X_for_same_decision_variable);
+      }
     }
 
     // Now we add the linear equality constraint arising from the first row of
@@ -535,18 +622,29 @@ void SdpaFreeFormat::AddLorentzConeConstraints(
     // lorentz_cone_constraint.variables() +
     // lorentz_cone_constraint.evaluator()->b()(i) = new_block(0, i) for i
     for (int i = 1; i < num_block_rows; ++i) {
-      a.clear();
-      a.reserve(num_decision_vars);
-      for (int j = 0; j < num_decision_vars; ++j) {
-        const double coeff =
-            lorentz_cone_constraint.evaluator()->A_dense()(i, j);
-        a.push_back(coeff);
+      const int zi_in_x_index =
+          SelectIndex(lorentz_cone_constraint.evaluator()->A_dense().row(i),
+                      lorentz_cone_constraint.evaluator()->b()(i));
+      if (zi_in_x_index == -1) {
+        a.clear();
+        a.reserve(num_decision_vars);
+        for (int j = 0; j < num_decision_vars; ++j) {
+          const double coeff =
+              lorentz_cone_constraint.evaluator()->A_dense()(i, j);
+          a.push_back(coeff);
+        }
+        // Add the term -new_block(0, i)
+        AddLinearEqualityConstraint(
+            a, prog_vars_indices, {-1},
+            {EntryInX(static_cast<int>(X_blocks_.size()), 0, i, num_X_rows_)},
+            {}, {}, -lorentz_cone_constraint.evaluator()->b()(i));
+      } else {
+        // z(i) is an entry in x.
+        const int prog_var_index = prog_vars_indices[zi_in_x_index];
+        RegisterDecisionVariableInX(prog, prog_var_index, X_blocks_.size(), 0,
+                                    i, num_X_rows_,
+                                    entries_in_X_for_same_decision_variable);
       }
-      // Add the term -new_block(0, i)
-      AddLinearEqualityConstraint(
-          a, prog_vars_indices, {-1},
-          {EntryInX(static_cast<int>(X_blocks_.size()), 0, i, num_X_rows_)}, {},
-          {}, -lorentz_cone_constraint.evaluator()->b()(i));
     }
 
     // Now add the constraint that many entries in this new block is 0.
@@ -682,7 +780,7 @@ SdpaFreeFormat::SdpaFreeFormat(const MathematicalProgram& prog) {
 
   AddLinearMatrixInequalityConstraints(prog);
 
-  AddLorentzConeConstraints(prog);
+  AddLorentzConeConstraints(prog, &entries_in_X_for_same_decision_variable);
 
   AddRotatedLorentzConeConstraints(prog);
 
