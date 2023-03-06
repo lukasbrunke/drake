@@ -7,6 +7,7 @@
 #include "drake/geometry/optimization/convex_set.h"
 #include "drake/geometry/optimization/hpolyhedron.h"
 #include "drake/multibody/plant/multibody_plant.h"
+#include "drake/planning/collision_checker.h"
 
 namespace drake {
 namespace geometry {
@@ -144,6 +145,18 @@ for the current implementation of the IRIS algorithm.
 */
 ConvexSets MakeIrisObstacles(
     const QueryObject<double>& query_object,
+    std::optional<FrameId> reference_frame = std::nullopt);
+
+/** Overloads MakeIrisObstacles. Constructs ConvexSet representations of
+ obstacles for IRIS in 3D using CollisionChecker. All geometries in the
+CollisionChecker, both anchored and dynamic, are consider to be *fixed*
+obstacles frozen in the poses captured in q_seed.
+
+ @ingroup geometry_optimization
+ */
+ConvexSets MakeIrisObstacles(
+    const planning::CollisionChecker& collision_checker,
+    const Eigen::Ref<const Eigen::VectorXd>& q_seed,
     std::optional<FrameId> reference_frame = std::nullopt);
 
 /** A variation of the Iris (Iterative Region Inflation by Semidefinite

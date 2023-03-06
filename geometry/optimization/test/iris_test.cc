@@ -348,6 +348,12 @@ TEST_F(SceneGraphTester, MultipleBoxes) {
   EXPECT_TRUE(region.PointInSet(Vector3d(0.0, 0.0, -0.99)));
 }
 
+class CollisionCheckerTester : public ::testing::Test {
+ protected:
+  void SetUp()
+
+      systems::DiagramBuilder
+};
 }  // namespace
 }  // namespace optimization
 }  // namespace geometry

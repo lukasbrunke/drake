@@ -214,6 +214,15 @@ ConvexSets MakeIrisObstacles(const QueryObject<double>& query_object,
   return sets;
 }
 
+ConvexSets MakeIrisObstacles(
+    const planning::CollisionChecker& collision_checker,
+    const Eigen::Ref<const Eigen::VectorXd>& q_seed,
+    std::optional<FrameId> reference_frame) {
+  collision_checker.UpdatePositions(q_seed);
+  return MakeIrisObstacles(collision_checker.model_context().GetQueryObject(),
+                           reference_frame);
+}
+
 namespace {
 
 // Takes q, p_AA, and p_BB and enforces that p_WA == p_WB.
