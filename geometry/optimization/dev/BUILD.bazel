@@ -13,6 +13,25 @@ load(
 exports_files(["cspace_free_polytope.cc"])
 
 drake_cc_library(
+    name = "cspace_free_box",
+    srcs = [
+        "cspace_free_box.cc",
+    ],
+    hdrs = ["cspace_free_box.h"],
+    deps = [
+        "//common/symbolic:monomial_util",
+        "//geometry/optimization:c_iris_collision_geometry",
+        "//geometry/optimization:c_iris_separating_plane",
+        "//geometry/optimization:cspace_free_internal",
+        "//geometry/optimization:cspace_free_structs",
+        "//solvers:choose_best_solver",
+        "//solvers:mathematical_program",
+        "//solvers:mosek_solver",
+        "//solvers:solve",
+    ],
+)
+
+drake_cc_library(
     name = "cspace_free_path",
     srcs = ["cspace_free_path.cc"],
     hdrs = ["cspace_free_path.h"],
