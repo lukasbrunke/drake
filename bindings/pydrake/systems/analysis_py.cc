@@ -494,7 +494,10 @@ PYBIND11_MODULE(analysis, m) {
                      const Eigen::Ref<const VectorX<symbolic::Polynomial>>&>(),
                 py::arg("x"), py::arg("f"), py::arg("G"),
                 py::arg("dynamics_denominator"), py::arg("u_vertices"),
-                py::arg("state_constraints"), cls_doc.ctor.doc);
+                py::arg("state_constraints"), cls_doc.ctor.doc)
+            .def("x", &Class::x, py_rvp::copy, cls_doc.x.doc)
+            .def("f", &Class::f, py_rvp::copy, cls_doc.f.doc)
+            .def("G", &Class::G, py_rvp::copy, cls_doc.G.doc);
 
     control_lyapunov
         .def(

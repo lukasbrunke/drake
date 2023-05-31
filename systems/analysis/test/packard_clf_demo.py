@@ -156,29 +156,36 @@ def draw_clf_contour(fig, ax, V, rho_vals, x):
     ax.set_ylabel(r"$x_2$", fontsize=20)
     return contour_handle
 
+
+
+
 def draw_contours(V, x, V_init, rho_init):
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    contour_handle_init = draw_clf_contour(fig, ax, V_init, [rho_init], x)
-    contour_handle_init.collections[0].set_edgecolor('g')
-    contour_handle = draw_clf_contour(fig, ax, V, [0.0002, 0.00025, 0.005, 0.0065, 0.14, 0.4], x)
-    contour_handle.collections[0].set_edgecolor('slategrey')
-    contour_handle.collections[1].set_edgecolor('tan')
-    contour_handle.collections[2].set_edgecolor('cyan')
-    contour_handle.collections[3].set_edgecolor('plum')
-    contour_handle.collections[4].set_edgecolor('black')
-    contour_handle.collections[-1].set_edgecolor('r')
-    proxy = [plt.Rectangle((0, 0), 1, 1, fc=contour_handle_init.collections[0].get_edgecolor()[0])] + [plt.Rectangle((0, 0), 1, 1, fc=pc.get_edgecolor()[0]) for pc in contour_handle.collections]
-    contour_labels = ["CLF_init", "degree(u)=1", "degree(u)=3", "degree(u)=5", "degree(u)=7", "degree(u)=9", "CLF"]
-    plt.legend(proxy, contour_labels, fontsize=12)
-    ax.axis("equal")
-    #ax.axis("scaled")
-    #ax.set(xlim=(-5, 5), ylim=(-10, 10))
-    #for i in range(len(contour_labels)):
-    #    contour_handle.collections[i].set_label(contour_labels[i])
+    def draw_contours_fun(V, x, V_init, rho_init, rho_vals, edge_colors, contour_labels):
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.set_aspect("equal")
+        ax.set_xlim([-5, 5])
+        ax.set_ylim([-5, 5])
+        contour_handle_init = draw_clf_contour(fig, ax, V_init, [rho_init], x)
+        contour_handle_init.collections[0].set_edgecolor('g')
+        contour_handle = draw_clf_contour(fig, ax, V, rho_vals, x)
+        for i in range(len(edge_colors)):
+            contour_handle.collections[i].set_edgecolor(edge_colors[i])
+        proxy = [plt.Rectangle((0, 0), 1, 1, fc=contour_handle_init.collections[0].get_edgecolor()[0])] + [plt.Rectangle((0, 0), 1, 1, fc=pc.get_edgecolor()[0]) for pc in contour_handle.collections]
+        contour_labels = ["CLF_init"] + contour_labels
+        plt.legend(proxy, contour_labels, fontsize=12)
+        return fig, ax
+
+    fig, ax = draw_contours_fun(V, x, V_init, rho_init, [], [], [])
     for fig_format in ["pdf", "png"]:
-        fig.savefig("/home/hongkaidai/Dropbox/talks/pictures/sos_clf_cbf/packard_V8_2_contours_with_init."+fig_format, format=fig_format)
-    return fig, ax, contour_handle
+        fig.savefig(f"/home/hongkaidai/Dropbox/talks/pictures/sos_clf_cbf/packard/packard_V8_2_contours0."+fig_format, format=fig_format)
+    rho_vals = [0.0002, 0.00025, 0.005, 0.0065, 0.14, 0.4]
+    edge_colors = ["slategrey", "tan", "cyan", "plum", "black", "r"]
+    contour_labels = ["degree(u)=1", "degree(u)=3", "degree(u)=5", "degree(u)=7", "degree(u)=9", "CLF"]
+    for i in range(6):
+        fig, ax = draw_contours_fun(V, x, V_init, rho_init, rho_vals[:i] + [rho_vals[-1]], edge_colors[:i] + [edge_colors[-1]], contour_labels[:i] + [contour_labels[-1]])
+        for fig_format in ["pdf", "png"]:
+            fig.savefig(f"/home/hongkaidai/Dropbox/talks/pictures/sos_clf_cbf/packard/packard_V8_2_contours{i+1}."+fig_format, format=fig_format)
 
 def simulate_u(x, u, V, kappa, u_max, x0, duration):
     def calc_xdot(x_val):
@@ -248,14 +255,14 @@ def search(u_max, kappa):
         kappa, x_star, S, r_degree=V_degree - 2, search_options=search_options,
         ellipsoid_option=ellipsoid_option)
 
-    with open("/home/hongkaidai/Dropbox/sos_clf_cbf/packard/V8_2.pickle", "wb") as handle:
-        pickle.dump({"V": clf_cbf_utils.serialize_polynomial(search_result.V),
-            "rho": search_options.rho,
-            "V_init": clf_cbf_utils.serialize_polynomial(V_init),
-            "kappa": kappa,
-            "u_max": u_max,
-            "lambda0_degree": lambda0_degree,
-            "l_degrees": l_degrees}, handle)
+    #with open("/home/hongkaidai/Dropbox/sos_clf_cbf/packard/V8_2.pickle", "wb") as handle:
+    #    pickle.dump({"V": clf_cbf_utils.serialize_polynomial(search_result.V),
+    #        "rho": search_options.rho,
+    #        "V_init": clf_cbf_utils.serialize_polynomial(V_init),
+    #        "kappa": kappa,
+    #        "u_max": u_max,
+    #        "lambda0_degree": lambda0_degree,
+    #        "l_degrees": l_degrees}, handle)
 
     fig, ax, contour_handle = draw_contours(search_result.V, x, V_init, rho_init)
 
