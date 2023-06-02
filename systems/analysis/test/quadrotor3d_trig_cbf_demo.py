@@ -1,11 +1,13 @@
 import numpy as np
 import pickle
+import matplotlib.pyplot as plt
 
 import clf_cbf_utils
 
 import pydrake.systems.analysis as analysis
 from pydrake.solvers import mathematicalprogram as mp
 from pydrake.solvers.mosek import MosekSolver
+from pydrake.solvers.gurobi import GurobiSolver 
 import pydrake.symbolic as sym
 import pydrake.common
 from pydrake.common import RandomGenerator
@@ -27,6 +29,9 @@ from pydrake.geometry import (
     StartMeshcat,
     SceneGraph,
 )
+import pydrake.geometry as geometry
+import pydrake.math as math
+from quadrotor3d_trig_clf_demo import QuadrotorClfController
 
 
 
@@ -175,7 +180,8 @@ class QuadrotorClfCbfController(LeafSystem):
     def CalcControl(self, context, output):
         x_val = self.x_input_port().Eval(context)
         prog, u, delta = self.construct_qp(x_val)
-        result = mp.Solve(prog)
+        gurobi_solver = GurobiSolver()
+        result = gurobi_solver.Solve(prog)
         if not result.is_success():
             raise Exception("CBF controller cannot find u")
         output.SetFromVector(result.GetSolution(u))
@@ -197,22 +203,32 @@ def simulate(x, f, G, clf, cbf, thrust_max, kappa_V, kappa_h, beta_minus, beta_p
     quadrotor = builder.AddSystem(analysis.QuadrotorTrigPlant())
 
     scene_graph = builder.AddSystem(pydrake.geometry.SceneGraph())
+    visual_properties = geometry.MakePhongIllustrationProperties(
+      np.array([0.7, 0.2, 0.1, 1]))
+    s_id = scene_graph.RegisterSource("python")
+    ground_id = scene_graph.RegisterAnchoredGeometry(
+      s_id,
+      geometry.GeometryInstance(
+          math.RigidTransform(np.array([0, 0, -0.25])), geometry.Box(10, 10, 0.01), "ground"));
+    scene_graph.AssignRole(s_id, ground_id, visual_properties);
 
     geom = QuadrotorTrigGeometry.AddToBuilder(
         builder, quadrotor.get_output_port(0), "quadrotor", scene_graph)
 
-    MeshcatVisualizer.AddToBuilder(
+    visualizer = MeshcatVisualizer.AddToBuilder(
         builder, scene_graph, meshcat,
-        MeshcatVisualizerParams(role=Role.kPerception))
+        MeshcatVisualizerParams(role=Role.kIllustration))
 
     state_converter = builder.AddSystem(analysis.QuadrotorTrigStateConverter())
 
-    if clf is not None:
+    if clf is not None and cbf is not None:
         controller = builder.AddSystem(QuadrotorClfCbfController(
             x, f, G, clf, cbf, kappa_V, kappa_h, thrust_max, beta_minus, beta_plus))
-    else:
+    elif clf is None and cbf is not None:
         controller = builder.AddSystem(QuadrotorCbfController(
             x, f, G, cbf, kappa_h, thrust_max, beta_minus, beta_plus))
+    elif clf is not None and cbf is None:
+        controller = builder.AddSystem(QuadrotorClfController(x, f, G, clf, kappa_V, thrust_max, Vdot_cost_weight=2))
 
     builder.Connect(controller.control_output_port(),
                     quadrotor.get_input_port())
@@ -235,7 +251,9 @@ def simulate(x, f, G, clf, cbf, thrust_max, kappa_V, kappa_h, beta_minus, beta_p
 
     x0 = analysis.ToQuadrotorTrigState(initial_state)
     simulator.get_mutable_context().SetContinuousState(x0)
+    visualizer.StartRecording()
     simulator.AdvanceTo(duration)
+    visualizer.StopRecording()
 
     state_data = state_logger.FindLog(simulator.get_context()).data()
     if cbf is not None:
@@ -596,40 +614,64 @@ def main():
     x_safe[:, 0] = np.zeros(13)
     x_safe[:, 1] = np.zeros(13)
     x_safe[4, 1] = 1
-    #h_sol = search(x, f, G, thrust_max, deriv_eps, unsafe_regions, x_safe)
-    h_sol = search_sphere_obstacle_cbf(
-        x, f, G, -0.01, 0.01, thrust_max, deriv_eps, x_safe)
+    ##h_sol = search(x, f, G, thrust_max, deriv_eps, unsafe_regions, x_safe)
+    #h_sol = search_sphere_obstacle_cbf(
+    #    x, f, G, -0.01, 0.01, thrust_max, deriv_eps, x_safe)
 
-    #x_set = sym.Variables(x)
-    #with open("/home/hongkaidai/Dropbox/sos_clf_cbf/quadrotor3d_cbf/quadrotor3d_trig_cbf23.pickle", "rb") as input_file:
-    #    cbf_input_data = pickle.load(input_file)
-    #    cbf = clf_cbf_utils.deserialize_polynomial(x_set, cbf_input_data["h"])
-    #    kappa_h = cbf_input_data["deriv_eps"]
-    #    beta_minus = cbf_input_data["beta_minus"]
-    #    beta_plus = cbf_input_data["beta_plus"]
-    #with open("/home/hongkaidai/Dropbox/sos_clf_cbf/quadrotor3d_clf/quadrotor3d_trig_clf_sol3.pickle", "rb") as input_file:
-    #    clf_input_data = pickle.load(input_file)
-    #    clf = clf_cbf_utils.deserialize_polynomial(x_set, clf_input_data["V"])
-    #    kappa_V = clf_input_data["kappa"]
-    #x0 = np.zeros((12,))
-    #x0[0] = 1 
-    #x0[1] = 0.
-    #x0[2] = 0.5
-    #x0[3] = 0.1*np.pi
-    #x0[6] = 0.
-    #if clf is not None:
-    #    print(f"CLF_init {clf.EvaluateIndeterminates(x, analysis.ToQuadrotorTrigState(x0).reshape((-1, 1)))}")
-    #if cbf is not None:
-    #    print(f"CBF_init {cbf.EvaluateIndeterminates(x, analysis.ToQuadrotorTrigState(x0).reshape((-1, 1)))}")
-    #state_data, control_data, clf_data, cbf_data, time_data = simulate(x, f, G, clf, cbf, thrust_max, kappa_V, kappa_h, beta_minus, beta_plus, x0, 100)
-    #with open("/home/hongkaidai/Dropbox/sos_clf_cbf/quadrotor3d_cbf/quadrotor3d_sim_clf3_cbf23_1.pickle", "wb") as handle:
-    #    pickle.dump({
-    #        "state_data": state_data,
-    #        "control_data": control_data,
-    #        "clf_data": clf_data,
-    #        "cbf_data": cbf_data,
-    #        "time_data": time_data}, handle)
-    #return
+    meshcat = StartMeshcat()
+    x_set = sym.Variables(x)
+    with open("/home/hongkaidai/Dropbox/sos_clf_cbf/quadrotor3d_cbf/quadrotor3d_trig_cbf21.pickle", "rb") as input_file:
+        cbf_input_data = pickle.load(input_file)
+        cbf = clf_cbf_utils.deserialize_polynomial(x_set, cbf_input_data["h"])
+        kappa_h = cbf_input_data["deriv_eps"]
+        beta_minus = cbf_input_data["beta_minus"]
+        beta_plus = cbf_input_data["beta_plus"]
+    with open("/home/hongkaidai/Dropbox/sos_clf_cbf/quadrotor3d_clf/quadrotor3d_trig_clf_sol3.pickle", "rb") as input_file:
+        clf_input_data = pickle.load(input_file)
+        clf = clf_cbf_utils.deserialize_polynomial(x_set, clf_input_data["V"])
+        kappa_V = clf_input_data["kappa"]
+    x0 = np.zeros((12,))
+    x0[0] = 1 
+    x0[1] = 0.
+    x0[2] = 0.
+    x0[3] = 0.0*np.pi
+    x0[6] = 0
+    if clf is not None:
+        print(f"CLF_init {clf.EvaluateIndeterminates(x, analysis.ToQuadrotorTrigState(x0).reshape((-1, 1)))}")
+    if cbf is not None:
+        print(f"CBF_init {cbf.EvaluateIndeterminates(x, analysis.ToQuadrotorTrigState(x0).reshape((-1, 1)))}")
+
+    sim_T = 20
+    state_data, control_data, clf_data, cbf_data, time_data = simulate(x, f, G, clf, cbf, thrust_max, kappa_V, kappa_h, beta_minus, beta_plus, x0, sim_T, meshcat)
+    with open("/home/hongkaidai/Dropbox/sos_clf_cbf/quadrotor3d_cbf/quadrotor3d_sim_clf3_cbf21_3.pickle", "wb") as handle:
+        pickle.dump({
+            "state_data": state_data,
+            "control_data": control_data,
+            "clf_data": clf_data,
+            "cbf_data": cbf_data,
+            "time_data": time_data}, handle)
+    state_data_clf, control_data_clf, clf_data_clf, cbf_data_clf, time_data_clf = simulate(x, f, G, clf, None, thrust_max, kappa_V, kappa_h, beta_minus, beta_plus, x0, sim_T, meshcat)
+    with open("/home/hongkaidai/Dropbox/sos_clf_cbf/quadrotor3d_cbf/quadrotor3d_sim_clf3__2.pickle", "wb") as handle:
+        pickle.dump({
+            "state_data_clf": state_data_clf,
+            "control_data_clf": control_data_clf,
+            "clf_data_clf": clf_data_clf,
+            "cbf_data_clf": cbf_data_clf,
+            "time_data_clf": time_data_clf}, handle)
+    fig = plt.figure()
+    ax = fig.add_subplot()
+    ax.plot(time_data, state_data[6] + 0.15, 'b', label="CBF-CLF-QP controller")
+    ax.plot(time_data_clf, state_data_clf[6] + 0.15, color='r', label="CLF-QP controller")
+    ax.plot([0, sim_T], [0, 0], 'g--')
+    ax.legend()
+    ax.set_title("Quadrotor height above ground", fontsize=18)
+    ax.set_xlabel("time (s)", fontsize=18)
+    ax.set_ylabel("z (m)", fontsize=18)
+    ax.xaxis.set_tick_params(labelsize=16)
+    ax.yaxis.set_tick_params(labelsize=16)
+    for fig_format in ("png", "pdf"):
+        fig.savefig(f"/home/hongkaidai/Dropbox/talks/pictures/sos_clf_cbf/quadrotor_clf_cbf_z_3.{fig_format}", format=fig_format, bbox_inches="tight")
+    return
 
 
 if __name__ == "__main__":
