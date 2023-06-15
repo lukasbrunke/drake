@@ -9,6 +9,39 @@
 namespace drake {
 namespace geometry {
 namespace optimization {
+
+CspaceFreeBox::SeparationCertificateResult
+CspaceFreeBox::SeparationCertificate::GetSolution(
+    int plane_index, const Vector3<symbolic::Polynomial>& a,
+    const symbolic::Polynomial& b,
+    const VectorX<symbolic::Variable>& plane_decision_vars,
+    const solvers::MathematicalProgramResult& result) const {
+  CspaceFreeBox::SeparationCertificateResult ret{};
+  ret.plane_index = plane_index;
+
+  auto set_lagrangians =
+      [&result](const std::vector<CspaceFreeBox::SeparatingPlaneLagrangians>&
+                    lagrangians_vec,
+                std::vector<CspaceFreeBox::SeparatingPlaneLagrangians>*
+                    lagrangians_result) {
+        lagrangians_result->reserve(lagrangians_vec.size());
+        for (const auto& lagrangians : lagrangians_vec) {
+          lagrangians_result->push_back(lagrangians.GetSolution(result));
+        }
+      };
+  set_lagrangians(this->positive_side_rational_lagrangians,
+                  &ret.positive_side_rational_lagrangians);
+  set_lagrangians(this->negative_side_rational_lagrangians,
+                  &ret.negative_side_rational_lagrangians);
+  for (int i = 0; i < 3; ++i) {
+    ret.a(i) = result.GetSolution(a(i));
+  }
+  ret.b = result.GetSolution(b);
+
+  ret.plane_decision_var_vals = result.GetSolution(plane_decision_vars);
+  return ret;
+}
+
 CspaceFreeBox::CspaceFreeBox(const multibody::MultibodyPlant<double>* plant,
                              const geometry::SceneGraph<double>* scene_graph,
                              SeparatingPlaneOrder plane_order,
@@ -90,6 +123,30 @@ void CspaceFreeBox::GeneratePolynomialsToCertify(
   internal::GenerateRationals(separating_planes_map, y_slack(), q_star,
                               rational_forward_kin(),
                               &(certify_polynomials->plane_geometries));
+}
+
+CspaceFreeBox::SeparationCertificateProgram
+CspaceFreeBox::ConstructPlaneSearchProgram(
+    const PlaneSeparatesGeometries& plane_geometries,
+    const VectorX<symbolic::Polynomial>& s_minus_s_lower,
+    const VectorX<symbolic::Polynomial>& s_upper_minus_s) const {
+  SeparationCertificateProgram ret;
+  ret.plane_index = plane_geometries.plane_index;
+  ret.prog->AddIndeterminates(rational_forward_kin().s());
+  const auto& plane = separating_planes()[plane_geometries.plane_index];
+  ret.prog->AddDecisionVariables(plane.decision_variables);
+
+  // First count the total size of the gram matrix variables.
+  int gram_var_count = 0;
+  auto count_gram = [this, &s_minus_s_lower, &s_upper_minus_s](
+                        const symbolic
+                        : RationalFunction& rational,
+                          const std::array<VectorX<symbolic::Monomial>, 4>&
+                              monomial_basis_array) {
+    // Each rational >= 0 requires the Lagrangian multiplier for s-s_lower and
+    // s_upper - s.
+    const int
+  }
 }
 }  // namespace optimization
 }  // namespace geometry

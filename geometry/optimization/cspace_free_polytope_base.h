@@ -120,6 +120,11 @@ class CspaceFreePolytopeBase {
       VectorX<symbolic::Polynomial>* s_minus_s_lower,
       VectorX<symbolic::Polynomial>* s_upper_minus_s) const;
 
+  // Returns the index of the plane which will separate the geometry pair.
+  // Returns -1 if the pair is not in map_geometries_to_separating_planes_.
+  int GetSeparatingPlaneIndex(
+      const SortedPair<geometry::GeometryId>& pair) const;
+
   [[nodiscard]] const symbolic::Variables& get_s_set() const { return s_set_; }
 
   [[nodiscard]] const geometry::SceneGraph<double>& scene_graph() const {

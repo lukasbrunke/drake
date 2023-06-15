@@ -1501,13 +1501,6 @@ GetCollisionGeometries(const multibody::MultibodyPlant<double>& plant,
   return internal::GetCollisionGeometries(plant, scene_graph);
 }
 
-int CspaceFreePolytope::GetSeparatingPlaneIndex(
-    const SortedPair<geometry::GeometryId>& pair) const {
-  return (map_geometries_to_separating_planes().count(pair) == 0)
-             ? -1
-             : map_geometries_to_separating_planes().at(pair);
-}
-
 HPolyhedron CspaceFreePolytope::GetPolyhedronWithJointLimits(
     const Eigen::MatrixXd& C, const Eigen::VectorXd& d) const {
   const int s_size = rational_forward_kin().s().rows();

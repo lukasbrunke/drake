@@ -183,6 +183,14 @@ void CspaceFreePolytopeBase::CalcSBoundsPolynomial(
         {{monomial_one, s_upper(i)}, {symbolic::Monomial(s(i)), -1}}));
   }
 }
+
+int CspaceFreePolytopeBase::GetSeparatingPlaneIndex(
+    const SortedPair<geometry::GeometryId>& pair) const {
+  return (map_geometries_to_separating_planes_.count(pair) == 0)
+             ? -1
+             : map_geometries_to_separating_planes_.at(pair);
+}
+
 }  // namespace optimization
 }  // namespace geometry
 }  // namespace drake
