@@ -1,5 +1,6 @@
 import numpy as np
 import pickle
+import os
 
 import pdb
 import matplotlib.pyplot as plt
@@ -215,7 +216,7 @@ def find_clf_init(pendulum, V_degree, x, f, G):
     return V_init
 
 
-def search(u_max, kappa):
+def search(u_max, kappa, path):
     x = sym.MakeVectorContinuousVariable(3, "x")
     pendulum = PendulumPlant()
     theta_des = np.pi
@@ -283,7 +284,7 @@ def search(u_max, kappa):
         V_init, lambda0_degree, l_degrees, V_degree, positivity_eps,
         positivity_d, positivity_eq_lagrangian_degrees, p_degrees, kappa,
         x_samples, None, True, search_options)
-    with open("/home/hongkaidai/Dropbox/sos_clf_cbf/pendulum/pendulum_trig_clf2.pickle", "wb") as handle:
+    with open(path + "pendulum/pendulum_trig_clf.pickle", "wb") as handle:
         pickle.dump({
             "V": clf_cbf_utils.serialize_polynomial(search_result.V),
             "kappa": kappa, "u_max": u_max, "rho": search_options.rho}, handle)
@@ -312,10 +313,10 @@ def draw_clf_contour(fig, ax, V, rho, x, draw_heatmap):
     return contour_handle, heatmap_handle
 
 
-def plot_results():
+def plot_results(path):
     x = sym.MakeVectorContinuousVariable(3, "x")
     x_set = sym.Variables(x)
-    with open("/home/hongkaidai/Dropbox/sos_clf_cbf/pendulum/pendulum_trig_clf1.pickle", "rb") as input_file:
+    with open(path + "pendulum/pendulum_trig_clf.pickle", "rb") as input_file:
         load_data = pickle.load(input_file)
         V = clf_cbf_utils.deserialize_polynomial(x_set, load_data["V"])
         u_max = load_data["u_max"]
@@ -324,7 +325,7 @@ def plot_results():
     ax1 = fig1.add_subplot(111)
     contour_handle1, heatmap_handle1 = draw_clf_contour(fig1, ax1, V, rho=1, x=x, draw_heatmap=True)
     for fig_format in ["png", "pdf"]:
-        fig1.savefig("/home/hongkaidai/Dropbox/talks/pictures/sos_clf_cbf/pendulum_V1." +
+        fig1.savefig(path + "pendulum_V1." +
                     fig_format, format=fig_format)
 
     # Simulate
@@ -354,7 +355,7 @@ def plot_results():
     for i in range(num_trajs):
         ax2.plot(state_trajs[i][0, :], state_trajs[i][1, :], color=traj_color[i])
     for fig_format in ["pdf", "png"]:
-        fig2.savefig("/home/hongkaidai/Dropbox/talks/pictures/sos_clf_cbf/pendulum_phase."+fig_format, format=fig_format)
+        fig2.savefig(path + "pendulum_phase."+fig_format, format=fig_format)
     
     fig3 = plt.figure()
     ax3 = fig3.add_subplot(111)
@@ -363,7 +364,7 @@ def plot_results():
     ax3.set_xlabel("time (s)", fontsize=14)
     ax3.set_ylabel("V(x(t))", fontsize=14)
     for fig_format in ["pdf", "png"]:
-        fig3.savefig("/home/hongkaidai/Dropbox/talks/pictures/sos_clf_cbf/pendulum_V_time."+fig_format, format=fig_format)
+        fig3.savefig(path + "pendulum_V_time."+fig_format, format=fig_format)
 
     fig4 = plt.figure()
     ax4 = fig4.add_subplot(111)
@@ -372,14 +373,16 @@ def plot_results():
     ax4.set_xlabel("time (s)", fontsize=14)
     ax4.set_ylabel("u(t)", fontsize=14)
     for fig_format in ["pdf", "png"]:
-        fig4.savefig("/home/hongkaidai/Dropbox/talks/pictures/sos_clf_cbf/pendulum_control_time."+fig_format, format=fig_format)
+        fig4.savefig(path + "pendulum_control_time."+fig_format, format=fig_format)
 
 
 def main():
+    path = os.getcwd() + "/results/sos_clf_cbf/"
+
     u_max = 5
     kappa = 0.1
-    #search(u_max, kappa)
-    plot_results()
+    search(u_max, kappa, path)
+    plot_results(path)
 
 
 if __name__ == "__main__":
